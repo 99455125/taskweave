@@ -1,0 +1,33 @@
+# Python / packaging
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.coverage
+htmlcov/
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+# Local configuration and execution data
+.env
+.env.*
+!.env.example
+config/local.*
+.runtime/
+outputs/
+*.log
+# Existing local-only work: preserved, not part of this refactor
+legacy/smart_excel/local-backups/
+legacy/smart_excel/tests/routes/
+legacy/smart_excel/tests/service/
+legacy/smart_excel/migrations/
+/migrations/
+/instance/
+
+# Local historical data, excluded from the public repository
+legacy/smart_excel/test_file/
