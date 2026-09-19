@@ -1,0 +1,109 @@
+{
+  "format_version": 1,
+  "task_id": "00000000-0000-4000-8000-000000000001",
+  "name": "Inspect a page",
+  "input_schema": {
+    "type": "object",
+    "properties": {
+      "url": {
+        "type": "string"
+      },
+      "role": {
+        "type": "string"
+      },
+      "capture": {
+        "type": "boolean"
+      }
+    },
+    "required": [
+      "url",
+      "role",
+      "capture"
+    ],
+    "additionalProperties": false
+  },
+  "entry_node_id": "inspect",
+  "nodes": [
+    {
+      "id": "inspect",
+      "kind": "action",
+      "next": null,
+      "config": {
+        "step_id": "00000000-0000-4000-8000-000000000002"
+      }
+    }
+  ],
+  "ui_layout": {},
+  "steps": [
+    {
+      "step_id": "00000000-0000-4000-8000-000000000002",
+      "name": "Open, read title, optional screenshot",
+      "goal": "打开指定地址，读取标题，按参数选择截图",
+      "position": 0,
+      "content_format": "python-async-v1",
+      "step_content": "async def run(ctx, inputs):\n    await ctx.call(\"playwright.page_open\", {\"role\": inputs[\"role\"], \"url\": inputs[\"url\"]})\n    page = await ctx.call(\"playwright.page_title\", {\"role\": inputs[\"role\"]})\n    if not page[\"title\"].strip():\n        raise ValueError(\"Page title is empty\")\n    outputs = []\n    if inputs[\"capture\"]:\n        shot = await ctx.call(\"playwright.page_screenshot\", {\"role\": inputs[\"role\"]})\n        outputs.append(ctx.output(\"playwright.image\", \"page\", shot))\n    return ctx.result(data={\"title\": page[\"title\"]}, outputs=outputs)\n",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "url": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "capture": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "url",
+          "role",
+          "capture"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "bindings": {
+        "url": {
+          "ref": {
+            "source": "task",
+            "pointer": "/url"
+          }
+        },
+        "role": {
+          "ref": {
+            "source": "task",
+            "pointer": "/role"
+          }
+        },
+        "capture": {
+          "ref": {
+            "source": "task",
+            "pointer": "/capture"
+          }
+        }
+      },
+      "capabilities": [
+        "playwright.page_open",
+        "playwright.page_title",
+        "playwright.page_screenshot",
+        "playwright.image"
+      ],
+      "plugin_requirements": {
+        "playwright": ">=0.1,<0.2"
+      },
+      "timeout_ms": 60000
+    }
+  ]
+}

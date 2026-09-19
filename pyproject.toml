@@ -8,7 +8,7 @@ version = "0.1.0"
 description = "Local task and step automation with extensible plugins"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = []
+dependencies = ["jsonschema>=4.23,<5", "packaging>=24,<27", "certifi>=2024.8.30"]
 
 [project.scripts]
 taskweave = "taskweave.__main__:main"
@@ -16,3 +16,28 @@ taskweave = "taskweave.__main__:main"
 [tool.setuptools.packages.find]
 where = ["src"]
 include = ["taskweave*"]
+
+[tool.setuptools.package-data]
+"taskweave.infrastructure" = ["sql/*.sql"]
+
+[project.optional-dependencies]
+browser = ["taskweave-playwright"]
+sample = ["taskweave-sample"]
+captcha = ["taskweave-captcha"]
+database = ["taskweave-tidb"]
+gui = ["nicegui>=3,<4", "pywebview>=6,<7"]
+
+[dependency-groups]
+build = ["pyinstaller>=6.11,<7"]
+
+[project.entry-points."taskweave.plugins"]
+demo = "taskweave.plugins.demo:DemoPlugin"
+text = "taskweave.plugins.demo:TextPlugin"
+
+[tool.uv.sources]
+taskweave-playwright = { path = "plugins/playwright", editable = true }
+taskweave-sample = { path = "plugins/custom", editable = true }
+
+taskweave-captcha = { path = "plugins/captcha", editable = true }
+
+taskweave-tidb = { path = "plugins/tidb", editable = true }

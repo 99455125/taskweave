@@ -15,12 +15,12 @@ def main():
     required = (
         "pyproject.toml", "README.md", "AGENTS.md", "AI_GUIDE.md", "CLAUDE.md",
         "TASK_TEMPLATE.md", "src/taskweave/core", "src/taskweave/plugins",
-        "src/taskweave/application", "src/taskweave/infrastructure", "plugins/excel",
+        "src/taskweave/application", "src/taskweave/infrastructure",
         "plugins/playwright", "plugins/custom", "apps", "config", "examples", "tests",
         "docs/architecture.md", "docs/progress.md", "docs/project-plan.md",
         "docs/ai-operating-model.md", "docs/engineering-playbook.md",
         "docs/testing.md", "docs/deployment.md", "docs/migration.md",
-        "docs/requirements/REQ-001-project-foundation/validation.md",
+        "docs/requirements/REQ-001-requirement-pool/validation.md",
     )
     for name in required:
         if not (ROOT / name).exists():

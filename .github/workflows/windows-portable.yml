@@ -1,0 +1,33 @@
+name: Windows portable package
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+      - name: Download configured WebView2 Fixed Runtime
+        shell: pwsh
+        env:
+          WEBVIEW2_FIXED_RUNTIME_URL: ${{ vars.WEBVIEW2_FIXED_RUNTIME_URL }}
+        run: |
+          if (-not $env:WEBVIEW2_FIXED_RUNTIME_URL) {
+            throw "Set the repository variable WEBVIEW2_FIXED_RUNTIME_URL to an approved WebView2 Fixed Version x64 zip URL."
+          }
+          Invoke-WebRequest $env:WEBVIEW2_FIXED_RUNTIME_URL -OutFile "$env:RUNNER_TEMP/webview2.zip"
+          Expand-Archive "$env:RUNNER_TEMP/webview2.zip" -DestinationPath "$env:RUNNER_TEMP/webview2"
+      - name: Build portable directory
+        shell: pwsh
+        run: ./scripts/build_windows.ps1 -WebView2Runtime "$env:RUNNER_TEMP/webview2"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TaskWeave-portable-win-x64
+          path: |
+            dist/windows/TaskWeave-portable-win-x64.zip
+            dist/windows/TaskWeave-portable-win-x64.zip.sha256
+          if-no-files-found: error

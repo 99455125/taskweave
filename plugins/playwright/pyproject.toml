@@ -1,0 +1,12 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "taskweave-playwright"
+version = "0.3.0"
+requires-python = ">=3.10"
+dependencies = ["playwright>=1.58,<1.59; sys_platform == 'darwin'", "playwright>=1.58,<2; sys_platform != 'darwin'"]
+[project.entry-points."taskweave.plugins"]
+playwright = "taskweave_playwright:PlaywrightPlugin"
+[tool.setuptools.packages.find]
+where = ["src"]

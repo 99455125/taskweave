@@ -1,5 +1,5 @@
 # infrastructure
 
-职责：本地配置、存储和日志。当前仅划定模块边界，无运行实现。
+职责：SQLite 存储、worker 执行、资源管理、运行协调、模型适配与本地 HTTP 接口。
 
-遵循 [项目架构](../../../docs/architecture.md)。
+遵循 [项目架构](../../../docs/architecture.md)。运行方法见 [REQ-004 指南](../../../docs/requirements/REQ-004-plugin-contract/usage.md)。

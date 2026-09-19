@@ -1,3 +1,7 @@
-# 自定义插件（待设计）
+# 最小独立插件
 
-用于开发者编写业务动作，与内置能力使用同一插件契约。将来提供一个最小示例、输入输出和测试。当前只建立扩展位置，不动态加载或执行任意代码。
+taskweave-sample 通过标准 entry point 提供 sample.upper、AI 只读工具、提示词和 sample.rows 自定义结果表及解析，仅导入公开 SDK。
+
+`uv sync --extra sample` 安装；安装后还需明确启用 sample。
+
+[完整开发说明](../../docs/requirements/REQ-004-plugin-contract/usage.md)。
