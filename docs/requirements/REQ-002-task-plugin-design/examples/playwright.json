@@ -1,0 +1,117 @@
+{
+  "id": "playwright",
+  "package_version": "0.1.0",
+  "api_version": 1,
+  "dependencies": {},
+  "actions": [
+    {
+      "id": "playwright.page_open",
+      "description": "Open URL in the run role context",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          },
+          "url": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "role",
+          "url"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "null"
+      },
+      "effect": "WRITE",
+      "timeout_ms": 30000,
+      "retry_safe": false,
+      "resource_ids": [
+        "playwright.browser"
+      ]
+    },
+    {
+      "id": "playwright.page_title",
+      "description": "Read current page title",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "title"
+        ],
+        "additionalProperties": false
+      },
+      "effect": "READ",
+      "timeout_ms": 5000,
+      "retry_safe": true,
+      "resource_ids": [
+        "playwright.browser"
+      ]
+    },
+    {
+      "id": "playwright.page_screenshot",
+      "description": "Capture to host-scoped staging token",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "role"
+        ],
+        "additionalProperties": false
+      },
+      "output_schema": {
+        "type": "object",
+        "properties": {
+          "staged_file": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "staged_file"
+        ],
+        "additionalProperties": false
+      },
+      "effect": "READ",
+      "timeout_ms": 10000,
+      "retry_safe": true,
+      "resource_ids": [
+        "playwright.browser"
+      ]
+    }
+  ],
+  "tools": [
+    "playwright.page_title"
+  ],
+  "context_providers": [
+    "playwright.page_structure"
+  ],
+  "resource_providers": [
+    "playwright.browser"
+  ],
+  "result_handlers": [
+    "playwright.image"
+  ]
+}

@@ -1,3 +1,5 @@
 # 应用入口
 
-预留本地 UI / API。后续根据单步执行、暂停检查和多任务操作设计选择界面技术。当前仅有 `taskweave` 版本/帮助 CLI，没有网页服务。
+CLI / API 入口为 taskweave；跨平台桌面工作台通过 taskweave workbench 启动，实际展示代码打包在 src/taskweave/desktop，避免仓库外运行或 wheel 安装时丢失 UI。
+
+运行见 [REQ-005 指南](../docs/requirements/REQ-005-local-workbench/usage.md)。

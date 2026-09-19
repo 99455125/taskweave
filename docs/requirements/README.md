@@ -1,18 +1,16 @@
 # 需求索引
 
+[REQ-001 总需求池](REQ-001-requirement-pool/backlog.md)为统一入口。
+
 | 编号 | 需求 | 状态 |
 |---|---|---|
-| REQ-001 | [项目基础整理](REQ-001-project-foundation/README.md) | 已完成 |
+| REQ-002 | [总体设计](REQ-002-task-plugin-design/README.md) | 已完成详细设计 |
+| REQ-003 | [任务与步骤](REQ-003-task-core/README.md) | 未开始 |
+| REQ-004 | [插件架构与 Playwright](REQ-004-plugin-contract/README.md) | 未开始 |
+| REQ-005 | [Windows 客户端](REQ-005-local-workbench/README.md) | 未开始 |
+| REQ-006 | [任务与插件分享](REQ-006-template-sharing/README.md) | 未开始 |
+| REQ-007 | [基础版本集成与交付](REQ-007-v1-release/README.md) | 未开始 |
+| REQ-008 | [条件、循环与嵌套流程](REQ-008-flow-control/README.md) | 未开始 |
+| REQ-009 | [流程图拖拽编排](REQ-009-visual-flow-editor/README.md) | 未开始 |
 
-## 新需求目录约定
-
-使用 `REQ-002-简短英文名称` 等递增编号；新建前核对现有目录避免重复。
-
-- `README.md`：目标、范围、不包含的工作、验收标准。
-- `design.md`：当前行为、目标行为、接口和数据影响、决策及待定项。
-- `code-mapping.md`：模块、代码入口、迁移来源。
-- `progress.md`：已完成、进行中、下一步。
-- `validation.md`：实际命令、结果、日期、未验证的部分。
-- `AGENTS.md`：仅在该需求有额外约束时添加；不复制项目级规则。
-
-本次用户明确先整理结构，下一需求等待用户提出功能设计目标。
+下一可用编号为 REQ-010。
