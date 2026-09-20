@@ -17,13 +17,12 @@ jobs:
           WEBVIEW2_FIXED_RUNTIME_URL: ${{ vars.WEBVIEW2_FIXED_RUNTIME_URL }}
         run: |
           if (-not $env:WEBVIEW2_FIXED_RUNTIME_URL) {
-            throw "Set the repository variable WEBVIEW2_FIXED_RUNTIME_URL to an approved WebView2 Fixed Version x64 zip URL."
+            throw "Set the repository variable WEBVIEW2_FIXED_RUNTIME_URL to an approved Microsoft WebView2 Fixed Version x64 CAB URL."
           }
-          Invoke-WebRequest $env:WEBVIEW2_FIXED_RUNTIME_URL -OutFile "$env:RUNNER_TEMP/webview2.zip"
-          Expand-Archive "$env:RUNNER_TEMP/webview2.zip" -DestinationPath "$env:RUNNER_TEMP/webview2"
+          Invoke-WebRequest $env:WEBVIEW2_FIXED_RUNTIME_URL -OutFile "$env:RUNNER_TEMP/webview2.cab"
       - name: Build portable directory
         shell: pwsh
-        run: ./scripts/build_windows.ps1 -WebView2Runtime "$env:RUNNER_TEMP/webview2"
+        run: ./scripts/build_windows.ps1 -WebView2Cab "$env:RUNNER_TEMP/webview2.cab"
       - uses: actions/upload-artifact@v4
         with:
           name: TaskWeave-portable-win-x64

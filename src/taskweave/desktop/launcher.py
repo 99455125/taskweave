@@ -146,6 +146,7 @@ def launch(home=None, port=None, browser=False):
             fixed = next((path for path in candidates if path.is_dir()), None)
             if fixed:
                 os.environ["WEBVIEW2_RUNTIME_PATH"] = str(fixed)
+                webview.settings["WEBVIEW2_RUNTIME_PATH"] = str(fixed)
     print(
         json.dumps({"url": url, "home": str(home), "native": not browser}), flush=True
     )
