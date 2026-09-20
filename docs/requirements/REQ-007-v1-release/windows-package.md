@@ -56,7 +56,7 @@ TaskWeave/
 ./scripts/build_windows.ps1 -WebView2Runtime C:\build\Microsoft.WebView2.FixedVersionRuntime.x64
 ```
 
-构建机需要 Windows x64、`uv`、网络（用于同步锁定依赖和下载与 Playwright 匹配的 Chromium），以及已解压的 WebView2 Fixed Version x64 目录。产物为 `dist/windows/TaskWeave-portable-win-x64.zip` 和对应 SHA-256 文件。目标机只需解压完整目录后运行 `TaskWeave.exe`。
+构建机需要 Windows x64、Windows PowerShell 5.1 或 PowerShell 7、`uv`、网络（用于同步锁定依赖和下载与 Playwright 匹配的 Chromium），以及已解压的 WebView2 Fixed Version x64 目录。产物为 `dist/windows/TaskWeave-portable-win-x64.zip` 和对应 SHA-256 文件。目标机只需解压完整目录后运行 `TaskWeave.exe`。
 
 `.github/workflows/windows-portable.yml` 可在 Windows CI 构建；运行前必须把仓库变量 `WEBVIEW2_FIXED_RUNTIME_URL` 设置成经过审核的固定版 x64 zip 地址。构建不会静默退回需要安装的 WebView2。
 

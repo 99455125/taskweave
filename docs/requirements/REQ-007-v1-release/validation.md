@@ -25,3 +25,4 @@
 - 冻结清单所需的 8 个 distribution（核心、四个插件、NiceGUI、pywebview、Playwright）均能从锁定环境解析。
 - 工程结构、源码语法、依赖边界与 Markdown 检查通过，`git diff --check` 通过。
 - macOS 上未生成 Windows EXE；PowerShell 真实构建、WebView2/Chromium 随包结果及目标 Windows 10 x64 断网 VM 仍为待验收项，不将静态检查记为便携包交付通过。
+- 2026-09-20：Windows 用户实际执行暴露 PowerShell 5.1 不存在 `$IsWindows` 的兼容问题，已改为检查 `$env:OS`；同步审查并补齐 PowerShell 5.1 的原生命令退出码处理和各关键产物实体校验。Windows 实机需从该检查后继续构建并记录下一个实际结果。
