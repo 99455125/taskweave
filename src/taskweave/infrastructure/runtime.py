@@ -13,7 +13,7 @@ from taskweave.infrastructure.worker import worker_main
 
 
 class Coordinator:
-    def __init__(self, repository, registry, factory):
+    def __init__(self, repository, registry, factory, recover=True):
         self.repo, self.registry, self.factory = repository, registry, factory
         self.lock = threading.RLock()
         self.process = self.pipe = self.thread = None
@@ -21,7 +21,12 @@ class Coordinator:
         self.pause_requested = threading.Event()
         self.cancel = multiprocessing.get_context("spawn").Event()
         self.closing = False
-        self.repo.recover()
+        if recover:
+            self.repo.recover()
+
+    @staticmethod
+    def lease_slot(run):
+        return "trial:" + run["task_id"] if run["mode"] == "TRIAL" else "execution:" + run["run_id"]
 
     def _worker(self):
         if self.process and self.process.is_alive():
@@ -152,12 +157,13 @@ class Coordinator:
                     )
                 elif run["status"] == "FAILED":
                     raise TaskError("EXPLICIT_RETRY_REQUIRED")
-                lease = db.execute("SELECT * FROM runtime_lease").fetchone()
+                slot = self.lease_slot(run)
+                lease = db.execute("SELECT * FROM runtime_lease WHERE slot=?", (slot,)).fetchone()
                 if lease and lease["run_id"] != run_id:
                     raise TaskError("RUN_LEASE_BUSY")
                 db.execute(
-                    "INSERT INTO runtime_lease VALUES(1,?,?,?) ON CONFLICT(slot) DO UPDATE SET owner_id=excluded.owner_id,heartbeat_at=excluded.heartbeat_at",
-                    (run_id, str(os.getpid()), now()),
+                    "INSERT INTO runtime_lease VALUES(?,?,?,?) ON CONFLICT(slot) DO UPDATE SET run_id=excluded.run_id,owner_id=excluded.owner_id,heartbeat_at=excluded.heartbeat_at",
+                    (slot, run_id, str(os.getpid()), now()),
                 )
                 db.execute(
                     "UPDATE task_runs SET status='RUNNING',started_at=COALESCE(started_at,?),request_json=? WHERE run_id=?",
@@ -288,8 +294,6 @@ class Coordinator:
                 raise TaskError('STEP_NOT_VALIDATED')
             if target_step_id not in {s['step_id'] for s in self.repo.steps(run['task_id'])}:
                 raise TaskError('TARGET_INVALID')
-            if self.repo.query('SELECT 1 FROM runtime_lease WHERE run_id<>?', (run_id,)):
-                raise TaskError('RUN_LEASE_BUSY')
             if start_step_id is not None:
                 ids = [step['step_id'] for step in self.repo.steps(run['task_id'])]
                 if start_step_id not in ids or ids.index(start_step_id) > ids.index(target_step_id):
@@ -471,20 +475,6 @@ class Coordinator:
                     self.wait_for_inputs(run, 'step', step, step['input_schema'], effective, missing)
                     return
                 if not self._attempt(run, step):
-                    # A trial is a bounded invocation; release its lease on known failure.
-                    if (
-                        run["mode"] == "TRIAL"
-                        and self.repo.run(run_id)["status"] == "FAILED"
-                    ):
-                        a = self.repo.query(
-                            "SELECT * FROM step_attempts WHERE run_id=? ORDER BY started_at DESC LIMIT 1",
-                            (run_id,),
-                            True,
-                        )
-                        if a["effect_state"] == "NOT_STARTED":
-                            self.repo.execute(
-                                "DELETE FROM runtime_lease WHERE run_id=?", (run_id,)
-                            )
                     return
                 if self.cancel.is_set():
                     self._done(run_id, "CANCELLED")
@@ -792,6 +782,7 @@ class Coordinator:
         raise TaskError("WAIT_TIMEOUT")
 
     def close(self):
+        owned_run = self.session_run_id
         with self.lock:
             self.closing = True
             self.pause_requested.set()
@@ -803,4 +794,105 @@ class Coordinator:
                 self.thread.join(5)
         self._stop_worker()
         if not (self.thread and self.thread.is_alive()):
-            self.repo.execute("DELETE FROM runtime_lease")
+            if owned_run:
+                self.repo.execute("DELETE FROM runtime_lease WHERE run_id=?", (owned_run,))
+
+
+class CoordinatorPool:
+    """Route each task trial and each formal execution to an isolated coordinator.
+
+    Core owns lifecycle only; plugin resources remain inside each coordinator's
+    worker and are still opened/closed exclusively by ResourceProvider hooks.
+    """
+    def __init__(self, repository, registry, factory):
+        self.repo, self._registry, self.factory = repository, registry, factory
+        self.lock = threading.RLock()
+        self.instances = {}
+        self.last = None
+        self.repo.recover()
+
+    @property
+    def registry(self): return self._registry
+
+    @registry.setter
+    def registry(self, value):
+        self._registry = value
+        for coordinator in self.instances.values():
+            coordinator.registry = value
+
+    def _key(self, run):
+        return ('trial', run['task_id']) if run['mode'] == 'TRIAL' else ('execution', run['run_id'])
+
+    def _for_run(self, run_id, create=True):
+        run = self.repo.run(run_id)
+        key = self._key(run)
+        coordinator = self.instances.get(key)
+        if coordinator is None and create:
+            coordinator = Coordinator(self.repo, self.registry, self.factory, recover=False)
+            self.instances[key] = coordinator
+        if coordinator is not None:
+            self.last = coordinator
+        return coordinator
+
+    @property
+    def process(self): return self.last.process if self.last else None
+    @property
+    def thread(self): return self.last.thread if self.last else None
+    @property
+    def session_run_id(self): return self.last.session_run_id if self.last else None
+    @session_run_id.setter
+    def session_run_id(self, value):
+        if self.last is None:
+            run = self.repo.run(value)
+            self.last = self._for_run(run['run_id'])
+        self.last.session_run_id = value
+
+    def start(self, run_id, *args, **kwargs): return self._for_run(run_id).start(run_id, *args, **kwargs)
+    def control(self, run_id, *args, **kwargs): return self._for_run(run_id).control(run_id, *args, **kwargs)
+    def restart(self, run_id, *args, **kwargs): return self._for_run(run_id).restart(run_id, *args, **kwargs)
+    def reconcile(self, attempt_id, *args, **kwargs):
+        attempt = self.repo.query('SELECT run_id FROM step_attempts WHERE attempt_id=?', (attempt_id,), True)
+        return self._for_run(attempt['run_id']).reconcile(attempt_id, *args, **kwargs)
+    def provide_inputs(self, run_id, *args, **kwargs): return self._for_run(run_id).provide_inputs(run_id, *args, **kwargs)
+    def wait(self, run_id, *args, **kwargs): return self._for_run(run_id).wait(run_id, *args, **kwargs)
+    def describe_run(self, run_id):
+        coordinator = self._for_run(run_id, create=False)
+        if coordinator is None:
+            run = self.repo.run_details(run_id)
+            run['can_end'] = bool(self.repo.query('SELECT 1 FROM runtime_lease WHERE run_id=?', (run_id,)))
+            return run
+        return coordinator.describe_run(run_id)
+    def collect_context(self, run_id, *args, **kwargs): return self._for_run(run_id).collect_context(run_id, *args, **kwargs)
+    def context_sessions(self, task_id):
+        result = []
+        for (kind, owner), coordinator in list(self.instances.items()):
+            if (kind == 'trial' and owner == task_id) or kind == 'execution':
+                result.extend(coordinator.context_sessions(task_id))
+        return result
+    def active_instances(self):
+        rows = []
+        for key, coordinator in self.instances.items():
+            if coordinator.process and coordinator.process.is_alive() and coordinator.session_run_id:
+                run = coordinator.describe_run(coordinator.session_run_id)
+                rows.append({**run, 'instance_type': key[0]})
+        return rows
+    def delete_run(self, run_id):
+        run = self.repo.run(run_id)
+        key = self._key(run)
+        coordinator = self._for_run(run_id)
+        result = coordinator.delete_run(run_id)
+        coordinator.close()
+        self.instances.pop(key, None)
+        return result
+    def clear_task_runs(self, task_id):
+        for key, coordinator in list(self.instances.items()):
+            if key == ('trial', task_id) or any(r['task_id'] == task_id for r in [self.repo.run(coordinator.session_run_id)] if coordinator.session_run_id):
+                coordinator.close()
+                self.instances.pop(key, None)
+        helper = Coordinator(self.repo, self.registry, self.factory, recover=False)
+        return helper.clear_task_runs(task_id)
+    def _stop_worker(self, force=False):
+        if self.last: self.last._stop_worker(force)
+    def close(self):
+        for coordinator in list(self.instances.values()): coordinator.close()
+        self.instances.clear()

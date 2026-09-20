@@ -440,6 +440,33 @@ class Repository(Store):
             (task_id,) if task_id else (),
         )
 
+    def list_step_contexts(self, step_id):
+        self.step(step_id)
+        rows = self.query("SELECT * FROM step_contexts WHERE step_id=? ORDER BY created_at", (step_id,))
+        for row in rows:
+            row['item'] = json.loads(row.pop('item_json'))
+        return rows
+
+    def save_step_context(self, step_id, provider_id, name, source_page, item, context_id=None):
+        self.step(step_id)
+        if source_page not in {'draft', 'trial_feedback'}:
+            raise TaskError('FORM_INVALID', '上下文来源无效')
+        if not isinstance(name, str) or not name.strip():
+            raise TaskError('FORM_INVALID', '上下文名称不能为空')
+        context_id = context_id or uid()
+        timestamp = now()
+        with self.transaction() as db:
+            db.execute(
+                "INSERT INTO step_contexts VALUES(?,?,?,?,?,?,?) ON CONFLICT(context_id) DO UPDATE SET name=excluded.name,item_json=excluded.item_json,updated_at=excluded.updated_at",
+                (context_id, step_id, provider_id, name.strip(), source_page, dumps(item), timestamp, timestamp),
+            )
+        return next(row for row in self.list_step_contexts(step_id) if row['context_id'] == context_id)
+
+    def delete_step_context(self, context_id):
+        if not self.execute('DELETE FROM step_contexts WHERE context_id=?', (context_id,)):
+            raise TaskError('NOT_FOUND')
+        return {'deleted': context_id}
+
     def events(self, run_id):
         return self.query(
             "SELECT * FROM run_events WHERE run_id=? ORDER BY created_at", (run_id,)

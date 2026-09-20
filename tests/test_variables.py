@@ -56,6 +56,10 @@ class VariablesTests(unittest.TestCase):
         schema={'type':'object','properties':{'x':{'type':'string'}},'additionalProperties':False}
         self.assertEqual(automatic_inputs(schema, {'x':'env','extra':1}, {'x':'task'}, {'x':'step'}), {'x':'step'})
 
+    def test_step_default_overrides_task_and_environment(self):
+        schema={'type':'object','properties':{'x':{'type':'string','default':'step'}},'additionalProperties':False}
+        self.assertEqual(automatic_inputs(schema, {'x':'env'}, {'x':'task'}, {}), {'x':'step'})
+
     def test_empty_parameter_rows_do_not_block_saving(self):
         editor=object.__new__(SchemaEditor)
         editor.original={'type':'object','properties':{}}

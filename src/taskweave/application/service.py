@@ -7,7 +7,7 @@ import time
 from taskweave.core.validation import TaskError, normalize_step
 from taskweave.infrastructure.locking import InstanceLock
 from taskweave.infrastructure.repository import Repository
-from taskweave.infrastructure.runtime import Coordinator
+from taskweave.infrastructure.runtime import CoordinatorPool
 from taskweave.infrastructure.worker import load_registry
 from taskweave.infrastructure.storage import default_home
 from taskweave.application.authoring import Authoring
@@ -28,7 +28,7 @@ class Application:
             self.repo = Repository(self.home)
             self.registry = load_registry(registry_factory, self.home)
             self.registry_factory = registry_factory
-            self.coordinator = Coordinator(self.repo, self.registry, registry_factory)
+            self.coordinator = CoordinatorPool(self.repo, self.registry, registry_factory)
             self.repo.finish_pending_deletions()
             self.authoring = Authoring(self.repo, self.registry, model)
         except Exception:
@@ -68,7 +68,7 @@ class Application:
             if not validation["valid"]:
                 raise TaskError("PLUGIN_LINT_FAILED")
             step = self.repo.step(step_id)
-            leases = self.repo.query("SELECT * FROM runtime_lease")
+            leases = self.repo.query("SELECT l.* FROM runtime_lease l JOIN task_runs r USING(run_id) WHERE r.mode='TRIAL' AND r.task_id=?", (step['task_id'],))
             lease = leases[0] if leases else None
             if lease:
                 owner = self.repo.run(lease['run_id'])
@@ -97,10 +97,8 @@ class Application:
                 if not request.get('flow_trial') or request.get('initial_step_inputs', request.get('step_inputs', {})) != (step_inputs or {}):
                     raise TaskError('COMMAND_CONFLICT')
                 return previous
-            if self.coordinator.thread and self.coordinator.thread.is_alive():
-                raise TaskError('RUN_BUSY')
             step = self.repo.step(step_id)
-            leases = self.repo.query('SELECT * FROM runtime_lease')
+            leases = self.repo.query("SELECT l.* FROM runtime_lease l JOIN task_runs r USING(run_id) WHERE r.mode='TRIAL' AND r.task_id=?", (step['task_id'],))
             for lease in leases:
                 owner = self.repo.run(lease['run_id'])
                 if owner['mode'] != 'TRIAL' or owner['task_id'] != step['task_id']:
@@ -110,11 +108,9 @@ class Application:
                     raise TaskError('PLUGIN_LINT_FAILED')
                 if candidate['step_id'] == step_id:
                     break
-            self.coordinator._stop_worker()
             for lease in leases:
                 self.repo.execute('DELETE FROM runtime_lease WHERE run_id=?', (lease['run_id'],))
             run = self.repo.create_run(step['task_id'], inputs, self.registry.versions, environment_id, step_id, flow_trial=True, step_inputs=step_inputs, defer_inputs=defer_inputs)
-            self.authoring.reset_conversation(step_id)
             return self.coordinator.start(run['run_id'], command_id)
 
     def confirm_step(self, step_id, attempt_id, expected_hash):
@@ -211,6 +207,9 @@ class Application:
             "plugin.configure": self.configure_plugin,
             "plugin.list": self.installed_plugins,
             "context.read": self.collect_context,
+            "context.list": self.repo.list_step_contexts,
+            "context.save": self.repo.save_step_context,
+            "context.delete": self.repo.delete_step_context,
             "task.copy": self.repo.copy_task,
             "task.clear_runs": self.clear_task_runs,
             "task.export": self.export_task,
@@ -244,6 +243,7 @@ class Application:
             "run.restart": self.coordinator.restart,
             "run.delete": self.coordinator.delete_run,
             "run.control": self.coordinator.control,
+            "run.instances": self.coordinator.active_instances,
             "run.reconcile": self.coordinator.reconcile,
             "run.get": self.coordinator.describe_run,
             "run.context.sessions": self.coordinator.context_sessions,
@@ -270,6 +270,7 @@ class Application:
             "run.wait",
             "run.get",
             "run.list",
+            "run.instances",
             "run.events",
             "run.output",
             "result.read",
@@ -281,6 +282,7 @@ class Application:
             "draft.export",
             "task.export",
             "feedback.export",
+            "context.list",
         }:
             return methods[operation](**(params or {}))
         with self.coordinator.lock:

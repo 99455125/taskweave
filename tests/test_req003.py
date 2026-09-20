@@ -223,7 +223,7 @@ class AppTests(unittest.TestCase):
         with self.assertRaises(TaskError):
             self.app.coordinator.start(run["run_id"], command, mode="NEXT")
 
-    def test_single_instance_and_single_active_run(self):
+    def test_single_desktop_instance_and_parallel_formal_runs(self):
         with self.assertRaises(TaskError):
             Application(self.home)
         task = self.task()
@@ -233,11 +233,12 @@ class AppTests(unittest.TestCase):
         r2 = self.app.create_run(task)
         self.app.coordinator.start(r1["run_id"], uid(), mode="NEXT")
         self.app.coordinator.wait(r1["run_id"])
-        with self.assertRaises(TaskError):
-            self.app.coordinator.start(r2["run_id"], uid())
-        self.app.coordinator.control(r1["run_id"], uid(), "abandon")
         self.app.coordinator.start(r2["run_id"], uid())
         self.assertEqual(self.app.coordinator.wait(r2["run_id"])["status"], "SUCCEEDED")
+        self.assertEqual(self.app.coordinator.describe_run(r1["run_id"])["status"], "PAUSED")
+        self.assertEqual({item['run_id'] for item in self.app.coordinator.active_instances()}, {r1['run_id'], r2['run_id']})
+        self.app.coordinator.control(r1["run_id"], uid(), "abandon")
+        self.app.coordinator.control(r2["run_id"], uid(), "abandon")
 
     def test_worker_kill_unknown_requires_reconciliation(self):
         task = self.task()

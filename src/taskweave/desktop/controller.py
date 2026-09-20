@@ -47,6 +47,9 @@ class DesktopController:
             raise TaskError('VALIDATION_EVIDENCE_INVALID', '尚无试跑记录')
         attempt_id = attempts[-1]['attempt_id']
         feedback = await self.call('feedback.export', attempt_id=attempt_id)
+        definition = json.loads(trial['definition_json'])
+        executed = next((item for item in definition['steps'] if item['step_id'] == step_id), None)
+        feedback['executed_step_content'] = executed.get('step_content') if executed else None
         events = await self.call('run.events', run_id=run_id)
         logs = []
         size = 0
