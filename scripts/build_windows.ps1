@@ -1,4 +1,4 @@
-param(
+﻿param(
     [string]$WebView2Runtime = $env:WEBVIEW2_FIXED_RUNTIME_DIR,
     [switch]$SkipWebView2
 )
