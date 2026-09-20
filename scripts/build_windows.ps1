@@ -1,5 +1,6 @@
 ﻿param(
     [string]$WebView2Runtime = $env:WEBVIEW2_FIXED_RUNTIME_DIR,
+    [string]$WebView2Cab = $env:WEBVIEW2_FIXED_RUNTIME_CAB,
     [switch]$SkipWebView2
 )
 
@@ -27,22 +28,38 @@ if (-not [Environment]::Is64BitProcess) {
 if (-not (Get-Command uv -ErrorAction SilentlyContinue)) {
     throw "构建机缺少 uv。请先安装 uv；目标机不需要 uv 或 Python。"
 }
-if (-not $SkipWebView2 -and (-not $WebView2Runtime -or -not (Test-Path $WebView2Runtime))) {
-    throw "请通过 -WebView2Runtime 指定已解压的 WebView2 Fixed Version x64 目录，或显式使用 -SkipWebView2（仅适用于目标机已验证存在 WebView2 Runtime）。"
+if (-not $SkipWebView2 -and -not $WebView2Runtime -and -not $WebView2Cab) {
+    throw "请用 -WebView2Cab 指定官方 Fixed Version x64 CAB，或用 -WebView2Runtime 指定已解压目录。"
 }
-if (-not $SkipWebView2) {
-    $WebViewExecutable = Get-ChildItem $WebView2Runtime -Recurse -Filter "msedgewebview2.exe" -File |
-        Select-Object -First 1
-    if (-not $WebViewExecutable) {
-        throw "WebView2 目录中没有 msedgewebview2.exe，请提供完整的 Fixed Version x64 Runtime。"
-    }
-    $WebView2Runtime = $WebViewExecutable.Directory.FullName
+if (-not $SkipWebView2 -and $WebView2Cab -and -not (Test-Path $WebView2Cab -PathType Leaf)) {
+    throw "WebView2 CAB 不存在：$WebView2Cab"
+}
+if (-not $SkipWebView2 -and -not $WebView2Cab -and -not (Test-Path $WebView2Runtime -PathType Container)) {
+    throw "WebView2 已解压目录不存在：$WebView2Runtime"
 }
 
 Remove-Item $BuildRoot -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item $DistRoot -Recurse -Force -ErrorAction SilentlyContinue
 New-Item $BrowserCache -ItemType Directory -Force | Out-Null
 New-Item $DistRoot -ItemType Directory -Force | Out-Null
+
+if (-not $SkipWebView2) {
+    if ($WebView2Cab) {
+        $ExpandedWebView2 = Join-Path $BuildRoot "webview2-fixed"
+        New-Item $ExpandedWebView2 -ItemType Directory -Force | Out-Null
+        & "$env:SystemRoot\System32\expand.exe" $WebView2Cab "-F:*" $ExpandedWebView2
+        if ($LASTEXITCODE -ne 0) {
+            throw "WebView2 CAB 解压失败，退出码：$LASTEXITCODE"
+        }
+        $WebView2Runtime = $ExpandedWebView2
+    }
+    $WebViewExecutable = Get-ChildItem $WebView2Runtime -Recurse -Filter "msedgewebview2.exe" -File |
+        Select-Object -First 1
+    if (-not $WebViewExecutable) {
+        throw "WebView2 内容中没有 msedgewebview2.exe，请提供完整的 Fixed Version x64 Runtime。"
+    }
+    $WebView2Runtime = $WebViewExecutable.Directory.FullName
+}
 
 Push-Location $Root
 try {

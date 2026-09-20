@@ -6,6 +6,8 @@
 
 2026-09-20：修复 Windows PowerShell 5.1 不提供 `$IsWindows` 自动变量而误判非 Windows 的问题；改用 Windows 各 PowerShell 版本均提供的 `$env:OS -eq "Windows_NT"` 判定。同时补上 PowerShell 5.1 不会因原生命令非零退出码自动停止的处理，以及 64 位进程、Chromium、WebView2、TaskWeave.exe 和最终 ZIP 的实体校验，防止生成残缺包。
 
+2026-09-20：WebView2 构建输入改为微软官方 Fixed Version x64 CAB，由脚本使用 `expand.exe` 解压并校验 `msedgewebview2.exe`；CI 同步改为 CAB 流程。Windows 启动时除环境变量外，显式设置 pywebview 6 的 `webview.settings["WEBVIEW2_RUNTIME_PATH"]`，确保使用包内固定版。
+
 下一步：在 Windows x64 构建机生成便携包，再到无 Python、无缓存、断网的目标 Windows 10 VM 验收。
 
 本需求交付基础顺序任务版本；条件/循环/嵌套与图形编排随后由 REQ-008/009 实现和验证。
