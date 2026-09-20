@@ -6,7 +6,7 @@
 
 开发机同步：`uv sync --extra browser`。下载匹配 Chromium 仅在开发/构建机进行；受限虚拟机运行随包浏览器。
 
-任务参数与环境变量支持 playwright_headless、playwright_timeout_ms、playwright_role、playwright_executable_path。任务参数优先；声明与说明在 manifest.config_variables 中，UI 统一展示。使用任务参数 schema 的默认值配置试跑，正式运行支持本次填写值；保留既有 browser 环境配置兼容。
+任务参数与环境变量支持 playwright_headless、playwright_timeout_ms、playwright_role、playwright_executable_path、playwright_locale。locale 默认 `zh-CN`，在创建 BrowserContext 时应用，不通过页面操作切换通用语言。任务参数优先；声明与说明在 manifest.config_variables 中，UI 统一展示。
 
 插件 manifest 可选 resource_descriptions 提供资源 ID 对应的人类可读说明，供结束执行确认框展示；缺省显示资源 ID，不改变关闭接口或 v1 契约。Playwright 声明浏览器、页面及浏览器上下文。
 

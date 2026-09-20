@@ -137,7 +137,7 @@ class ModelLogTests(unittest.TestCase):
                 asyncio.run(app.authoring.generate(one['step_id'],one['content_hash']))
                 self.assertNotIn('second repair',json.dumps(model.requests[-1]))
 
-    def test_repair_history_keeps_turns_without_repeating_stale_snapshots(self):
+    def test_repair_history_keeps_contexts_without_repeating_static_step_fields(self):
         from taskweave.application.service import Application
         from taskweave.core.ports import ModelReply
         source = 'async def run(ctx, inputs):\n    return ctx.result()'
@@ -159,7 +159,9 @@ class ModelLogTests(unittest.TestCase):
                 self.assertEqual(len(sent), 4)
                 self.assertEqual([d['user_supplement'] for d in sent], ['round '+str(i) for i in range(4)])
                 self.assertIn('elements', json.loads(sent[-1]['contexts'][0]['content']))
-                self.assertNotIn('elements', json.loads(sent[0]['contexts'][0]['content']))
+                self.assertIn('elements', json.loads(sent[0]['contexts'][0]['content']))
+                self.assertNotIn('step_content', sent[0])
+                self.assertIn('step_content', sent[-1])
                 stored = [json.loads(m['content']) for m in app.authoring.conversations[step['step_id']] if m['role'] == 'user']
                 self.assertIn('elements', json.loads(stored[0]['contexts'][0]['content']))
 

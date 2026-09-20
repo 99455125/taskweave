@@ -64,8 +64,10 @@ class Workbench:
         ):
             ui.label("TaskWeave · 任务织流").classes("text-lg font-medium")
             ui.label("本地工作空间").classes("text-gray-500")
-            if hasattr(controller, "open_logs"):
-                self.button("服务日志", controller.open_logs)
+            with ui.row().classes("items-center gap-2"):
+                self.button("执行实例", self.instance_dialog)
+                if hasattr(controller, "open_logs"):
+                    self.button("服务日志", controller.open_logs)
         with ui.row().classes("w-full items-start flex-wrap md:flex-nowrap gap-5"):
             with ui.column().classes("tw-sidebar tw-panel"):
                 for page, title in [
@@ -129,6 +131,42 @@ class Workbench:
             control.props('text-color=red-7').style('background: #fef2f2; color: #b91c1c; border: 1px solid #dc2626')
         else:
             control.props('text-color=primary').style('background: white; color: #345adb; border: 1px solid #cbd5e1')
+
+    async def instance_dialog(self):
+        with ui.dialog() as dialog, ui.card().classes("w-full max-w-4xl"):
+            ui.label("执行实例").classes("text-lg font-medium")
+            ui.label("调试实例按任务复用；正式执行每条运行使用独立实例。").classes("text-gray-500")
+            area = ui.column().classes("w-full gap-2")
+
+            async def refresh():
+                instances = await self.controller.call("run.instances")
+                area.clear()
+                with area:
+                    if not instances:
+                        ui.label("当前没有未结束的执行实例。").classes("text-gray-500")
+                        return
+                    for instance in instances:
+                        with ui.row().classes("w-full items-center justify-between border rounded p-3 gap-3"):
+                            kind = "调试" if instance["instance_type"] == "trial" else "正式执行"
+                            with ui.column().classes("gap-0 min-w-0"):
+                                ui.label(f"{kind} · {instance['status']}").classes("font-medium")
+                                ui.label(f"任务 {instance['task_id']} · 运行 {instance['run_id'][:8]}").classes("text-sm text-gray-500")
+
+                            async def end(current=instance):
+                                operation = "cancel" if current["status"] == "RUNNING" else "abandon"
+                                await self.controller.call("run.control", run_id=current["run_id"], command_id=command_id(), operation=operation)
+                                if operation == "cancel":
+                                    await self.controller.call("run.wait", run_id=current["run_id"], timeout=5)
+                                    latest = await self.controller.call("run.get", run_id=current["run_id"])
+                                    if latest.get("can_end"):
+                                        await self.controller.call("run.control", run_id=current["run_id"], command_id=command_id(), operation="abandon")
+                                await refresh()
+
+                            self.button("结束实例", end)
+            await refresh()
+            with ui.row().classes("w-full justify-end"):
+                ui.button("关闭", on_click=dialog.close).props("outline")
+        dialog.open()
 
     async def navigate(self, page, task_id=None, step_id=None):
         dirty = False
@@ -480,6 +518,8 @@ class Workbench:
             'step_values': lambda _: step_form.values(),
             'apply_task_values': lambda _, values: form.apply_defaults(values),
             'apply_step_values': lambda _, values: step_form.apply_defaults(values),
+            'task_form': form,
+            'step_form': step_form,
         })()
         async def change(event):
             if getattr(environment, '_tw_skip_change', False):
@@ -572,6 +612,8 @@ class Workbench:
             self.step_id = steps[0]["step_id"]
         step = next(s for s in steps if s["step_id"] == self.step_id)
         self.old_step = step
+        self.context_entries = await self.controller.call("context.list", step_id=self.step_id)
+        self.contexts = [entry["item"] for entry in self.context_entries]
         catalog = await self.controller.call("capabilities")
         with ui.row().classes("w-full items-start flex-wrap lg:flex-nowrap"):
             with ui.column().classes("tw-panel w-full lg:w-56 shrink-0"):
@@ -645,11 +687,11 @@ class Workbench:
             with ui.column().classes("tw-panel tw-content w-full"):
                 with ui.tabs().classes("w-full") as tabs:
                     self.editor_tabs = tabs
-                    content = ui.tab("内容与 AI")
+                    content = ui.tab("步骤详情")
                     action = ui.tab("动作表单")
-                    bindings = ui.tab("输入与依赖")
-                    settings = ui.tab("步骤设置")
-                    trial = ui.tab("试跑反馈")
+                    bindings = ui.tab("输入依赖")
+                    settings = ui.tab("时间设置")
+                    trial = ui.tab("调试")
                 with ui.tab_panels(tabs, value=content).classes("w-full"):
                     with ui.tab_panel(content):
                         name = ui.input("步骤名称", value=step["name"]).classes(
@@ -707,8 +749,8 @@ class Workbench:
                             self.button("校验内容", lint)
                             self.button("保存草稿", self.save_editor)
                             self.button(
-                                "试跑",
-                                lambda: self.start_trial(tabs, trial),
+                                "调试",
+                                lambda: self.enter_debug(tabs, trial),
                                 primary=True,
                             )
                             self.button("确认验证并保存", self.confirm)
@@ -892,9 +934,23 @@ class Workbench:
                             min=1,
                             max=3600,
                             step=1,
-                        )
+                        ).classes("w-full")
                         self.button("保存步骤设置", self.save_editor, primary=True)
                     with ui.tab_panel(trial):
+                        with ui.row().classes('w-full items-center gap-2 flex-wrap'):
+                            ui.label('步骤插件上下文').classes('font-medium')
+                            self.button('采集插件上下文', lambda: self.collect_context(source_page='trial_feedback'))
+                        self.trial_context_panel = ui.column().classes('w-full')
+                        self.render_collected_contexts(self.trial_context_panel)
+                        self.debug_ai_supplement_value = getattr(self, 'debug_ai_supplement_value', '')
+                        self.trial_ai_supplement = ui.textarea(
+                            'AI 补充说明（可选）',
+                            value=self.debug_ai_supplement_value,
+                            placeholder='仅用于当前调试轮次，例如：点击结果后会打开新标签页。',
+                        ).classes('w-full')
+                        self.trial_ai_supplement.on_value_change(
+                            lambda event: setattr(self, 'debug_ai_supplement_value', event.value or '')
+                        )
                         environment = await self.environment_select()
                         self.trial_environment = environment
                         self.trial_form = await self.trial_variables(step, environment)
@@ -966,8 +1022,24 @@ class Workbench:
                 ui.button('取消', on_click=dialog.close).props('outline')
         dialog.open()
 
+    async def enter_debug(self, tabs, trial_tab):
+        saved = await self.save_editor()
+        self.controller.application.authoring.reset_conversation(saved['step_id'])
+        self.debug_round_fresh = True
+        self.debug_feedback = None
+        self.debug_feedback_run_id = None
+        self.debug_removed_feedback = set()
+        self.debug_ai_supplement_value = ''
+        self.trial_signature = None
+        tabs.value = trial_tab
+        await self.refresh_trial()
+
     async def start_trial(self, tabs, trial_tab, continue_session=False):
         saved = await self.save_editor()
+        self.debug_round_fresh = False
+        self.debug_feedback = None
+        self.debug_feedback_run_id = None
+        self.debug_removed_feedback = set()
         if continue_session:
             previous_id = self.trials.get(saved["step_id"])
             if previous_id:
@@ -1086,8 +1158,33 @@ class Workbench:
                 await self.resume_inputs(run, form.task_values() if waiting['scope'] == 'task' else form.step_values(), step_inputs=step_inputs)
                 dialog.close()
             with ui.row().classes("w-full items-center gap-2 flex-wrap"):
-                self.button('提交输入并继续', resume, primary=True)
+                submit = ui.button('提交输入并继续', on_click=resume).props('outline')
                 ui.button('稍后填写', on_click=dialog.close).props('outline')
+            validation_hint = ui.label().classes('text-sm text-red-700')
+            def update_submit(_=None):
+                from taskweave.core.validation import validate
+                try:
+                    values = form.task_values() if waiting['scope'] == 'task' else form.step_values()
+                    validate(values, waiting['schema'])
+                    if waiting['scope'] == 'task':
+                        editable_schema = {**current['input_schema'], 'properties': {key: spec for key, spec in current['input_schema'].get('properties', {}).items() if key not in current['bindings']}, 'required': [key for key in current['input_schema'].get('required', []) if key not in current['bindings']]}
+                        validate(form.step_values(), {**editable_schema, 'additionalProperties': True})
+                    submit.enable()
+                    validation_hint.text = ''
+                except (TaskError, ValueError, TypeError) as exc:
+                    submit.disable()
+                    required = list(waiting['schema'].get('required', []))
+                    values = form.task_values() if waiting['scope'] == 'task' else form.step_values()
+                    missing = [key for key in required if key not in values or values[key] in (None, '')]
+                    if waiting['scope'] == 'task':
+                        step_values = form.step_values()
+                        missing.extend(key for key in editable_schema.get('required', []) if key not in step_values or step_values[key] in (None, ''))
+                    validation_hint.text = ('请补充必填字段：' + '、'.join(missing)) if missing else ('输入格式不正确：' + str(exc))
+            for value_form in (form.task_form, form.step_form):
+                for _, control in value_form.controls.values():
+                    if hasattr(control, 'on_value_change'):
+                        control.on_value_change(update_submit)
+            update_submit()
         self.button('补充必录参数', dialog.open, primary=True)
         dialog.open()
 
@@ -1112,12 +1209,15 @@ class Workbench:
                 kind = 'flow' if json.loads(run['request_json']).get('flow_trial') else 'single'
                 state = run['status']
                 self.style_trial_action(self.trial_actions[kind], state)
-        signature = document_text(run)
+        signature = document_text({'run': run, 'fresh_round': bool(getattr(self, 'debug_round_fresh', False))})
         if signature == getattr(self, "trial_signature", None):
             return
         self.trial_signature = signature
         self.trial_area.clear()
         with self.trial_area:
+            if getattr(self, 'debug_round_fresh', False):
+                ui.label('新的调试轮次已准备。保留现有调试实例和插件资源；执行后显示本轮日志与错误。')
+                return
             await self.pending_inputs(run)
             if not run_id:
                 ui.label("暂无试跑记录。修改后请重新试跑，再确认保存。")
@@ -1140,6 +1240,31 @@ class Workbench:
                 if any(ref['attempt_id'] == attempt['attempt_id'] for ref in run['results']):
                     result_step = {'step_id': attempt['step_id'], 'name': names.get(attempt['step_id'], '步骤')}
                     self.button('查看结果', lambda r=run, st=result_step, aid=attempt['attempt_id']: self.step_result_dialog(r, st, aid))
+            failed = next((a for a in reversed(run['attempts']) if a['valid'] and a['status'] in {'FAILED', 'UNKNOWN'} and a['step_id'] == self.step_id), None)
+            if failed:
+                feedback = await self.controller.trial_feedback(run_id, self.step_id)
+                self.debug_feedback = feedback
+                self.debug_feedback_run_id = run_id
+                removed = getattr(self, 'debug_removed_feedback', set())
+                self.debug_removed_feedback = removed
+                with ui.expansion('本次报错上下文', icon='error_outline').classes('w-full border rounded'):
+                    ui.label('下列内容默认提供给 AI；删除只影响本轮 AI 请求，不删除运行记录。').classes('text-sm text-gray-500')
+                    for key, title in [
+                        ('executed_step_content', '本次实际执行的步骤内容'),
+                        ('failed_action', '失败动作'),
+                        ('failure_snapshots', '失败快照'),
+                        ('trial_logs', '本次试跑日志'),
+                    ]:
+                        value = feedback.get(key)
+                        if key in removed or not value:
+                            continue
+                        with ui.expansion(title).classes('w-full'):
+                            with ui.row().classes('w-full justify-end'):
+                                def remove_error_part(part=key):
+                                    self.debug_removed_feedback.add(part)
+                                    self.trial_signature = None
+                                ui.button(icon='delete', on_click=remove_error_part).props('flat round color=negative').tooltip('不再发送给 AI')
+                            ui.code(document_text(value), language='json').classes('w-full tw-code')
             events = await self.controller.call("run.events", run_id=run_id)
             if events:
                 with ui.expansion("试跑日志").classes("w-full"):
@@ -1182,18 +1307,7 @@ class Workbench:
         await self.paint()
 
     async def generate(self, fix_logs=False, web_chat=False):
-        supplement = ""
-        if fix_logs:
-            with ui.dialog() as prompt, ui.card().classes("w-full max-w-2xl"):
-                ui.label("根据试跑日志修复当前步骤").classes("text-lg")
-                information = ui.textarea("补充说明（可选）", placeholder="例如：继续操作当前页面，点击结果后会打开新标签页。").classes("w-full")
-                ui.label("携带当前调试过程中历次修复对话及最新试跑日志；在反馈页再次试跑会保留这些对话。")
-                with ui.row():
-                    ui.button("取消", on_click=lambda: prompt.submit(None)).props("outline")
-                    ui.button("生成修复建议", on_click=lambda: prompt.submit(information.value or ""))
-            supplement = await prompt
-            if supplement is None:
-                return
+        supplement = getattr(self, 'debug_ai_supplement_value', '') if fix_logs else ''
         saved = await self.save_editor()
         feedback = None
         if fix_logs and self.trials.get(saved["step_id"]):
@@ -1207,6 +1321,10 @@ class Workbench:
                     name = next(st['name'] for st in definition if st['step_id'] == failed['step_id'])
                     raise TaskError('FORM_INVALID', '本次流程试跑失败在“' + name + '”，请切换到该步骤修复。')
                 feedback = await self.controller.trial_feedback(trial['run_id'], saved['step_id'])
+                if getattr(self, 'debug_feedback_run_id', None) == trial['run_id'] and getattr(self, 'debug_feedback', None):
+                    feedback = dict(self.debug_feedback)
+                for key in getattr(self, 'debug_removed_feedback', set()):
+                    feedback.pop(key, None)
         if fix_logs and feedback is None:
             raise TaskError("VALIDATION_EVIDENCE_INVALID", "请先执行当前步骤试跑")
         generation_contexts = self.contexts
@@ -1226,10 +1344,12 @@ class Workbench:
             environment_id=self.environment_id or None,
             supplement=supplement,
             use_history=fix_logs,
+            history_rounds=-1 if fix_logs else 0,
+            deduplicate_history=True,
             export_only=web_chat,
         )
         if proposal.get('history_trimmed'):
-            ui.notify("对话较长，本次只携带最近两轮历史。", type="info")
+            ui.notify("本次已按选择携带限定轮数的历史对话。", type="info")
         if web_chat:
             await self.web_chat_dialog(saved, proposal, fix_logs)
             return
@@ -1272,39 +1392,68 @@ class Workbench:
         from taskweave.desktop.chat import parse_chat_reply
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-4xl"):
             ui.label("网页 AI 对话 · 不需要 API Key").classes("text-lg")
-            ui.label("复制以下内容到网页 AI，回复后粘贴到下方。可粘贴 JSON 或完整 Python 代码。")
+            ui.label("复制以下内容到网页 AI，再将它的整段回复粘贴到下方。推荐回复为包含 step_content 和 explanation 的 JSON；也兼容完整 Python 代码。")
             ui.textarea("复制到网页 AI 的内容", value=exported["prompt"]).props("readonly autogrow").classes("w-full")
             async def copy_prompt():
                 await self.controller.copy_text(exported["prompt"])
                 ui.notify("对话内容已复制")
             self.button("复制对话内容", copy_prompt)
             reply = ui.textarea("粘贴网页 AI 回复").classes("w-full").props("autogrow")
-            async def accept():
+            async def preview_reply():
                 source, explanation = parse_chat_reply(reply.value or "")
                 current = await self.controller.call("step.get", step_id=saved["step_id"])
                 if current["content_hash"] != exported["expected_hash"] or self.edit_controls["code"].value != saved["step_content"]:
                     raise TaskError("EDIT_CONFLICT", "步骤已修改，请重新生成网页对话内容")
-                self.edit_controls["code"].value = source
-                try:
-                    await self.save_editor()
-                except Exception:
-                    self.edit_controls["code"].value = saved["step_content"]
-                    raise
-                if use_history:
-                    authoring = self.controller.application.authoring
-                    authoring.conversations.setdefault(saved["step_id"], []).extend([
-                        exported["messages"][-1],
-                        {"role": "assistant", "content": json.dumps({"step_content": source, "explanation": explanation}, ensure_ascii=False)},
-                    ])
-                from taskweave.infrastructure.privacy import redact
-                logging.getLogger(__name__).info("网页 AI 回复已采纳：%s", redact({"step_content": source, "explanation": explanation}))
-                ui.notify("网页 AI 回复已保存为草稿，下一次试跑使用此内容。")
-                dialog.close()
-                selected_tab = self.editor_tabs.value
-                await self.paint()
-                self.editor_tabs.value = selected_tab
+                candidate = normalize_step({**saved, "step_content": source})
+                diagnostics = await self.controller.application.authoring.validate_step(candidate)
+                errors = [item.get("message", "") for item in diagnostics if item.get("severity") == "error"]
+                if errors:
+                    raise TaskError("CHAT_REPLY_INVALID", "；".join(errors))
+                with ui.dialog() as preview, ui.card().classes("w-full max-w-4xl"):
+                    ui.label("网页 AI 回复预览").classes("text-lg")
+                    ui.label("解析和差异均由程序生成；只有点击采纳后才会写入草稿。").classes("text-gray-500")
+                    ui.label("解释").classes("font-medium")
+                    ui.label(explanation or "AI 未提供解释。").classes("whitespace-pre-wrap")
+                    ui.label("步骤对比").classes("font-medium")
+                    ui.code(
+                        self.controller.diff(saved["step_content"], source),
+                        language="diff",
+                    ).classes("w-full tw-code")
+                    warnings = [item.get("message", "") for item in diagnostics if item.get("severity") != "error"]
+                    if warnings:
+                        ui.label("校验提示：" + "；".join(warnings)).classes("text-amber-700")
+
+                    async def adopt():
+                        latest = await self.controller.call("step.get", step_id=saved["step_id"])
+                        if latest["content_hash"] != exported["expected_hash"] or self.edit_controls["code"].value != saved["step_content"]:
+                            raise TaskError("EDIT_CONFLICT", "预览期间步骤已修改，请重新生成网页对话内容")
+                        self.edit_controls["code"].value = source
+                        try:
+                            await self.save_editor()
+                        except Exception:
+                            self.edit_controls["code"].value = saved["step_content"]
+                            raise
+                        if use_history:
+                            authoring = self.controller.application.authoring
+                            authoring.conversations.setdefault(saved["step_id"], []).extend([
+                                exported["messages"][-1],
+                                {"role": "assistant", "content": json.dumps({"step_content": source, "explanation": explanation}, ensure_ascii=False)},
+                            ])
+                        from taskweave.infrastructure.privacy import redact
+                        logging.getLogger(__name__).info("网页 AI 回复已采纳：%s", redact({"step_content": source, "explanation": explanation}))
+                        ui.notify("网页 AI 回复已保存为草稿，下一次试跑使用此内容。")
+                        preview.close()
+                        dialog.close()
+                        selected_tab = self.editor_tabs.value
+                        await self.paint()
+                        self.editor_tabs.value = selected_tab
+
+                    with ui.row().classes("w-full items-center gap-2 flex-wrap"):
+                        self.button("采纳到编辑器", adopt, primary=True)
+                        ui.button("返回修改粘贴内容", on_click=preview.close).props("outline")
+                preview.open()
             with ui.row().classes("w-full items-center gap-2 flex-wrap"):
-                self.button("采纳并保存草稿", accept, primary=True)
+                self.button("解析并预览", preview_reply, primary=True)
                 ui.button("关闭", on_click=dialog.close).props("outline")
         dialog.open()
 
@@ -1312,7 +1461,6 @@ class Workbench:
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-md"):
             ui.label("AI 生成 / 修订").classes("text-lg font-medium")
             ui.label("选择本次使用的对话方式。").classes("text-gray-500")
-
             with ui.row().classes("w-full items-center gap-2 flex-wrap"):
                 ui.button("使用 API", on_click=lambda: dialog.submit("api")).props(
                     "outline"
@@ -1325,8 +1473,8 @@ class Workbench:
         if mode:
             await self.generate(web_chat=mode == "chat")
 
-    def render_collected_contexts(self):
-        panel = getattr(self, "context_panel", None)
+    def render_collected_contexts(self, panel=None):
+        panel = panel or getattr(self, "context_panel", None)
         if panel is None or panel.is_deleted:
             return
         panel.clear()
@@ -1342,41 +1490,57 @@ class Workbench:
                 ).classes("text-sm text-gray-500 px-2")
                 for entry in list(self.context_entries):
                     item = entry["item"]
-                    source = item.get("source") or entry["provider"]
-                    label = source + " · " + entry["collected_at"]
+                    provider = entry.get("provider_id", entry.get("provider", ""))
+                    source_label = {'draft': '草稿页面', 'trial_feedback': '调试页面'}.get(entry.get('source_page'), entry.get('source_page', ''))
+                    label = entry.get('name') or item.get("source") or provider
                     with ui.expansion(label, icon="description").classes(
                         "w-full border rounded"
                     ):
                         with ui.row().classes("w-full items-center justify-between"):
-                            ui.label("插件上下文：" + entry["provider"]).classes(
+                            ui.label("插件上下文：" + provider + " · 来源：" + source_label).classes(
                                 "text-sm text-gray-500"
                             )
 
-                            def remove(current=entry):
-                                self.remove_context_entry(current)
-                                self.render_collected_contexts()
+                            async def remove(current=entry):
+                                await self.remove_context_entry(current)
+                                self.render_all_context_panels()
 
                             ui.button(icon="delete", on_click=remove).props(
                                 "flat round color=negative aria-label=删除上下文"
                             ).tooltip("删除上下文")
+                        name = ui.input('上下文名称', value=entry.get('name', label)).classes('w-full')
+                        async def rename(current=entry, control=name, provider_id=provider):
+                            if control.value and control.value.strip() != current.get('name'):
+                                saved = await self.controller.call('context.save', step_id=self.step_id,
+                                    provider_id=provider_id, name=control.value.strip(), source_page=current['source_page'],
+                                    item=current['item'], context_id=current['context_id'])
+                                current.update(saved)
+                                self.render_all_context_panels()
+                        name.on('blur', rename)
                         ui.code(document_text(item), language="json").classes(
                             "w-full tw-code"
                         )
 
-    def append_contexts(self, provider, collected, collected_at=None):
-        timestamp = collected_at or datetime.now().strftime("%H:%M:%S")
-        for item in collected:
-            self.context_entries.append(
-                {"provider": provider, "collected_at": timestamp, "item": item}
-            )
+    def render_all_context_panels(self):
+        for panel in (getattr(self, 'context_panel', None), getattr(self, 'trial_context_panel', None)):
+            if panel is not None and not panel.is_deleted:
+                self.render_collected_contexts(panel)
+
+    async def append_contexts(self, provider, collected, source_page='draft'):
+        for index, item in enumerate(collected, 1):
+            suggested = item.get('source') if isinstance(item, dict) else None
+            saved = await self.controller.call('context.save', step_id=self.step_id, provider_id=provider,
+                name=suggested or f'{provider} 上下文 {index}', source_page=source_page, item=item)
+            self.context_entries.append(saved)
         self.contexts = [entry["item"] for entry in self.context_entries]
 
-    def remove_context_entry(self, entry):
+    async def remove_context_entry(self, entry):
+        await self.controller.call('context.delete', context_id=entry['context_id'])
         if entry in self.context_entries:
             self.context_entries.remove(entry)
         self.contexts = [saved["item"] for saved in self.context_entries]
 
-    async def collect_context(self):
+    async def collect_context(self, source_page='draft'):
         saved = await self.save_editor()
         contributions = self.controller.application.registry.contributions(
             saved["capabilities"]
@@ -1432,9 +1596,9 @@ class Workbench:
                     environment_id=self.environment_id or None,
                     run_id=None if provider.value in request_forms else run.value or None,
                 )
-                self.append_contexts(provider.value, collected)
+                await self.append_contexts(provider.value, collected, source_page)
                 dialog.close()
-                self.render_collected_contexts()
+                self.render_all_context_panels()
                 ui.notify(
                     "已采集 " + str(len(collected)) + " 条上下文，共 "
                     + str(len(self.context_entries)) + " 条"
@@ -1529,14 +1693,18 @@ class Workbench:
                             for index, step in enumerate(definition):
                                 attempts = [a for a in run["attempts"] if a["step_id"] == step["step_id"] and a["valid"]]
                                 state = attempts[-1]['status'] if attempts else None
-                                control = self.button(f"{index+1}. {step['name']}", lambda r=run, st=step: self.choose_run_step(r, st), flat=True)
-                                control.classes('shrink-0 whitespace-nowrap')
-                                control.props('icon-right=check' if state == 'SUCCEEDED' else 'icon-right=error' if state in {'FAILED', 'UNKNOWN'} else '')
-                                control.props('text-color=white' if state == 'SUCCEEDED' else 'text-color=red-7' if state in {'FAILED', 'UNKNOWN'} else 'text-color=grey-7')
-                                control.style('background: ' + ('#16a34a; color: white' if state == 'SUCCEEDED' else '#fee2e2; color: #dc2626' if state in {'FAILED', 'UNKNOWN'} else '#e5e7eb; color: #6b7280'))
-                                control.tooltip(STATUS.get(state, '未执行'))
-                                if state == 'SUCCEEDED':
-                                    self.button('', lambda r=run, st=step: self.step_result_dialog(r, st), flat=True).props('icon=visibility round dense aria-label=查看步骤结果').classes('shrink-0').tooltip('查看 ' + step['name'] + ' 的结果')
+                                with ui.row().classes('shrink-0 flex-nowrap gap-0 items-stretch'):
+                                    control = self.button(f"{index+1}. {step['name']}", lambda r=run, st=step: self.choose_run_step(r, st), flat=True)
+                                    control.classes('shrink-0 whitespace-nowrap rounded-r-none')
+                                    control.props('text-color=white' if state == 'SUCCEEDED' else 'text-color=red-7' if state in {'FAILED', 'UNKNOWN'} else 'text-color=grey-7')
+                                    control.style('background: ' + ('#16a34a; color: white' if state == 'SUCCEEDED' else '#fee2e2; color: #dc2626' if state in {'FAILED', 'UNKNOWN'} else '#e5e7eb; color: #6b7280'))
+                                    control.tooltip(STATUS.get(state, '未执行'))
+                                    if state == 'SUCCEEDED':
+                                        icon = self.button('', lambda r=run, st=step: self.step_result_dialog(r, st), flat=True)
+                                        icon.props('icon=check round dense aria-label=查看步骤结果').style('background:#16a34a;color:white').tooltip('查看运行结果')
+                                    elif state in {'FAILED', 'UNKNOWN'}:
+                                        icon = self.button('', lambda a=attempts[-1], st=step: self.step_error_dialog(a, st), flat=True)
+                                        icon.props('icon=error round dense aria-label=查看步骤错误').style('background:#fee2e2;color:#dc2626').tooltip('查看报错')
                         with ui.row().classes('shrink-0 flex-nowrap gap-2'):
                             async def inspect(rid=run["run_id"]):
                                 self.run_id = None if self.run_id == rid else rid
@@ -1586,6 +1754,13 @@ class Workbench:
             await self.controller.call('run.start', run_id=self.run_id, command_id=command_id(), mode='UNTIL', target_step_id=step['step_id'], retry_step_id=failed['step_id'] if failed else None)
         self.run_signature = self.execution_signature = None
         await self.refresh_run()
+
+    async def step_error_dialog(self, attempt, step):
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-2xl'):
+            ui.label(step['name'] + ' · 执行错误').classes('text-lg font-medium')
+            ui.label((attempt.get('error_code') or 'UNKNOWN') + '：' + (attempt.get('error_summary') or '无错误说明')).classes('text-red-700 whitespace-pre-wrap')
+            ui.button('关闭', on_click=dialog.close).props('outline')
+        dialog.open()
 
     async def refresh_run(self):
         if self.page != "run":
@@ -1963,7 +2138,7 @@ class Workbench:
             with ui.dialog() as form, ui.card().classes("w-full max-w-3xl"):
                 name = ui.input("环境名称", value=existing["name"] if existing else "").classes("w-full")
                 ui.label("配置变量：普通值直接填写；对象、数组、数字和布尔值支持 JSON。")
-                ui.label('变量保存在 TaskWeave 本地配置，不修改系统环境变量。步骤通过 inputs["变量名"] 引用；任务参数优先于环境变量。')
+                ui.label('变量保存在 TaskWeave 本地配置，不修改系统环境变量。步骤通过 inputs["变量名"] 引用；统一优先级为：步骤变量 > 任务变量 > 环境变量。')
                 area = ui.column().classes("w-full")
                 rows = []
                 def add(key="", value=""):

@@ -14,23 +14,50 @@ from taskweave.infrastructure.storage import uid
 
 
 class WorkbenchChanges(unittest.TestCase):
+    def test_step_contexts_persist_and_can_be_renamed_or_deleted(self):
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('contexts')['task_id']
+            step = app.repo.save_step(task, {'name': 'collect'})
+            saved = app.dispatch('context.save', {
+                'step_id': step['step_id'], 'provider_id': 'playwright.page',
+                'name': '登录页', 'source_page': 'draft',
+                'item': {'kind': 'text', 'content': 'page'},
+            })
+            self.assertEqual(app.dispatch('context.list', {'step_id': step['step_id']})[0]['name'], '登录页')
+            app.dispatch('context.save', {**saved, 'name': '登录页面', 'item': saved['item']})
+            self.assertEqual(app.dispatch('context.list', {'step_id': step['step_id']})[0]['name'], '登录页面')
+            app.dispatch('context.delete', {'context_id': saved['context_id']})
+            self.assertEqual(app.dispatch('context.list', {'step_id': step['step_id']}), [])
+
     def test_collected_contexts_accumulate_across_plugins_and_delete_one(self):
         from taskweave.desktop.workbench import Workbench
 
         workbench = Workbench.__new__(Workbench)
+        saved = []
+        async def call(operation, **params):
+            if operation == 'context.save':
+                entry = {**params, 'context_id': uid()}
+                saved.append(entry)
+                return entry
+            if operation == 'context.delete':
+                saved[:] = [entry for entry in saved if entry['context_id'] != params['context_id']]
+                return {'deleted': True}
+            raise AssertionError(operation)
+        workbench.controller = SimpleNamespace(call=call)
+        workbench.step_id = uid()
         workbench.contexts = []
         workbench.context_entries = []
         page = {"kind": "text", "source": "playwright.page", "content": "page"}
         schema = {"kind": "text", "source": "tidb.schema", "content": "orders"}
         second_schema = {"kind": "text", "source": "tidb.schema", "content": "items"}
-        workbench.append_contexts("playwright.page", [page], "10:00:00")
-        workbench.append_contexts("tidb.schema", [schema, second_schema], "10:01:00")
+        asyncio.run(workbench.append_contexts("playwright.page", [page], "draft"))
+        asyncio.run(workbench.append_contexts("tidb.schema", [schema, second_schema], "trial_feedback"))
         self.assertEqual(workbench.contexts, [page, schema, second_schema])
         self.assertEqual(
-            [entry["provider"] for entry in workbench.context_entries],
+            [entry["provider_id"] for entry in workbench.context_entries],
             ["playwright.page", "tidb.schema", "tidb.schema"],
         )
-        workbench.remove_context_entry(workbench.context_entries[1])
+        asyncio.run(workbench.remove_context_entry(workbench.context_entries[1]))
         self.assertEqual(workbench.contexts, [page, second_schema])
 
     def test_manual_confirmation_execution_and_scoped_restart(self):
@@ -93,7 +120,7 @@ class WorkbenchChanges(unittest.TestCase):
                 first_pid = app.coordinator.process.pid
                 again = app.trial_flow(two['step_id'], {}, uid())
                 self.assertEqual(app.coordinator.wait(again['run_id'])['status'], 'SUCCEEDED')
-                self.assertNotEqual(app.coordinator.process.pid, first_pid)
+                self.assertEqual(app.coordinator.process.pid, first_pid)
 
     def test_restart_clears_live_sessions_keeps_history(self):
         with tempfile.TemporaryDirectory() as home:
@@ -146,3 +173,4 @@ class WorkbenchChanges(unittest.TestCase):
         with patch('taskweave_playwright.async_playwright',return_value=factory):
             asyncio.run(BrowserSession().open(ctx,'operator'))
         self.assertTrue(launch.call_args.kwargs['headless'])
+        self.assertEqual(browser.new_context.call_args.kwargs['locale'], 'zh-CN')

@@ -60,6 +60,29 @@ ALTER TABLE task_runs ADD COLUMN wait_until TEXT;
 
 TASK_V2 = "CREATE TABLE IF NOT EXISTS plugin_table_schemas(table_name TEXT PRIMARY KEY,version INTEGER NOT NULL);"
 CONTROL_V4 = "ALTER TABLE steps ADD COLUMN validation_source TEXT; UPDATE steps SET validation_source='TRIAL' WHERE validation_state='VALIDATED';"
+CONTROL_V5 = """
+CREATE TABLE step_contexts (
+ context_id TEXT PRIMARY KEY,
+ step_id TEXT NOT NULL REFERENCES steps(step_id) ON DELETE CASCADE,
+ provider_id TEXT NOT NULL,
+ name TEXT NOT NULL,
+ source_page TEXT NOT NULL CHECK(source_page IN ('draft','trial_feedback')),
+ item_json TEXT NOT NULL,
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+CREATE INDEX step_contexts_step_created ON step_contexts(step_id,created_at);
+"""
+CONTROL_V6 = """
+CREATE TABLE runtime_lease_new (
+ slot TEXT PRIMARY KEY, run_id TEXT NOT NULL UNIQUE REFERENCES task_runs(run_id),
+ owner_id TEXT NOT NULL, heartbeat_at TEXT NOT NULL
+);
+INSERT INTO runtime_lease_new(slot,run_id,owner_id,heartbeat_at)
+ SELECT CAST(slot AS TEXT),run_id,owner_id,heartbeat_at FROM runtime_lease;
+DROP TABLE runtime_lease;
+ALTER TABLE runtime_lease_new RENAME TO runtime_lease;
+"""
 
 
 @contextmanager
@@ -113,8 +136,8 @@ def initialize(path, name):
         migrate(
             db,
             path,
-            4 if name == "control" else 2,
-            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4},
+            6 if name == "control" else 2,
+            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6},
         )
 
 

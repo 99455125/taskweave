@@ -126,7 +126,7 @@ class BrowserSession:
         options = ctx.environment.get("browser", {})
         options = dict(options)
         parameters = {**ctx.environment, **getattr(ctx, 'task_parameters', {})}
-        for name in ('headless', 'timeout_ms', 'executable_path'):
+        for name in ('headless', 'timeout_ms', 'executable_path', 'locale'):
             if 'playwright_' + name in parameters:
                 options[name] = parameters['playwright_' + name]
         try:
@@ -139,7 +139,10 @@ class BrowserSession:
                     else {}
                 ),
             )
-            context = await browser.new_context(accept_downloads=True)
+            context = await browser.new_context(
+                accept_downloads=True,
+                locale=options.get("locale", "zh-CN"),
+            )
             page = await context.new_page()
             page.set_default_timeout(options.get("timeout_ms", 10000))
             return {
@@ -360,6 +363,7 @@ class PlaywrightPlugin:
                 {"key": "playwright_timeout_ms", "type": "number", "default": 10000, "required": False, "description": "页面动作超时，毫秒。"},
                 {"key": "playwright_role", "type": "string", "default": "operator", "required": False, "description": "默认浏览器角色；动作显式 role 优先。"},
                 {"key": "playwright_executable_path", "type": "string", "required": False, "description": "自定义匹配 Chromium 路径，通常无需设置。"},
+                {"key": "playwright_locale", "type": "string", "default": "zh-CN", "required": False, "description": "BrowserContext 语言区域，新建浏览器上下文时应用；不通过页面操作切换语言。"},
             ],
         }
 

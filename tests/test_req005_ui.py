@@ -179,12 +179,12 @@ class WorkbenchAcceptance(unittest.TestCase):
                     page.keyboard.insert_text(
                         'async def run(ctx, inputs):\n    await ctx.call("demo.wait", {"seconds": 0})\n    return ctx.result(data={"manual_adjustment": True})\n'
                     )
-                    page.get_by_role("button", name="试跑", exact=True).click()
-                    page.get_by_role("button", name="开始试跑", exact=True).click()
+                    page.get_by_role("button", name="调试", exact=True).click()
+                    page.get_by_role("button", name="执行试跑", exact=True).click()
                     expect(
                         page.get_by_text("试跑状态：成功", exact=True)
                     ).to_be_visible(timeout=15000)
-                    page.get_by_role("tab", name="内容与 AI", exact=True).click()
+                    page.get_by_role("tab", name="步骤详情", exact=True).click()
                     page.get_by_role(
                         "button", name="确认验证并保存", exact=True
                     ).click()
@@ -204,16 +204,16 @@ class WorkbenchAcceptance(unittest.TestCase):
                         "button", name="插入到步骤内容", exact=True
                     ).click()
                     page.get_by_label("步骤名称", exact=True).fill("手写文本步骤")
-                    page.get_by_role("tab", name="步骤设置", exact=True).click()
+                    page.get_by_role("tab", name="时间设置", exact=True).click()
                     page.get_by_label("上一步成功后等待（秒）", exact=True).fill("2")
                     page.get_by_role("button", name="保存步骤设置", exact=True).click()
-                    page.get_by_role("tab", name="内容与 AI", exact=True).click()
-                    page.get_by_role("button", name="试跑", exact=True).click()
-                    page.get_by_role("button", name="开始试跑", exact=True).click()
+                    page.get_by_role("tab", name="步骤详情", exact=True).click()
+                    page.get_by_role("button", name="调试", exact=True).click()
+                    page.get_by_role("button", name="执行试跑", exact=True).click()
                     expect(
                         page.get_by_text("试跑状态：成功", exact=True)
                     ).to_be_visible(timeout=15000)
-                    page.get_by_role("tab", name="内容与 AI", exact=True).click()
+                    page.get_by_role("tab", name="步骤详情", exact=True).click()
                     page.get_by_role(
                         "button", name="确认验证并保存", exact=True
                     ).click()
@@ -261,21 +261,22 @@ class WorkbenchAcceptance(unittest.TestCase):
                     with closing(sqlite3.connect(Path(temporary) / "taskweave.db")) as db:
                         web_source = db.execute("SELECT step_content FROM steps WHERE name=?", ("AI 编写等待步骤",)).fetchone()[0]
                     page.get_by_label("粘贴网页 AI 回复", exact=True).fill(json.dumps({'step_content': web_source, 'explanation':'网页回复'}))
-                    page.get_by_role("button", name="采纳并保存草稿", exact=True).click()
+                    page.get_by_role("button", name="解析并预览", exact=True).click()
+                    expect(page.get_by_text("网页 AI 回复预览", exact=True)).to_be_visible()
+                    expect(page.get_by_text("网页回复", exact=True)).to_be_visible()
+                    page.get_by_role("button", name="采纳到编辑器", exact=True).click()
                     expect(page.get_by_text("网页 AI 回复已保存为草稿，下一次试跑使用此内容。", exact=True)).to_be_visible()
                     self.assertEqual(len(provider.requests), 1)
-                    page.get_by_role("tab", name="试跑反馈", exact=True).click()
+                    page.get_by_role("tab", name="调试", exact=True).click()
+                    page.get_by_label("AI 补充说明（可选）", exact=True).fill("网页保留页面")
                     page.get_by_role("button", name="AI 修复", exact=True).click()
                     page.get_by_role("button", name="Chat 网页修复", exact=True).click()
-                    page.get_by_label("补充说明（可选）", exact=True).fill("网页保留页面")
-                    page.get_by_role("button", name="生成修复建议", exact=True).click()
                     expect(page.get_by_label("复制到网页 AI 的内容", exact=True)).to_be_visible()
                     self.assertIn('网页保留页面', page.get_by_label("复制到网页 AI 的内容", exact=True).input_value())
                     page.get_by_role("button", name="关闭", exact=True).click()
+                    page.get_by_label("AI 补充说明（可选）", exact=True).fill("继续当前页面，不重新打开")
                     page.get_by_role("button", name="AI 修复", exact=True).click()
                     page.get_by_role("button", name="API 修复", exact=True).click()
-                    page.get_by_label("补充说明（可选）", exact=True).fill("继续当前页面，不重新打开")
-                    page.get_by_role("button", name="生成修复建议", exact=True).click()
                     expect(page.get_by_role("button", name="采纳到编辑器", exact=True)).to_be_visible(timeout=15000)
                     self.assertIn("继续当前页面", json.dumps(provider.requests[-1], ensure_ascii=False))
                     page.get_by_role("button", name="采纳到编辑器", exact=True).click()
