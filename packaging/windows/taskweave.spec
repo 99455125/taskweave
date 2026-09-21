@@ -8,8 +8,7 @@ ROOT = Path(SPECPATH).parents[1]
 packages = [
     "taskweave",
     "taskweave_playwright",
-    "taskweave_sample",
-    "taskweave_captcha",
+    "taskweave_ocr",
     "taskweave_tidb",
     "nicegui",
     "webview",
@@ -32,8 +31,7 @@ for package in packages:
 for distribution in [
     "taskweave",
     "taskweave-playwright",
-    "taskweave-sample",
-    "taskweave-captcha",
+    "taskweave-ocr",
     "taskweave-tidb",
     "nicegui",
     "pywebview",

@@ -42,7 +42,7 @@ class AppTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="taskweave-test-")
         self.home = Path(self.tmp.name)
-        self.app = Application(self.home)
+        self.app = Application(self.home, registry_factory="taskweave.plugins.demo:build_registry")
 
     def tearDown(self):
         self.app.close()
@@ -119,7 +119,7 @@ class AppTests(unittest.TestCase):
         with self.assertRaisesRegex(TaskError, "End the active"):
             self.app.repo.save_step(task, one, one["step_id"], one["content_hash"])
         self.app.close()
-        self.app = Application(self.home)
+        self.app = Application(self.home, registry_factory="taskweave.plugins.demo:build_registry")
         self.app.coordinator.start(run["run_id"], uid())
         self.assertEqual(
             self.app.coordinator.wait(run["run_id"])["status"], "SUCCEEDED"
@@ -236,9 +236,27 @@ class AppTests(unittest.TestCase):
         self.app.coordinator.start(r2["run_id"], uid())
         self.assertEqual(self.app.coordinator.wait(r2["run_id"])["status"], "SUCCEEDED")
         self.assertEqual(self.app.coordinator.describe_run(r1["run_id"])["status"], "PAUSED")
-        self.assertEqual({item['run_id'] for item in self.app.coordinator.active_instances()}, {r1['run_id'], r2['run_id']})
+        formal = {item['run_id'] for item in self.app.coordinator.active_instances() if item['instance_type'] == 'execution'}
+        self.assertEqual(formal, {r1['run_id'], r2['run_id']})
         self.app.coordinator.control(r1["run_id"], uid(), "abandon")
         self.app.coordinator.control(r2["run_id"], uid(), "abandon")
+
+    def test_executor_concurrency_limit_rejects_excess_run(self):
+        task = self.task()
+        step = self.step(
+            task,
+            'async def run(ctx, inputs):\n    await ctx.call("demo.wait", {"seconds": 1})\n    return ctx.result()',
+            capabilities=['demo.wait'],
+        )
+        self.app.confirm_step_manual(step['step_id'], step['content_hash'])
+        self.app.coordinator.set_max_concurrency(1)
+        first = self.app.create_run(task)
+        second = self.app.create_run(task)
+        self.app.coordinator.start(first['run_id'], uid())
+        with self.assertRaises(TaskError) as raised:
+            self.app.coordinator.start(second['run_id'], uid())
+        self.assertEqual(raised.exception.code, 'EXECUTOR_CAPACITY')
+        self.assertEqual(self.app.coordinator.wait(first['run_id'])['status'], 'SUCCEEDED')
 
     def test_worker_kill_unknown_requires_reconciliation(self):
         task = self.task()
@@ -368,7 +386,7 @@ class AppTests(unittest.TestCase):
         # The application retains RUNNING when a receipt exists but ACK cannot commit.
         self.assertEqual(done["attempts"][0]["status"], "RUNNING")
         self.app.close()
-        self.app = Application(self.home)
+        self.app = Application(self.home, registry_factory="taskweave.plugins.demo:build_registry")
         self.assertEqual(
             self.app.repo.run_details(run["run_id"])["attempts"][0]["status"],
             "SUCCEEDED",

@@ -135,4 +135,4 @@ ResultHandler 提供 schema、prepare、parse、preview，不拿数据库连接�
 
 ## 本地验证码 OCR
 
-[验证码插件指南](../../../plugins/captcha/README.md) 提供无 API Key 的本地识别与跨插件步骤示例。启动增加 `--extra captcha`，插件管理启用 captcha，步骤同时选 playwright 和 captcha。普通文字图片适用；真实业务页面先采集上下文，再由 AI 按当前定位器生成完整步骤。
+[验证码插件指南](../../../plugins/ocr/README.md) 提供无 API Key 的本地识别与跨插件步骤示例。启动增加 `--extra ocr`，插件管理启用 ocr，步骤同时选 playwright 和 ocr。普通文字图片适用；真实业务页面先采集上下文，再由 AI 按当前定位器生成完整步骤。

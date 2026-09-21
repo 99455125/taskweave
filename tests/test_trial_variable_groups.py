@@ -61,6 +61,7 @@ class TrialVariableGroups(unittest.TestCase):
                     bench.trial_form=SimpleNamespace(values=lambda:{'code':'edited'})
                     bench.confirm_end=AsyncMock(return_value=True)
                     bench.refresh_trial=AsyncMock()
+                    bench.settle_trial_start=AsyncMock()
                     previous={'environment_id':previous_env,'status':'SUCCEEDED','can_end':can_end,'attempts':[]}
                     bench.controller=SimpleNamespace(call=AsyncMock(return_value=previous),
                         trial=AsyncMock(return_value={'run_id':'new'}),

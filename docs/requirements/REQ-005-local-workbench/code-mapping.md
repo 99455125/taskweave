@@ -4,7 +4,7 @@
 |---|---|
 | src/taskweave/desktop/launcher.py | 回环服务、原生窗口、启动/退出、延迟构建 Application |
 | src/taskweave/desktop/workbench.py | 一级导航、任务二级导航、编辑、运行、历史、插件、环境和设置 |
-| src/taskweave/desktop/controller.py | 异步服务调用、幂等草稿保存、试跑确认、AI 差异、模型连接配置 |
+| src/taskweave/desktop/controller.py | 异步服务调用、幂等草稿保存、调试确认、AI 差异、模型连接配置 |
 | src/taskweave/desktop/forms.py | schema 参数表单、参数定义编辑 |
 | src/taskweave/desktop/security.py | HTTP / Socket.IO 启动凭据、Host / Origin 校验 |
 | src/taskweave/infrastructure/runtime.py | 持久化间隔等待、暂停/取消与继续 |
@@ -22,7 +22,7 @@
 
 `src/taskweave/desktop/chat.py`：网页回复解析；authoring.generate(export_only=True)：共享规范组合、插件渠道适配及无 API 导出；`tests/test_web_chat.py`：无密钥导出、历史边界及回复格式。
 
-`tests/test_variables.py`：本地配置不修改系统、任务/环境/步骤输入优先级、正式/试跑执行、必填环境变量及表单切换环境与空白行。
+`tests/test_variables.py`：本地配置不修改系统、任务/环境/步骤输入优先级、正式/调试执行、必填环境变量及表单切换环境与空白行。
 
 `Workbench.trial_variables`：三组可折叠变量、只读环境和步骤来源、任务运行输入；`start_trial`：环境切换与同环境重试分流；`DesktopController.repeat_trial`：当前任务输入覆盖历史输入。回归入口 `tests/test_trial_variable_groups.py`。
 

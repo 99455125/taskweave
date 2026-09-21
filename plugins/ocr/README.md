@@ -1,14 +1,14 @@
 # 本地图片验证码插件
 
-独立 `captcha` 插件提供 `captcha.recognize`，内嵌本机 CPU OCR 服务，不要求 API Key、GPU 或另开 HTTP 服务；识别时不联网。使用 [ddddocr](https://github.com/sml2h3/ddddocr) 1.6.1 随包模型、ONNX Runtime 1.20.1，OpenCV 固定 4.11.0.86 以使用当前平台预编译包、避免源码构建。固定版本兼顾当前 macOS 13 / Python 3.13；Windows 10 x64 实机与免安装包依赖尚待验证。
+独立 `ocr` 插件提供 `ocr.recognize`，内嵌本机 CPU OCR 服务，不要求 API Key、GPU 或另开 HTTP 服务；识别时不联网。使用 [ddddocr](https://github.com/sml2h3/ddddocr) 1.6.1 随包模型、ONNX Runtime 1.20.1，OpenCV 固定 4.11.0.86 以使用当前平台预编译包、避免源码构建。固定版本兼顾当前 macOS 13 / Python 3.13；Windows 10 x64 实机与免安装包依赖尚待验证。
 
 ## 启动与使用
 
 ```bash
-uv run --extra gui --extra browser --extra sample --extra captcha taskweave workbench
+uv run --extra gui --extra browser --extra ocr --extra database taskweave workbench
 ```
 
-开发机首次同步会下载依赖与随包模型；目标离线机由后续打包交付全部资源，不在目标机下载模型。插件管理启用 `captcha`，步骤选择 `playwright` 和 `captcha` 两个插件。配置普通任务/环境变量 loginurl、orgcode、orgsecret。
+开发机首次同步会下载依赖与随包模型；目标离线机由后续打包交付全部资源，不在目标机下载模型。插件管理启用 `ocr`，步骤选择 `playwright` 和 `ocr` 两个插件。配置普通任务/环境变量 loginurl、orgcode、orgsecret。
 
 ```python
 async def run(ctx, inputs):
@@ -16,7 +16,7 @@ async def run(ctx, inputs):
     await ctx.call("playwright.page_fill", {"selector": {"kind": "label", "value": "机构代码"}, "value": inputs["orgcode"]})
     await ctx.call("playwright.page_fill", {"selector": {"kind": "label", "value": "机构密钥"}, "value": inputs["orgsecret"]})
     image = await ctx.call("playwright.page_element_image", {"selector": inputs["captcha_image_selector"]})
-    code = await ctx.call("captcha.recognize", {"image_base64": image["image_base64"], "expected_length": 4})
+    code = await ctx.call("ocr.recognize", {"image_base64": image["image_base64"], "expected_length": 4})
     await ctx.call("playwright.page_fill", {"selector": inputs["captcha_input_selector"], "value": code["text"]})
     await ctx.call("playwright.page_click", {"selector": {"kind": "role", "value": "button", "name": "登录"}})
     await ctx.call("playwright.page_assert_url", {"url": inputs["authenticated_url_pattern"]})

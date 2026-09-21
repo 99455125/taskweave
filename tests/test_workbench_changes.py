@@ -24,10 +24,25 @@ class WorkbenchChanges(unittest.TestCase):
                 'item': {'kind': 'text', 'content': 'page'},
             })
             self.assertEqual(app.dispatch('context.list', {'step_id': step['step_id']})[0]['name'], '登录页')
-            app.dispatch('context.save', {**saved, 'name': '登录页面', 'item': saved['item']})
+            app.dispatch('context.save', {
+                'context_id': saved['context_id'], 'step_id': saved['step_id'],
+                'provider_id': saved['provider_id'], 'source_page': saved['source_page'],
+                'name': '登录页面', 'item': saved['item'],
+            })
             self.assertEqual(app.dispatch('context.list', {'step_id': step['step_id']})[0]['name'], '登录页面')
             app.dispatch('context.delete', {'context_id': saved['context_id']})
             self.assertEqual(app.dispatch('context.list', {'step_id': step['step_id']}), [])
+
+    def test_executor_thread_setting_persists(self):
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home:
+            with Application(home) as app:
+                controller = DesktopController(app)
+                self.assertEqual(asyncio.run(controller.workbench_settings())['executor_max_threads'], 8)
+                asyncio.run(controller.save_executor_max_threads(3))
+                self.assertEqual(app.coordinator.max_concurrency, 3)
+            with Application(home) as reopened:
+                self.assertEqual(reopened.coordinator.max_concurrency, 3)
 
     def test_collected_contexts_accumulate_across_plugins_and_delete_one(self):
         from taskweave.desktop.workbench import Workbench
@@ -121,6 +136,19 @@ class WorkbenchChanges(unittest.TestCase):
                 again = app.trial_flow(two['step_id'], {}, uid())
                 self.assertEqual(app.coordinator.wait(again['run_id'])['status'], 'SUCCEEDED')
                 self.assertEqual(app.coordinator.process.pid, first_pid)
+
+    def test_failed_trial_edit_and_retry_reuses_task_debug_instance(self):
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('debug reuse')['task_id']
+            step = app.repo.save_step(task, {'step_content': 'async def run(ctx, inputs):\n    assert False, "first"'})
+            first = app.trial_step(step['step_id'], {}, uid(), continue_session=True)
+            self.assertEqual(app.coordinator.wait(first['run_id'])['status'], 'FAILED')
+            first_pid = app.coordinator.process.pid
+            self.assertTrue(app.coordinator.describe_run(first['run_id'])['can_end'])
+            edited = app.repo.save_step(task, {**step, 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data={"ok": True})'}, step['step_id'], step['content_hash'])
+            second = app.trial_step(edited['step_id'], {}, uid(), continue_session=True)
+            self.assertEqual(app.coordinator.wait(second['run_id'])['status'], 'SUCCEEDED')
+            self.assertEqual(app.coordinator.process.pid, first_pid)
 
     def test_restart_clears_live_sessions_keeps_history(self):
         with tempfile.TemporaryDirectory() as home:

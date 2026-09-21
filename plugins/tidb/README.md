@@ -5,8 +5,8 @@
 ## 安装与启用
 
 ```bash
-uv sync --locked --extra gui --extra browser --extra sample --extra captcha --extra database
-uv run --extra gui --extra browser --extra sample --extra captcha --extra database taskweave workbench
+uv sync --locked --extra gui --extra browser --extra ocr --extra database
+uv run --extra gui --extra browser --extra ocr --extra database taskweave workbench
 ```
 
 在插件管理启用 `tidb`，步骤选择 TiDB 插件。第三方数据库依赖只属于插件，不进入核心默认依赖。

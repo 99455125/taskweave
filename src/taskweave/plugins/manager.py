@@ -16,7 +16,7 @@ class PluginManager:
 
     def enabled(self):
         if not self.path.exists():
-            return ["demo", "text"]
+            return []
         data = json.loads(self.path.read_text())
         if data.get("format") != 1 or not isinstance(data.get("enabled"), list):
             raise TaskError("PLUGIN_CONFIG_INVALID")
@@ -24,7 +24,7 @@ class PluginManager:
             set(data["enabled"])
         ) != len(data["enabled"]):
             raise TaskError("PLUGIN_CONFIG_INVALID")
-        return data["enabled"]
+        return [name for name in data["enabled"] if name not in {"demo", "sample", "text"}]
 
     def registry(self, enabled=None, strict=True):
         enabled = self.enabled() if enabled is None else enabled

@@ -9,7 +9,7 @@ def step_names(run, fallback=()):
 
 
 def execution_title(run):
-    kind = '试跑' if run.get('mode') == 'TRIAL' else '执行'
+    kind = '调试' if run.get('mode') == 'TRIAL' else '执行'
     return kind + ' · ' + (run.get('started_at') or '未开始')
 
 

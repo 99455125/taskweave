@@ -25,13 +25,13 @@ def sample_image():
 
 class CaptchaTests(unittest.TestCase):
     def test_bad_images_rejected_without_opening_engine(self):
-        from taskweave_captcha import image_bytes
+        from taskweave_ocr import image_bytes
         for text in ['bad-base64!', '', base64.b64encode(b'not-an-image').decode()]:
             with self.assertRaises(TaskError):
                 image_bytes(text)
 
     def test_actual_local_ocr_without_network(self):
-        from taskweave_captcha import LocalOcr
+        from taskweave_ocr import LocalOcr
         from types import SimpleNamespace
         async def recognize():
             resource = await LocalOcr().open(SimpleNamespace(environment={}, task_parameters={}), 'local')
@@ -49,7 +49,7 @@ class CaptchaTests(unittest.TestCase):
                 if self.path == '/code.png':
                     data, kind = image, 'image/png'
                 else:
-                    data = b'''<html><body><label>Code<input id="code"></label><label>Password<input type="password" id="secret" value="never-forwarded"></label><img id="captcha" src="/code.png"><button onclick="if(document.querySelector('#code').value==='1234'){history.pushState({},'', '/home');document.title='Logged in';document.querySelector('#status').textContent='Welcome'}">Login</button><div id="status"></div></body></html>'''
+                    data = b'''<html><body><label>Code<input id="code"></label><label>Password<input type="password" id="secret" value="never-forwarded"></label><img id="ocr" src="/code.png"><button onclick="if(document.querySelector('#code').value==='1234'){history.pushState({},'', '/home');document.title='Logged in';document.querySelector('#status').textContent='Welcome'}">Login</button><div id="status"></div></body></html>'''
                     kind = 'text/html'
                 self.send_response(200); self.send_header('Content-Type',kind); self.end_headers(); self.wfile.write(data)
             def log_message(self,*args):
@@ -58,20 +58,20 @@ class CaptchaTests(unittest.TestCase):
         thread=threading.Thread(target=server.serve_forever,daemon=True);thread.start()
         try:
             with tempfile.TemporaryDirectory() as home, Application(home) as app:
-                app.configure_plugin('playwright',True); app.configure_plugin('captcha',True)
+                app.configure_plugin('playwright',True); app.configure_plugin('ocr',True)
                 env=app.repo.save_environment('test',{'playwright_headless':True,'loginurl':f'http://127.0.0.1:{server.server_port}/'})['environment_id']
                 task=app.repo.create_task('local OCR login')['task_id']
                 source='''async def run(ctx, inputs):
     await ctx.call("playwright.page_open", {"url": inputs["loginurl"]})
-    image = await ctx.call("playwright.page_element_image", {"selector": "#captcha"})
-    code = await ctx.call("captcha.recognize", {"image_base64": image["image_base64"], "expected_length": 4})
+    image = await ctx.call("playwright.page_element_image", {"selector": "#ocr"})
+    code = await ctx.call("ocr.recognize", {"image_base64": image["image_base64"], "expected_length": 4})
     await ctx.call("playwright.page_fill", {"selector": "#code", "value": code["text"]})
     await ctx.call("playwright.page_click", {"selector": {"kind":"role", "value":"button", "name":"Login"}})
     await ctx.call("playwright.page_assert_url", {"url":"**/home"})
     await ctx.call("playwright.page_assert_title", {"text":"Logged in"})
     return ctx.result(data={"logged_in":True})
 '''
-                caps=['playwright.page_open','playwright.page_element_image','captcha.recognize','playwright.page_fill','playwright.page_click','playwright.page_assert_url','playwright.page_assert_title']
+                caps=['playwright.page_open','playwright.page_element_image','ocr.recognize','playwright.page_fill','playwright.page_click','playwright.page_assert_url','playwright.page_assert_title']
                 step=app.repo.save_step(task, {'step_content':source,'capabilities':caps})
                 run=app.trial_step(step['step_id'],{},uid(),env)
                 result=app.coordinator.wait(run['run_id'], timeout=60)
@@ -80,7 +80,7 @@ class CaptchaTests(unittest.TestCase):
                 contexts = app.dispatch('context.read', {'step_id':step['step_id'], 'provider_id':'playwright.page', 'run_id':run['run_id']})
                 data = json.loads(contexts[0]['content'])
                 elements = {item['id']:item for item in data['elements']}
-                self.assertEqual(elements['captcha']['selector'], {'kind':'css','value':'#captcha'})
+                self.assertEqual(elements['ocr']['selector'], {'kind':'css','value':'#ocr'})
                 self.assertEqual(elements['secret']['type'], 'password')
                 self.assertNotIn('never-forwarded', contexts[0]['content'])
         finally:

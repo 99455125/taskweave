@@ -457,7 +457,7 @@ class Repository(Store):
         timestamp = now()
         with self.transaction() as db:
             db.execute(
-                "INSERT INTO step_contexts VALUES(?,?,?,?,?,?,?) ON CONFLICT(context_id) DO UPDATE SET name=excluded.name,item_json=excluded.item_json,updated_at=excluded.updated_at",
+                "INSERT INTO step_contexts VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(context_id) DO UPDATE SET name=excluded.name,item_json=excluded.item_json,updated_at=excluded.updated_at",
                 (context_id, step_id, provider_id, name.strip(), source_page, dumps(item), timestamp, timestamp),
             )
         return next(row for row in self.list_step_contexts(step_id) if row['context_id'] == context_id)
