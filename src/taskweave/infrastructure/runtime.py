@@ -436,6 +436,12 @@ class Coordinator:
                     steps = steps[:next(i for i, s in enumerate(steps) if s['step_id'] == run['trial_step_id']) + 1]
                 else:
                     steps = [s for s in steps if s["step_id"] == run["trial_step_id"]]
+            start_step_id = json.loads(run['request_json']).get('last_command', {}).get('from')
+            if start_step_id:
+                ids = [step['step_id'] for step in steps]
+                if start_step_id not in ids:
+                    raise TaskError('TARGET_INVALID')
+                steps = steps[ids.index(start_step_id):]
             task_schema = json.loads(self.repo.task(run['task_id'])['input_schema_json'])
             task_values = json.loads(run['inputs_json'])
             missing = self.missing_inputs(task_schema, task_values)
@@ -804,9 +810,10 @@ class CoordinatorPool:
     Core owns lifecycle only; plugin resources remain inside each coordinator's
     worker and are still opened/closed exclusively by ResourceProvider hooks.
     """
-    def __init__(self, repository, registry, factory):
+    def __init__(self, repository, registry, factory, max_concurrency=8):
         self.repo, self._registry, self.factory = repository, registry, factory
         self.lock = threading.RLock()
+        self.max_concurrency = max_concurrency
         self.instances = {}
         self.last = None
         self.repo.recover()
@@ -847,7 +854,20 @@ class CoordinatorPool:
             self.last = self._for_run(run['run_id'])
         self.last.session_run_id = value
 
-    def start(self, run_id, *args, **kwargs): return self._for_run(run_id).start(run_id, *args, **kwargs)
+    def start(self, run_id, *args, **kwargs):
+        with self.lock:
+            coordinator = self._for_run(run_id)
+            active = sum(bool(item.thread and item.thread.is_alive()) for item in self.instances.values())
+            if not (coordinator.thread and coordinator.thread.is_alive()) and active >= self.max_concurrency:
+                raise TaskError('EXECUTOR_CAPACITY', f'执行器已达并发上限 {self.max_concurrency}')
+            return coordinator.start(run_id, *args, **kwargs)
+
+    def set_max_concurrency(self, value):
+        value = int(value)
+        if not 1 <= value <= 8:
+            raise TaskError('FORM_INVALID', '执行器并发线程数必须在 1 到 8 之间')
+        self.max_concurrency = value
+        return value
     def control(self, run_id, *args, **kwargs): return self._for_run(run_id).control(run_id, *args, **kwargs)
     def restart(self, run_id, *args, **kwargs): return self._for_run(run_id).restart(run_id, *args, **kwargs)
     def reconcile(self, attempt_id, *args, **kwargs):

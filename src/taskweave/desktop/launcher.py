@@ -45,6 +45,20 @@ def launch(home=None, port=None, browser=False):
     from taskweave.infrastructure.storage import default_home
 
     home = Path(home or default_home()).resolve()
+    if home is not None:
+        from taskweave.infrastructure.storage import workspace_location_file
+        location = workspace_location_file()
+        if location.exists():
+            try:
+                location_data = json.loads(location.read_text(encoding='utf-8'))
+                old = Path(location_data.get('remove_after_restart', '')).resolve()
+                if old != home and old.exists():
+                    import shutil
+                    shutil.rmtree(old)
+                location_data.pop('remove_after_restart', None)
+                location.write_text(json.dumps(location_data, ensure_ascii=False), encoding='utf-8')
+            except (OSError, ValueError):
+                logging.getLogger(__name__).warning('旧工作空间将在下次启动继续清理')
     port = port if port is not None else select_local_port()
     token = secrets.token_urlsafe(32)
     url = f"http://127.0.0.1:{port}/?access={token}"

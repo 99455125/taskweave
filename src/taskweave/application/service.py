@@ -28,7 +28,12 @@ class Application:
             self.repo = Repository(self.home)
             self.registry = load_registry(registry_factory, self.home)
             self.registry_factory = registry_factory
-            self.coordinator = CoordinatorPool(self.repo, self.registry, registry_factory)
+            workbench_path = self.home / 'workbench.json'
+            workbench_settings = json.loads(workbench_path.read_text()) if workbench_path.exists() else {}
+            max_concurrency = int(workbench_settings.get('executor_max_threads', 8))
+            if not 1 <= max_concurrency <= 8:
+                max_concurrency = 8
+            self.coordinator = CoordinatorPool(self.repo, self.registry, registry_factory, max_concurrency=max_concurrency)
             self.repo.finish_pending_deletions()
             self.authoring = Authoring(self.repo, self.registry, model)
         except Exception:
@@ -87,7 +92,7 @@ class Application:
                 self.authoring.reset_conversation(step_id)
             return result
 
-    def trial_flow(self, step_id, inputs, command_id, environment_id=None, step_inputs=None, defer_inputs=False):
+    def trial_flow(self, step_id, inputs, command_id, environment_id=None, step_inputs=None, defer_inputs=False, start_step_id=None):
         with self.coordinator.lock:
             task_id = self.repo.step(step_id)['task_id']
             step_inputs = self.repo.normalize_step_inputs(task_id, step_inputs)
@@ -111,7 +116,7 @@ class Application:
             for lease in leases:
                 self.repo.execute('DELETE FROM runtime_lease WHERE run_id=?', (lease['run_id'],))
             run = self.repo.create_run(step['task_id'], inputs, self.registry.versions, environment_id, step_id, flow_trial=True, step_inputs=step_inputs, defer_inputs=defer_inputs)
-            return self.coordinator.start(run['run_id'], command_id)
+            return self.coordinator.start(run['run_id'], command_id, start_step_id=start_step_id)
 
     def confirm_step(self, step_id, attempt_id, expected_hash):
         self.registry.check(self.repo.step(step_id))
@@ -125,13 +130,13 @@ class Application:
             raise TaskError('PLUGIN_LINT_FAILED')
         return self.repo.confirm_manual(step_id, expected_hash, environment_id)
 
-    def create_run(self, task_id, inputs=None, environment_id=None, defer_inputs=False):
+    def create_run(self, task_id, inputs=None, environment_id=None, defer_inputs=False, step_inputs=None):
         for step in self.repo.steps(task_id):
             diagnostics = asyncio.run(self.authoring.validate_step(step))
             if any(d["severity"] == "error" for d in diagnostics):
                 raise TaskError("PLUGIN_LINT_FAILED")
         return self.repo.create_run(
-            task_id, inputs or {}, self.registry.versions, environment_id, defer_inputs=defer_inputs
+            task_id, inputs or {}, self.registry.versions, environment_id, defer_inputs=defer_inputs, step_inputs=step_inputs
         )
 
     def clear_task_runs(self, task_id):
@@ -260,6 +265,7 @@ class Application:
         }
         async_methods = {
             "step.generate": self.authoring.generate,
+            "step.generate_goal": self.authoring.generate_goal,
             "step.diagnose": self.authoring.diagnose,
         }
         if operation in async_methods:

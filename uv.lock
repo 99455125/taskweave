@@ -2661,9 +2661,6 @@ dependencies = [
 browser = [
     { name = "taskweave-playwright" },
 ]
-captcha = [
-    { name = "taskweave-captcha" },
-]
 database = [
     { name = "taskweave-tidb" },
 ]
@@ -2671,8 +2668,8 @@ gui = [
     { name = "nicegui" },
     { name = "pywebview" },
 ]
-sample = [
-    { name = "taskweave-sample" },
+ocr = [
+    { name = "taskweave-ocr" },
 ]
 
 [package.dev-dependencies]
@@ -2687,20 +2684,19 @@ requires-dist = [
     { name = "nicegui", marker = "extra == 'gui'", specifier = ">=3,<4" },
     { name = "packaging", specifier = ">=24,<27" },
     { name = "pywebview", marker = "extra == 'gui'", specifier = ">=6,<7" },
-    { name = "taskweave-captcha", marker = "extra == 'captcha'", editable = "plugins/captcha" },
+    { name = "taskweave-ocr", marker = "extra == 'ocr'", editable = "plugins/ocr" },
     { name = "taskweave-playwright", marker = "extra == 'browser'", editable = "plugins/playwright" },
-    { name = "taskweave-sample", marker = "extra == 'sample'", editable = "plugins/custom" },
     { name = "taskweave-tidb", marker = "extra == 'database'", editable = "plugins/tidb" },
 ]
-provides-extras = ["browser", "sample", "captcha", "database", "gui"]
+provides-extras = ["browser", "ocr", "database", "gui"]
 
 [package.metadata.requires-dev]
 build = [{ name = "pyinstaller", specifier = ">=6.11,<7" }]
 
 [[package]]
-name = "taskweave-captcha"
+name = "taskweave-ocr"
 version = "0.1.0"
-source = { editable = "plugins/captcha" }
+source = { editable = "plugins/ocr" }
 dependencies = [
     { name = "ddddocr" },
     { name = "onnxruntime" },
@@ -2730,11 +2726,6 @@ requires-dist = [
     { name = "playwright", marker = "sys_platform != 'darwin'", specifier = ">=1.58,<2" },
     { name = "playwright", marker = "sys_platform == 'darwin'", specifier = ">=1.58,<1.59" },
 ]
-
-[[package]]
-name = "taskweave-sample"
-version = "0.1.0"
-source = { editable = "plugins/custom" }
 
 [[package]]
 name = "taskweave-tidb"

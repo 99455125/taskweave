@@ -150,7 +150,7 @@ class WorkbenchAcceptance(unittest.TestCase):
                     page.get_by_role("button", name="保存", exact=True).click()
                     page.get_by_role("button", name="添加步骤", exact=True).click()
                     expect(
-                        page.get_by_role("button", name="运行历史", exact=True)
+                    page.get_by_role("button", name="调试历史", exact=True)
                     ).to_be_visible()
                     page.get_by_role("tab", name="动作表单", exact=True).click()
                     page.locator(".q-select").filter(
@@ -262,7 +262,7 @@ class WorkbenchAcceptance(unittest.TestCase):
                         web_source = db.execute("SELECT step_content FROM steps WHERE name=?", ("AI 编写等待步骤",)).fetchone()[0]
                     page.get_by_label("粘贴网页 AI 回复", exact=True).fill(json.dumps({'step_content': web_source, 'explanation':'网页回复'}))
                     page.get_by_role("button", name="解析并预览", exact=True).click()
-                    expect(page.get_by_text("网页 AI 回复预览", exact=True)).to_be_visible()
+                    expect(page.get_by_role("dialog").filter(has_text="网页 AI 回复预览").last).to_be_visible()
                     expect(page.get_by_text("网页回复", exact=True)).to_be_visible()
                     page.get_by_role("button", name="采纳到编辑器", exact=True).click()
                     expect(page.get_by_text("网页 AI 回复已保存为草稿，下一次试跑使用此内容。", exact=True)).to_be_visible()

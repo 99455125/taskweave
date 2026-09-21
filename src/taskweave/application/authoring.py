@@ -84,6 +84,31 @@ class Authoring:
             diagnostics.extend(asdict(d) for d in await plugin.lint(step))
         return diagnostics
 
+    async def generate_goal(self, step_id, expected_hash, supplement="", contexts=None, export_only=False):
+        """Generate only a concise human goal; never generate or execute code."""
+        step = self.repo.step(step_id)
+        if step["content_hash"] != expected_hash:
+            raise TaskError("EDIT_CONFLICT")
+        contributions = [asdict(item) for item in self.registry.contributions(step["capabilities"])]
+        request = {
+            "current_goal": step["goal"],
+            "user_requirement": supplement or "",
+            "plugin_guidance": contributions,
+            "plugin_contexts": contexts or [],
+        }
+        system = "根据用户要求和插件上下文编写清晰、可验证的步骤目标描述。只描述本步骤要达到的业务结果、必要输入和成功标准，不生成 Python、插件调用或实现细节。返回 JSON：step_content 为目标描述纯文本，explanation 为简短说明。"
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(redact(request), ensure_ascii=False)}]
+        if export_only:
+            prompt = "请严格返回一个 JSON 对象，step_content 只放目标描述纯文本，explanation 放简短说明，不要 Markdown。\n\n" + "\n\n".join(item["role"] + ":\n" + item["content"] for item in messages)
+            return {"prompt": prompt, "expected_hash": expected_hash}
+        if self.model is None:
+            raise TaskError("MODEL_NOT_CONFIGURED")
+        reply = await self.model.complete(messages, [], {"type": "object"})
+        text = (reply.proposed_content or "").strip()
+        if not text or "async def" in text:
+            raise TaskError("MODEL_CONTENT_INVALID", "AI 未返回有效目标描述")
+        return {"goal": text, "explanation": reply.explanation, "expected_hash": expected_hash}
+
     async def generate(
         self,
         step_id,

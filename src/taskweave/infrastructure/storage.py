@@ -28,13 +28,32 @@ def default_home():
     if os.getenv("TASKWEAVE_HOME"):
         return Path(os.environ["TASKWEAVE_HOME"]).expanduser()
     if sys.platform == "win32":
-        return Path(os.environ["LOCALAPPDATA"]) / "TaskWeave"
-    if sys.platform == "darwin":
-        return Path.home() / "Library/Application Support/TaskWeave"
-    return (
+        standard = Path(os.environ["LOCALAPPDATA"]) / "TaskWeave"
+    elif sys.platform == "darwin":
+        standard = Path.home() / "Library/Application Support/TaskWeave"
+    else:
+        standard = (
         Path(os.getenv("XDG_DATA_HOME", str(Path.home() / ".local/share")))
         / "taskweave"
-    )
+        )
+    location = standard.parent / "taskweave-location.json"
+    if location.exists():
+        try:
+            configured = Path(json.loads(location.read_text(encoding="utf-8"))["workspace_home"]).expanduser().resolve()
+            return configured
+        except (ValueError, KeyError, TypeError):
+            pass
+    return standard
+
+
+def workspace_location_file():
+    if sys.platform == "win32":
+        standard = Path(os.environ["LOCALAPPDATA"]) / "TaskWeave"
+    elif sys.platform == "darwin":
+        standard = Path.home() / "Library/Application Support/TaskWeave"
+    else:
+        standard = Path(os.getenv("XDG_DATA_HOME", str(Path.home() / ".local/share"))) / "taskweave"
+    return standard.parent / "taskweave-location.json"
 
 
 CONTROL_V2 = """

@@ -56,5 +56,5 @@ class ConfirmationUi(unittest.TestCase):
                 if choice is None:
                     bench.generate.assert_not_awaited()
                 else:
-                    bench.generate.assert_awaited_once_with(fix_logs=True, web_chat=choice == 'chat')
+                    bench.generate.assert_awaited_once_with(fix_logs=True, web_chat=choice == 'chat', supplement_override='', history_rounds=-1, deduplicate_history=True)
         asyncio.run(scenario())

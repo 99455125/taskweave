@@ -2,11 +2,11 @@
 requires = ["setuptools>=68"]
 build-backend = "setuptools.build_meta"
 [project]
-name = "taskweave-captcha"
+name = "taskweave-ocr"
 version = "0.1.0"
 requires-python = ">=3.10"
 dependencies = ["ddddocr==1.6.1", "onnxruntime==1.20.1", "opencv-python==4.11.0.86; sys_platform == 'darwin' or sys_platform == 'win32'", "opencv-python-headless==4.11.0.86; sys_platform == 'linux'"]
 [project.entry-points."taskweave.plugins"]
-captcha = "taskweave_captcha:CaptchaPlugin"
+ocr = "taskweave_ocr:OcrPlugin"
 [tool.setuptools.packages.find]
 where = ["src"]

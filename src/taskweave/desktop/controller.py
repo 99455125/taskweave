@@ -8,6 +8,7 @@ import logging
 import os
 from pathlib import Path
 import subprocess
+import shutil
 import sys
 from uuid import uuid4
 
@@ -44,7 +45,7 @@ class DesktopController:
         trial = await self.call('run.get', run_id=run_id)
         attempts = [a for a in trial['attempts'] if a['step_id'] == step_id]
         if not attempts:
-            raise TaskError('VALIDATION_EVIDENCE_INVALID', '尚无试跑记录')
+            raise TaskError('VALIDATION_EVIDENCE_INVALID', '尚无调试记录')
         attempt_id = attempts[-1]['attempt_id']
         feedback = await self.call('feedback.export', attempt_id=attempt_id)
         definition = json.loads(trial['definition_json'])
@@ -206,15 +207,59 @@ class DesktopController:
         )
 
     async def default_environment(self):
+        return (await self.workbench_settings()).get('default_environment_id')
+
+    async def workbench_settings(self):
         path = self.application.home / 'workbench.json'
-        return json.loads(path.read_text()).get('default_environment_id') if path.exists() else None
+        settings = json.loads(path.read_text()) if path.exists() else {}
+        settings.setdefault('executor_max_threads', 8)
+        return settings
+
+    async def save_executor_max_threads(self, value):
+        value = self.application.coordinator.set_max_concurrency(value)
+        path = self.application.home / 'workbench.json'
+        settings = await self.workbench_settings()
+        settings['executor_max_threads'] = value
+        temporary = path.with_suffix('.tmp')
+        temporary.write_text(json.dumps(settings, ensure_ascii=False), encoding='utf-8')
+        temporary.replace(path)
+        return value
+
+    async def migrate_workspace(self, destination):
+        destination = Path(destination).expanduser().resolve()
+        source = self.application.home.resolve()
+        if destination == source or source in destination.parents:
+            raise TaskError('WORKSPACE_INVALID', '新目录不能是当前工作空间或其子目录')
+        if await self.call('run.instances'):
+            raise TaskError('WORKSPACE_BUSY', '请先结束全部执行实例')
+        if destination.exists() and any(destination.iterdir()):
+            raise TaskError('WORKSPACE_INVALID', '目标目录必须为空')
+        from taskweave.infrastructure.storage import workspace_location_file
+
+        def migrate():
+            destination.mkdir(parents=True, exist_ok=True)
+            for item in source.iterdir():
+                if item.name in {'coordinator.lock'}:
+                    continue
+                target = destination / item.name
+                if item.is_dir():
+                    shutil.copytree(item, target, dirs_exist_ok=True)
+                else:
+                    shutil.copy2(item, target)
+            marker = workspace_location_file()
+            marker.parent.mkdir(parents=True, exist_ok=True)
+            temporary = marker.with_suffix('.tmp')
+            temporary.write_text(json.dumps({'workspace_home': str(destination), 'remove_after_restart': str(source)}, ensure_ascii=False), encoding='utf-8')
+            temporary.replace(marker)
+        await asyncio.to_thread(migrate)
+        return {'workspace_home': str(destination), 'restart_required': True}
 
     async def set_default_environment(self, environment_id):
         environments = await self.call('environment.list')
         if environment_id is not None and environment_id not in {e['environment_id'] for e in environments}:
             raise TaskError('FORM_INVALID', '请选择已有环境')
         path = self.application.home / 'workbench.json'
-        settings = json.loads(path.read_text()) if path.exists() else {}
+        settings = await self.workbench_settings()
         settings['default_environment_id'] = environment_id
         temporary = path.with_suffix('.tmp')
         temporary.write_text(json.dumps(settings, ensure_ascii=False))

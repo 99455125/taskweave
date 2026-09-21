@@ -68,4 +68,4 @@ Playwright 浏览器在 worker 固定事件循环里运行，role 资源独立�
 
 Playwright 0.2.0 增量：selector 兼容 CSS 字符串并支持结构化 role/label/placeholder/frame；新增输入值读取/断言和 URL/title 断言；时间标识可见快照、失败诊断与插件提示词，兼容策略及限制见插件 README。核心仍通过通用动作与 ContextItem 交互，不引入 Playwright 依赖。
 
-2026-09-18：新增独立 captcha 插件，使用随包 ddddocr 1.6.1/ONNX Runtime 1.20.1 本地 CPU OCR，模型和识别在 worker 单线程执行，无网络或 API Key；识别普通图片文字，返回候选文字并要求业务验证。Playwright 新增通用 page_element_image 采集元素 PNG Base64，核心不导入 OCR 或按插件硬编码。插件对 API/网页渠道提供提示词；验证码图片、输出长度和模型初始化失败有明确错误，不自动刷新或无限重试。Windows 10 x64 免安装包与真实业务验证码准确率待实机验收。
+2026-09-18：新增独立 ocr 插件，使用随包 ddddocr 1.6.1/ONNX Runtime 1.20.1 本地 CPU OCR，模型和识别在 worker 单线程执行，无网络或 API Key；识别普通图片文字，返回候选文字并要求业务验证。Playwright 新增通用 page_element_image 采集元素 PNG Base64，核心不导入 OCR 或按插件硬编码。插件对 API/网页渠道提供提示词；验证码图片、输出长度和模型初始化失败有明确错误，不自动刷新或无限重试。Windows 10 x64 免安装包与真实业务验证码准确率待实机验收。
