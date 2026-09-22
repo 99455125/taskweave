@@ -448,7 +448,7 @@ class Repository(Store):
         return rows
 
     def save_step_context(self, step_id, provider_id, name, source_page, item, context_id=None):
-        self.step(step_id)
+        step = self.step(step_id)
         if source_page not in {'draft', 'trial_feedback'}:
             raise TaskError('FORM_INVALID', '上下文来源无效')
         if not isinstance(name, str) or not name.strip():
@@ -460,11 +460,24 @@ class Repository(Store):
                 "INSERT INTO step_contexts VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(context_id) DO UPDATE SET name=excluded.name,item_json=excluded.item_json,updated_at=excluded.updated_at",
                 (context_id, step_id, provider_id, name.strip(), source_page, dumps(item), timestamp, timestamp),
             )
+            db.execute(
+                "UPDATE steps SET validation_state='DRAFT',validation_source=NULL,verified_hash=NULL,updated_at=? WHERE step_id=?",
+                (timestamp, step_id),
+            )
+            db.execute("UPDATE tasks SET updated_at=? WHERE task_id=?", (timestamp, step['task_id']))
         return next(row for row in self.list_step_contexts(step_id) if row['context_id'] == context_id)
 
     def delete_step_context(self, context_id):
-        if not self.execute('DELETE FROM step_contexts WHERE context_id=?', (context_id,)):
-            raise TaskError('NOT_FOUND')
+        row = self.query('SELECT step_id FROM step_contexts WHERE context_id=?', (context_id,), True)
+        step = self.step(row['step_id'])
+        timestamp = now()
+        with self.transaction() as db:
+            db.execute('DELETE FROM step_contexts WHERE context_id=?', (context_id,))
+            db.execute(
+                "UPDATE steps SET validation_state='DRAFT',validation_source=NULL,verified_hash=NULL,updated_at=? WHERE step_id=?",
+                (timestamp, row['step_id']),
+            )
+            db.execute("UPDATE tasks SET updated_at=? WHERE task_id=?", (timestamp, step['task_id']))
         return {'deleted': context_id}
 
     def events(self, run_id):

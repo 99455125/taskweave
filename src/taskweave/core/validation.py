@@ -282,6 +282,7 @@ def normalize_step(document):
     defaults = {
         "name": "Step",
         "goal": "",
+        "ai_authoring_notes": "",
         "step_content": "",
         "input_schema": {"type": "object"},
         "output_schema": {},

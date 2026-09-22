@@ -17,7 +17,7 @@ class DisplayTests(unittest.TestCase):
         self.assertEqual(readable_metadata({'step_id': 'deleted'}, {}), {'步骤': '未知步骤'})
 
     def test_session_title_has_time_and_kind(self):
-        self.assertEqual(execution_title({'mode': 'TRIAL', 'started_at': '2026-09-18 10:00', 'run_id': 'opaque'}), '试跑 · 2026-09-18 10:00')
+        self.assertEqual(execution_title({'mode': 'TRIAL', 'started_at': '2026-09-18 10:00', 'run_id': 'opaque'}), '调试 · 2026-09-18 10:00')
         self.assertEqual(execution_title({}), '执行 · 未开始')
 
 
@@ -42,4 +42,3 @@ class OutputPersistenceValidationTests(unittest.TestCase):
             content_tree('async def run(ctx, inputs):\n    ctx.output("playwright.image", "capture", {})\n    return ctx.result(data={})', ['playwright.image'])
         self.assertEqual(error.exception.code, 'CONTENT_OUTPUT_UNUSED')
         content_tree('async def run(ctx, inputs):\n    output = ctx.output("playwright.image", "capture", {})\n    return ctx.result(data={"capture":{"output":"capture"}}, outputs=[output])', ['playwright.image'])
-

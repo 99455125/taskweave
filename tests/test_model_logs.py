@@ -77,7 +77,7 @@ class ModelLogTests(unittest.TestCase):
                 return ModelReply('async def run(ctx, inputs):\n    return ctx.result(data=await ctx.call("'+action+'", inputs))')
         with tempfile.TemporaryDirectory() as home:
             model=Model()
-            with Application(home,model) as app:
+            with Application(home,model,registry_factory='taskweave.plugins.demo:build_registry') as app:
                 task=app.repo.create_task('test')['task_id']
                 step=app.repo.save_step(task,{'name':'test','capabilities':['demo.echo'],'step_content':'async def run(ctx, inputs):\n    return ctx.result(data=inputs)'})
                 result=asyncio.run(app.authoring.generate(step['step_id'],step['content_hash']))

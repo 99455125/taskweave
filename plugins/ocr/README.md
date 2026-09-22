@@ -23,7 +23,7 @@ async def run(ctx, inputs):
     return ctx.result(data={"logged_in": True})
 ```
 
-示例定位器必须按实际采集的页面确定；`authenticated_url_pattern` 为真实登录后地址规则。验证码识别输出 `text`、`engine`、`needs_verification=true`，不返回虚构成功/置信度。可选 `captcha_beta` 变量切换备选模型。API/网页编写均由插件贡献适配规则。
+示例定位器必须按实际采集的页面确定；`authenticated_url_pattern` 为真实登录后地址规则。验证码识别输出 `text`、`engine`、`needs_verification=true`，不返回虚构成功/置信度。可选 `ocr_beta` 变量切换备选模型。API/网页编写均由插件贡献适配规则。
 
 首期仅普通单行图片文字验证码，不实现滑块、点选、算术求解；尺寸/格式、输入大小、空结果和预期长度不符明确报错。不自动刷新或无限重试；识别不准时可修订或人工接管。提交之后必须验证真实登录状态。
 

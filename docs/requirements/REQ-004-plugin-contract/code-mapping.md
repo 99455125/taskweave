@@ -17,4 +17,4 @@
 
 [运行及开发说明](usage.md)。
 
-`plugins/ocr/`：独立本地文字验证码识别插件（无浏览器依赖）；Playwright `page_element_image`：通用元素 PNG Base64 采集，用于跨插件图像传递。`tests/test_captcha.py`：非法输入、无网络本地推理、实际浏览器采集→识别→填写→登录状态断言。
+`plugins/ocr/`：独立本地文字识别插件（无浏览器依赖）；Playwright `page_element_image`：通用元素 PNG Base64 采集，用于跨插件图像传递。`tests/test_ocr.py`：非法输入、无网络本地推理、实际浏览器采集→识别→填写→登录状态断言。

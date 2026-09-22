@@ -17,21 +17,25 @@ class WorkbenchChanges(unittest.TestCase):
     def test_step_contexts_persist_and_can_be_renamed_or_deleted(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
             task = app.repo.create_task('contexts')['task_id']
-            step = app.repo.save_step(task, {'name': 'collect'})
+            step = app.repo.save_step(task, {'name': 'collect', 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data={})'})
+            app.confirm_step_manual(step['step_id'], step['content_hash'])
             saved = app.dispatch('context.save', {
                 'step_id': step['step_id'], 'provider_id': 'playwright.page',
                 'name': '登录页', 'source_page': 'draft',
                 'item': {'kind': 'text', 'content': 'page'},
             })
+            self.assertEqual(app.repo.step(step['step_id'])['validation_state'], 'DRAFT')
             self.assertEqual(app.dispatch('context.list', {'step_id': step['step_id']})[0]['name'], '登录页')
             app.dispatch('context.save', {
                 'context_id': saved['context_id'], 'step_id': saved['step_id'],
                 'provider_id': saved['provider_id'], 'source_page': saved['source_page'],
                 'name': '登录页面', 'item': saved['item'],
             })
+            app.confirm_step_manual(step['step_id'], step['content_hash'])
             self.assertEqual(app.dispatch('context.list', {'step_id': step['step_id']})[0]['name'], '登录页面')
             app.dispatch('context.delete', {'context_id': saved['context_id']})
             self.assertEqual(app.dispatch('context.list', {'step_id': step['step_id']}), [])
+            self.assertEqual(app.repo.step(step['step_id'])['validation_state'], 'DRAFT')
 
     def test_executor_thread_setting_persists(self):
         from taskweave.desktop.controller import DesktopController
@@ -43,6 +47,29 @@ class WorkbenchChanges(unittest.TestCase):
                 self.assertEqual(app.coordinator.max_concurrency, 3)
             with Application(home) as reopened:
                 self.assertEqual(reopened.coordinator.max_concurrency, 3)
+
+    def test_workspace_migration_copies_then_removes_only_after_new_workspace_starts(self):
+        from taskweave.desktop.controller import DesktopController
+        from taskweave.desktop.launcher import finish_workspace_migration
+        with tempfile.TemporaryDirectory() as root:
+            root = Path(root)
+            old, new, unrelated = root / 'old', root / 'new', root / 'unrelated'
+            marker = root / 'location.json'
+            with Application(old) as app:
+                app.repo.create_task('migrated')
+                controller = DesktopController(app)
+                with patch('taskweave.infrastructure.storage.workspace_location_file', return_value=marker):
+                    result = asyncio.run(controller.migrate_workspace(new))
+            self.assertEqual(result['workspace_home'], str(new.resolve()))
+            self.assertTrue((new / 'taskweave.db').exists())
+            self.assertTrue(old.exists())
+            unrelated.mkdir()
+            with patch('taskweave.infrastructure.storage.workspace_location_file', return_value=marker):
+                self.assertFalse(finish_workspace_migration(unrelated))
+                self.assertTrue(old.exists())
+                self.assertTrue(finish_workspace_migration(new))
+            self.assertFalse(old.exists())
+            self.assertNotIn('remove_after_restart', json.loads(marker.read_text()))
 
     def test_collected_contexts_accumulate_across_plugins_and_delete_one(self):
         from taskweave.desktop.workbench import Workbench
@@ -57,6 +84,8 @@ class WorkbenchChanges(unittest.TestCase):
             if operation == 'context.delete':
                 saved[:] = [entry for entry in saved if entry['context_id'] != params['context_id']]
                 return {'deleted': True}
+            if operation == 'step.get':
+                return {'step_id': params['step_id'], 'validation_state': 'DRAFT'}
             raise AssertionError(operation)
         workbench.controller = SimpleNamespace(call=call)
         workbench.step_id = uid()
