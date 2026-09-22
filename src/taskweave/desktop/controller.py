@@ -13,6 +13,7 @@ import sys
 from uuid import uuid4
 
 from taskweave.core.validation import TaskError, normalize_step
+from taskweave.application.prompts import MODEL_JSON_CORRECTION
 from taskweave.infrastructure.model import HttpModel
 
 
@@ -35,6 +36,32 @@ class DesktopController:
             logger.error('服务操作失败：%s [%s]', api_operation, getattr(exc, 'code', type(exc).__name__))
             raise
 
+    @property
+    def workspace_home(self):
+        return self.application.home
+
+    def reset_debug_conversation(self, step_id):
+        self.application.authoring.reset_conversation(step_id)
+
+    async def validate_step_candidate(self, candidate):
+        return await self.application.authoring.validate_step(candidate)
+
+    def append_debug_conversation(self, step_id, messages):
+        self.application.authoring.conversations.setdefault(step_id, []).extend(messages)
+
+    def plugin_contributions(self, capabilities):
+        return self.application.registry.contributions(capabilities)
+
+    def plugin_context_requests(self):
+        requests = {}
+        for manifest in self.application.registry.manifests.values():
+            requests.update(manifest.get('context_requests', {}))
+        return requests
+
+    @property
+    def result_renderers(self):
+        return self.application.registry.views
+
     async def execution_inputs(self, run_id):
         stored = await asyncio.to_thread(self.application.repo.run, run_id)
         return {'task': json.loads(stored['inputs_json']),
@@ -48,6 +75,8 @@ class DesktopController:
             raise TaskError('VALIDATION_EVIDENCE_INVALID', '尚无调试记录')
         attempt_id = attempts[-1]['attempt_id']
         feedback = await self.call('feedback.export', attempt_id=attempt_id)
+        feedback['run_id'] = run_id
+        feedback['attempt_id'] = attempt_id
         definition = json.loads(trial['definition_json'])
         executed = next((item for item in definition['steps'] if item['step_id'] == step_id), None)
         feedback['executed_step_content'] = executed.get('step_content') if executed else None
@@ -307,7 +336,7 @@ class DesktopController:
             [
                 {
                     "role": "system",
-                    "content": "Return only valid JSON with step_content and explanation. Escape newlines in strings. Example: " + json.dumps({"step_content": 'async def run(ctx, inputs):\n    return ctx.result(data={"connected": True})', "explanation": "connected"}),
+                    "content": MODEL_JSON_CORRECTION + " Example: " + json.dumps({"step_content": 'async def run(ctx, inputs):\n    return ctx.result(data={"connected": True})', "explanation": "connected"}),
                 },
                 {
                     "role": "user",

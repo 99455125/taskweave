@@ -23,7 +23,7 @@ def sample_image():
     return buffer.getvalue()
 
 
-class CaptchaTests(unittest.TestCase):
+class OcrTests(unittest.TestCase):
     def test_bad_images_rejected_without_opening_engine(self):
         from taskweave_ocr import image_bytes
         for text in ['bad-base64!', '', base64.b64encode(b'not-an-image').decode()]:

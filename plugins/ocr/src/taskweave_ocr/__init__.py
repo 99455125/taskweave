@@ -10,19 +10,19 @@ def image_bytes(encoded):
     try:
         data = base64.b64decode(encoded, validate=True)
     except (ValueError, TypeError) as exc:
-        raise PluginError('CAPTCHA_IMAGE_INVALID', '验证码图片需要有效 Base64') from exc
+        raise PluginError('OCR_IMAGE_INVALID', '待识别图片需要有效 Base64') from exc
     if not data or len(data) > 1024 * 1024:
-        raise PluginError('CAPTCHA_IMAGE_INVALID', '验证码图片不能为空且不能超过 1MB')
+        raise PluginError('OCR_IMAGE_INVALID', '待识别图片不能为空且不能超过 1MB')
     from PIL import Image
     try:
         with Image.open(BytesIO(data)) as image:
             if image.format not in {'PNG', 'JPEG', 'WEBP', 'BMP'} or max(image.size) > 4096 or image.width * image.height > 4_000_000:
-                raise PluginError('CAPTCHA_IMAGE_INVALID', '验证码图片格式或尺寸不支持')
+                raise PluginError('OCR_IMAGE_INVALID', '待识别图片格式或尺寸不支持')
             image.verify()
     except PluginError:
         raise
     except Exception as exc:
-        raise PluginError('CAPTCHA_IMAGE_INVALID', '验证码图片无法解析') from exc
+        raise PluginError('OCR_IMAGE_INVALID', '待识别图片无法解析') from exc
     return data
 
 
@@ -38,7 +38,7 @@ class LocalOcr:
             return {'executor': executor, 'engine': engine}
         except Exception as exc:
             executor.shutdown(wait=False, cancel_futures=True)
-            raise PluginError('CAPTCHA_ENGINE_UNAVAILABLE', '本地 OCR 初始化失败，请检查随包模型及运行库') from exc
+            raise PluginError('OCR_ENGINE_UNAVAILABLE', '本地 OCR 初始化失败，请检查随包模型及运行库') from exc
 
     async def close(self, resource):
         resource['engine'] = None
@@ -61,10 +61,10 @@ class Recognize:
         try:
             text = await asyncio.get_running_loop().run_in_executor(resource['executor'], resource['engine'].classification, data)
         except Exception as exc:
-            raise PluginError('CAPTCHA_RECOGNITION_FAILED', '本地验证码识别失败') from exc
+            raise PluginError('OCR_RECOGNITION_FAILED', '本地文字识别失败') from exc
         text = str(text).strip()
         if not text or len(text) > 16 or (inputs.get('expected_length') and len(text) != inputs['expected_length']):
-            raise PluginError('CAPTCHA_RESULT_INVALID', '识别结果为空或长度不符，请检查图片或人工填写')
+            raise PluginError('OCR_RESULT_INVALID', '识别结果为空或长度不符，请检查图片或人工填写')
         return {'text':text, 'engine':'ddddocr', 'needs_verification':True}
 
     async def verify(self, ctx, inputs, output):

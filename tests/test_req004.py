@@ -88,15 +88,16 @@ class ContractTests(unittest.TestCase):
             ]
             manager = PluginManager(home, entries)
             self.assertEqual(
-                manager.registry().versions, {"demo": "1.0.0", "text": "1.0.0"}
+                manager.registry(["demo", "text"]).versions, {"demo": "1.0.0", "text": "1.0.0"}
             )
             with self.assertRaises(TaskError):
                 manager.configure("broken", True)
             self.assertFalse(manager.path.exists())
+            manager.configure("demo", True)
             manager.configure("demo", False)
-            self.assertEqual(manager.enabled(), ["text"])
+            self.assertEqual(manager.enabled(), [])
             with self.assertRaises(TaskError):
-                PluginManager(home, [entries[1], entries[1]]).registry()
+                PluginManager(home, [entries[1], entries[1]]).registry(["text"])
             with self.assertRaises(TaskError):
                 manager.configure("absent", True)
 
@@ -532,20 +533,11 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(self.trial(step)["status"], "SUCCEEDED")
         self.assertEqual(model.calls, 2)
 
-    def test_sample_package_and_playwright_contribute_without_core_changes(self):
-        self.app.configure_plugin("sample", True)
-        step = self.step(
-            """async def run(ctx, inputs):
-    title = await ctx.call("playwright.page_title", {})
-    upper = await ctx.call("sample.upper", {"text": title["title"]})
-    return ctx.result(data=upper)
-""",
-            ["playwright.page_title", "sample.upper"],
-        )
-        contributions = self.app.registry.contributions(step["capabilities"])
-        self.assertEqual(len(contributions), 2)
-        self.assertTrue(any("sample.upper" in c.instructions for c in contributions))
-        self.assertEqual(self.trial(step)["status"], "SUCCEEDED")
+    def test_third_party_plugin_contributes_without_core_changes(self):
+        registry = Registry([TextPlugin()])
+        contributions = registry.contributions(["text.upper"])
+        self.assertEqual(len(contributions), 1)
+        self.assertTrue(any("text.upper" in c.instructions for c in contributions))
 
     def test_paused_worker_context_observes_existing_page(self):
         source = 'async def run(ctx, inputs):\n    await ctx.call("playwright.page_open", {"url": inputs["url"]})\n    return ctx.result()\n'
@@ -636,7 +628,7 @@ class BrowserTests(unittest.TestCase):
     await ctx.call("playwright.page_open", {"url": inputs["url"]})
     await ctx.call("playwright.page_click", {"selector": "#submit"})
     await ctx.call("playwright.page_wait", {"selector": "#order-id:not(:empty)"})
-    await ctx.call("demo.wait", {"seconds": 10})
+    await ctx.call("playwright.page_wait", {"selector": "#never", "timeout_ms": 10000})
     return ctx.result()
 """
         step = self.step(
@@ -645,7 +637,7 @@ class BrowserTests(unittest.TestCase):
                 "playwright.page_open",
                 "playwright.page_click",
                 "playwright.page_wait",
-                "demo.wait",
+                "playwright.page_wait",
             ],
         )
         run = self.app.trial_step(step["step_id"], {"url": self.url}, uid(), self.env)

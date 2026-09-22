@@ -24,7 +24,7 @@ GUI_AVAILABLE = all(
 class FixtureModel(BaseHTTPRequestHandler):
     def do_POST(self):
         body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
-        source = 'async def run(ctx, inputs):\n    await ctx.call("demo.wait", {"seconds": 0})\n    return ctx.result(data={"ai": True})\n'
+        source = 'async def run(ctx, inputs):\n    return ctx.result(data={"ai": True})\n'
         payload = json.dumps(
             {
                 "choices": [
@@ -152,21 +152,9 @@ class WorkbenchAcceptance(unittest.TestCase):
                     expect(
                     page.get_by_role("button", name="调试历史", exact=True)
                     ).to_be_visible()
-                    page.get_by_role("tab", name="动作表单", exact=True).click()
-                    page.locator(".q-select").filter(
-                        has=page.get_by_text("插件动作", exact=True)
-                    ).click()
-                    page.get_by_role("option", name="demo.wait", exact=True).click()
-                    expect(
-                        page.get_by_label("seconds · 必录", exact=True)
-                    ).to_be_visible(timeout=15000)
-                    page.get_by_label("seconds · 必录", exact=True).fill("0")
-                    page.get_by_role(
-                        "button", name="插入到步骤内容", exact=True
-                    ).click()
                     page.get_by_label("步骤名称", exact=True).fill("AI 编写等待步骤")
                     page.get_by_role(
-                        "button", name="AI 生成 / 修订", exact=True
+                        "button", name="AI 生成内容", exact=True
                     ).click()
                     page.get_by_role("button", name="使用 API", exact=True).click()
                     expect(
@@ -177,12 +165,11 @@ class WorkbenchAcceptance(unittest.TestCase):
                     editor.click()
                     editor.press("ControlOrMeta+A")
                     page.keyboard.insert_text(
-                        'async def run(ctx, inputs):\n    await ctx.call("demo.wait", {"seconds": 0})\n    return ctx.result(data={"manual_adjustment": True})\n'
+                        'async def run(ctx, inputs):\n    return ctx.result(data={"manual_adjustment": True})\n'
                     )
-                    page.get_by_role("button", name="调试", exact=True).click()
-                    page.get_by_role("button", name="执行试跑", exact=True).click()
+                    page.get_by_role("button", name="调试当前步骤", exact=True).click()
                     expect(
-                        page.get_by_text("试跑状态：成功", exact=True)
+                        page.get_by_text("调试状态：成功", exact=True)
                     ).to_be_visible(timeout=15000)
                     page.get_by_role("tab", name="步骤详情", exact=True).click()
                     page.get_by_role(
@@ -194,34 +181,27 @@ class WorkbenchAcceptance(unittest.TestCase):
                         )
                     ).to_be_visible()
                     page.get_by_role("button", name="+", exact=True).click()
-                    page.get_by_role("tab", name="动作表单", exact=True).click()
-                    page.locator(".q-select").filter(
-                        has=page.get_by_text("插件动作", exact=True)
-                    ).click()
-                    page.get_by_role("option", name="text.upper", exact=True).click()
-                    page.get_by_label("text · 必录", exact=True).fill("taskweave")
-                    page.get_by_role(
-                        "button", name="插入到步骤内容", exact=True
-                    ).click()
+                    expect(page.get_by_role("button", name="2. 新步骤", exact=True)).to_be_visible()
                     page.get_by_label("步骤名称", exact=True).fill("手写文本步骤")
+                    expect(page.get_by_label("步骤名称", exact=True)).to_have_value("手写文本步骤")
                     page.get_by_role("tab", name="时间设置", exact=True).click()
                     page.get_by_label("上一步成功后等待（秒）", exact=True).fill("2")
                     page.get_by_role("button", name="保存步骤设置", exact=True).click()
                     page.get_by_role("tab", name="步骤详情", exact=True).click()
-                    page.get_by_role("button", name="调试", exact=True).click()
-                    page.get_by_role("button", name="执行试跑", exact=True).click()
+                    page.get_by_role("button", name="调试当前步骤", exact=True).click()
                     expect(
-                        page.get_by_text("试跑状态：成功", exact=True)
+                        page.get_by_text("调试状态：成功", exact=True)
                     ).to_be_visible(timeout=15000)
                     page.get_by_role("tab", name="步骤详情", exact=True).click()
                     page.get_by_role(
                         "button", name="确认验证并保存", exact=True
                     ).click()
                     expect(
-                        page.get_by_role(
-                            "button", name="2. 手写文本步骤", exact=True
-                        )
+                        page.get_by_text("2. 手写文本步骤", exact=True)
                     ).to_be_visible()
+                    with closing(sqlite3.connect(Path(temporary) / "taskweave.db")) as db:
+                        second_saved = db.execute("SELECT name,validation_state FROM steps ORDER BY position").fetchall()[1]
+                    self.assertEqual(second_saved, ("手写文本步骤", "VALIDATED"))
                     page.screenshot(
                         path=str(evidence / "step-editor.png"), full_page=True
                     )
@@ -229,9 +209,7 @@ class WorkbenchAcceptance(unittest.TestCase):
                     page.get_by_role(
                         "button", name="新建执行", exact=True
                     ).click()
-                    page.get_by_role("button", name="创建执行", exact=True).click()
-                    page.get_by_role("button", name="2. 手写文本步骤", exact=True).click()
-                    page.get_by_role("button", name="从前面未执行的步骤继续到此步", exact=True).click()
+                    page.get_by_role("button", name="创建并执行", exact=True).click()
                     expect(
                         page.get_by_text("运行状态：成功", exact=True)
                     ).to_be_visible(timeout=20000)
@@ -241,23 +219,13 @@ class WorkbenchAcceptance(unittest.TestCase):
                     self.assertEqual(
                         len(provider.requests), 1
                     )  # fixed execution never invokes the model
-                    page.get_by_role("button", name="运行历史", exact=True).click()
-                    expect(
-                        page.get_by_role("button", name="查看记录", exact=True)
-                    ).to_have_count(3)
-                    page.get_by_role(
-                        "button", name="查看记录", exact=True
-                    ).first.click()
-                    expect(
-                        page.get_by_text("执行时任务：UI 验收任务", exact=True)
-                    ).to_be_visible()
-                    page.get_by_role("button", name="关闭", exact=True).click()
-                    page.get_by_role("button", name="步骤编写", exact=True).click()
+                    page.get_by_role("button", name="任务", exact=True).click()
+                    page.get_by_role("button", name="打开", exact=True).click()
                     page.get_by_role("button", name="1. AI 编写等待步骤", exact=True).click()
-                    page.get_by_role("button", name="AI 生成 / 修订", exact=True).click()
+                    page.get_by_role("button", name="AI 生成内容", exact=True).click()
                     page.get_by_role("button", name="使用 Chat 网页", exact=True).click()
                     expect(page.get_by_label("复制到网页 AI 的内容", exact=True)).to_be_visible()
-                    self.assertIn('demo.wait', page.get_by_label("复制到网页 AI 的内容", exact=True).input_value())
+                    self.assertIn('async def run', page.get_by_label("复制到网页 AI 的内容", exact=True).input_value())
                     with closing(sqlite3.connect(Path(temporary) / "taskweave.db")) as db:
                         web_source = db.execute("SELECT step_content FROM steps WHERE name=?", ("AI 编写等待步骤",)).fetchone()[0]
                     page.get_by_label("粘贴网页 AI 回复", exact=True).fill(json.dumps({'step_content': web_source, 'explanation':'网页回复'}))
@@ -265,28 +233,36 @@ class WorkbenchAcceptance(unittest.TestCase):
                     expect(page.get_by_role("dialog").filter(has_text="网页 AI 回复预览").last).to_be_visible()
                     expect(page.get_by_text("网页回复", exact=True)).to_be_visible()
                     page.get_by_role("button", name="采纳到编辑器", exact=True).click()
-                    expect(page.get_by_text("网页 AI 回复已保存为草稿，下一次试跑使用此内容。", exact=True)).to_be_visible()
+                    expect(page.get_by_text("网页 AI 回复已保存为草稿，下一次调试使用此内容。", exact=True)).to_be_visible()
                     self.assertEqual(len(provider.requests), 1)
-                    page.get_by_role("tab", name="调试", exact=True).click()
-                    page.get_by_label("AI 补充说明（可选）", exact=True).fill("网页保留页面")
+                    repair_note = page.get_by_label("AI 补充说明（可选）", exact=True)
+                    if not repair_note.is_visible():
+                        page.get_by_role("button", name="调试", exact=True).click()
+                    repair_note.fill("网页保留页面")
                     page.get_by_role("button", name="AI 修复", exact=True).click()
                     page.get_by_role("button", name="Chat 网页修复", exact=True).click()
                     expect(page.get_by_label("复制到网页 AI 的内容", exact=True)).to_be_visible()
                     self.assertIn('网页保留页面', page.get_by_label("复制到网页 AI 的内容", exact=True).input_value())
                     page.get_by_role("button", name="关闭", exact=True).click()
-                    page.get_by_label("AI 补充说明（可选）", exact=True).fill("继续当前页面，不重新打开")
+                    supplement = page.get_by_label("AI 补充说明（可选）", exact=True)
+                    supplement.click()
+                    supplement.press("ControlOrMeta+A")
+                    supplement.press_sequentially("继续当前页面，不重新打开")
+                    supplement.press("Tab")
+                    expect(supplement).to_have_value("继续当前页面，不重新打开")
                     page.get_by_role("button", name="AI 修复", exact=True).click()
                     page.get_by_role("button", name="API 修复", exact=True).click()
                     expect(page.get_by_role("button", name="采纳到编辑器", exact=True)).to_be_visible(timeout=15000)
                     self.assertIn("继续当前页面", json.dumps(provider.requests[-1], ensure_ascii=False))
                     page.get_by_role("button", name="采纳到编辑器", exact=True).click()
-                    expect(page.get_by_text("AI 建议已保存为草稿，下一次试跑使用此内容。", exact=True)).to_be_visible()
+                    expect(page.get_by_text("AI 建议已保存为草稿，下一次调试使用此内容。", exact=True)).to_be_visible()
                     with closing(sqlite3.connect(Path(temporary) / "taskweave.db")) as db:
                         saved_content = db.execute("SELECT step_content,validation_state FROM steps WHERE name=?", ("AI 编写等待步骤",)).fetchone()
                         self.assertIn('"ai": True', saved_content[0])
                         self.assertEqual(saved_content[1], 'DRAFT')
                     page.get_by_role("button", name="插件", exact=True).click()
-                    expect(page.get_by_text("text · 1.0.0", exact=True)).to_be_visible()
+                    page.get_by_text("未启用 · ocr", exact=True).click()
+                    expect(page.get_by_text("ocr · 未加载", exact=True)).to_be_visible()
                     page.get_by_role("button", name="环境", exact=True).click()
                     page.get_by_role("button", name="新建环境", exact=True).click()
                     page.get_by_label("环境名称", exact=True).fill("本地 UI 环境")

@@ -210,16 +210,18 @@ class IntervalTests(unittest.TestCase):
         with closing(sqlite3.connect(path)) as db, db:
             db.execute("ALTER TABLE steps DROP COLUMN delay_after_previous_seconds")
             db.execute("ALTER TABLE steps DROP COLUMN validation_source")
+            db.execute("ALTER TABLE steps DROP COLUMN ai_authoring_notes")
             db.execute("ALTER TABLE tasks DROP COLUMN sort_order")
             db.execute("ALTER TABLE task_runs DROP COLUMN definition_json")
             db.execute("ALTER TABLE task_runs DROP COLUMN waiting_step_id")
             db.execute("ALTER TABLE task_runs DROP COLUMN wait_until")
+            db.execute("DROP TABLE step_contexts")
             db.execute("PRAGMA user_version=2")
         self.app = Application(self.temp.name)
         self.assertTrue(Path(str(path) + ".v2.bak").exists())
         self.assertEqual(self.app.repo.task(self.task)["name"], "Interval")
         self.assertEqual(
-            self.app.repo.query("PRAGMA user_version")[0]["user_version"], 4
+            self.app.repo.query("PRAGMA user_version")[0]["user_version"], 7
         )
 
     def test_restart_while_paused_keeps_original_deadline_and_success(self):

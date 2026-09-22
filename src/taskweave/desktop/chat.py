@@ -85,3 +85,16 @@ def parse_chat_reply(text):
     if len(tree.body) != 1 or not isinstance(tree.body[0], ast.AsyncFunctionDef) or tree.body[0].name != 'run':
         raise TaskError('CHAT_REPLY_INVALID', 'step_content 必须只包含一个 async def run(ctx, inputs)')
     return source + '\n', explanation
+
+
+def parse_goal_reply(text):
+    """Parse the plain-text web-chat contract for a step description."""
+    value = text.strip()
+    fenced = re.fullmatch(
+        r'```(?:text|markdown)?\s*\n(.*?)\n```', value, re.DOTALL | re.IGNORECASE
+    )
+    if fenced:
+        value = fenced.group(1).strip()
+    if not value or value.startswith('{') or 'async def run(' in value:
+        raise TaskError('CHAT_REPLY_INVALID', '网页 AI 必须只返回步骤描述纯文本')
+    return value

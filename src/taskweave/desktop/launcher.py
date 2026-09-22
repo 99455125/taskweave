@@ -18,6 +18,25 @@ def select_local_port():
         return listener.getsockname()[1]
 
 
+def finish_workspace_migration(home):
+    """Remove the old tree only when this launch uses the configured new tree."""
+    from taskweave.infrastructure.storage import workspace_location_file
+    location = workspace_location_file()
+    if not location.exists():
+        return False
+    location_data = json.loads(location.read_text(encoding='utf-8'))
+    configured = Path(location_data.get('workspace_home', '')).expanduser().resolve()
+    old_value = location_data.get('remove_after_restart')
+    old = Path(old_value).expanduser().resolve() if old_value else None
+    if configured != Path(home).resolve() or old is None or old == configured or not old.exists():
+        return False
+    import shutil
+    shutil.rmtree(old)
+    location_data.pop('remove_after_restart', None)
+    location.write_text(json.dumps(location_data, ensure_ascii=False), encoding='utf-8')
+    return True
+
+
 def launch(home=None, port=None, browser=False):
     multiprocessing.freeze_support()
     if getattr(sys, "frozen", False):
@@ -46,19 +65,10 @@ def launch(home=None, port=None, browser=False):
 
     home = Path(home or default_home()).resolve()
     if home is not None:
-        from taskweave.infrastructure.storage import workspace_location_file
-        location = workspace_location_file()
-        if location.exists():
-            try:
-                location_data = json.loads(location.read_text(encoding='utf-8'))
-                old = Path(location_data.get('remove_after_restart', '')).resolve()
-                if old != home and old.exists():
-                    import shutil
-                    shutil.rmtree(old)
-                location_data.pop('remove_after_restart', None)
-                location.write_text(json.dumps(location_data, ensure_ascii=False), encoding='utf-8')
-            except (OSError, ValueError):
-                logging.getLogger(__name__).warning('旧工作空间将在下次启动继续清理')
+        try:
+            finish_workspace_migration(home)
+        except (OSError, ValueError):
+            logging.getLogger(__name__).warning('旧工作空间将在下次启动继续清理')
     port = port if port is not None else select_local_port()
     token = secrets.token_urlsafe(32)
     url = f"http://127.0.0.1:{port}/?access={token}"

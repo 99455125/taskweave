@@ -906,7 +906,15 @@ class CoordinatorPool:
         return result
     def clear_task_runs(self, task_id):
         for key, coordinator in list(self.instances.items()):
-            if key == ('trial', task_id) or any(r['task_id'] == task_id for r in [self.repo.run(coordinator.session_run_id)] if coordinator.session_run_id):
+            belongs = key == ('trial', task_id)
+            if not belongs and coordinator.session_run_id:
+                try:
+                    belongs = self.repo.run(coordinator.session_run_id)['task_id'] == task_id
+                except TaskError as exc:
+                    if exc.code != 'NOT_FOUND':
+                        raise
+                    belongs = True  # stale instance whose run was already removed
+            if belongs:
                 coordinator.close()
                 self.instances.pop(key, None)
         helper = Coordinator(self.repo, self.registry, self.factory, recover=False)

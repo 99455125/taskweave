@@ -102,6 +102,7 @@ INSERT INTO runtime_lease_new(slot,run_id,owner_id,heartbeat_at)
 DROP TABLE runtime_lease;
 ALTER TABLE runtime_lease_new RENAME TO runtime_lease;
 """
+CONTROL_V7 = "ALTER TABLE steps ADD COLUMN ai_authoring_notes TEXT NOT NULL DEFAULT '';"
 
 
 @contextmanager
@@ -155,8 +156,8 @@ def initialize(path, name):
         migrate(
             db,
             path,
-            6 if name == "control" else 2,
-            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6},
+            7 if name == "control" else 2,
+            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7},
         )
 
 

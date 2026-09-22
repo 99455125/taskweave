@@ -24,7 +24,7 @@ class PluginManager:
             set(data["enabled"])
         ) != len(data["enabled"]):
             raise TaskError("PLUGIN_CONFIG_INVALID")
-        return [name for name in data["enabled"] if name not in {"demo", "sample", "text"}]
+        return data["enabled"]
 
     def registry(self, enabled=None, strict=True):
         enabled = self.enabled() if enabled is None else enabled

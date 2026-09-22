@@ -54,8 +54,8 @@ class TaskConfigRefresh(unittest.TestCase):
                 self.assertEqual(fields['任务名称'].value, '新名称')
                 self.assertEqual(fields['说明'].value, '新说明')
                 self.assertEqual(schema_editor.call_args.args[0], schema)
-                self.assertIs(workbench.edit_controls, editor)
-                workbench.paint.assert_not_awaited()
+                self.assertIsNone(workbench.edit_controls)
+                workbench.paint.assert_awaited_once()
                 self.assertEqual(stale['name'], '旧名称')
 
         asyncio.run(scenario())

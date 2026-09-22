@@ -10,13 +10,14 @@ class TaskTransfer(unittest.TestCase):
     def test_round_trip_new_ids_dependencies_and_verification(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
             task = app.repo.create_task('订单', {'type': 'object', 'properties': {'url': {'type': 'string', 'default': 'local'}}})
-            first = app.repo.save_step(task['task_id'], {'name': '获取单号', 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data={"order_no": "001"})'})
+            first = app.repo.save_step(task['task_id'], {'name': '获取单号', 'ai_authoring_notes': '单号必须来自页面，不得编造', 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data={"order_no": "001"})'})
             app.repo.save_step(task['task_id'], {'name': '核对', 'input_schema': {'type': 'object', 'properties': {'order_no': {'type': 'string'}}}, 'bindings': {'order_no': {'ref': {'source': 'step', 'step_id': first['step_id'], 'output': 'data', 'pointer': '/order_no'}}}, 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)'})
             package = app.dispatch('task.export', {'task_id': task['task_id']})
             self.assertNotIn('environments', package)
             imported = app.dispatch('task.import', {'package': package})
             steps = app.repo.steps(imported['task_id'])
             self.assertNotEqual(steps[0]['step_id'], first['step_id'])
+            self.assertEqual(steps[0]['ai_authoring_notes'], '单号必须来自页面，不得编造')
             self.assertEqual(steps[1]['bindings']['order_no']['ref']['step_id'], steps[0]['step_id'])
             self.assertTrue(all(s['validation_state'] == 'VALIDATED' and s['validation_source'] == 'MANUAL' for s in steps))
             self.assertEqual(app.export_task(imported['task_id']), package)

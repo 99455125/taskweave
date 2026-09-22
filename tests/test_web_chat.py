@@ -3,11 +3,19 @@ import tempfile
 import unittest
 from taskweave.application.service import Application
 from taskweave.core.validation import TaskError
-from taskweave.desktop.chat import parse_chat_reply
+from taskweave.desktop.chat import parse_chat_reply, parse_goal_reply
 
 SOURCE = 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n'
 
 class WebChatTests(unittest.TestCase):
+    def test_unicode_space_json_and_plain_description_reply(self):
+        reply = r'{"step_content":"async def run(ctx, inputs):\n\u0020\u0020\u0020\u0020role = \"operator\"\n\u0020\u0020\u0020\u0020return ctx.result(data={\"role\": role}, outputs=[])","explanation":"ok"}'
+        source, explanation = parse_chat_reply(reply)
+        self.assertIn('\n    role = "operator"', source)
+        self.assertEqual(explanation, 'ok')
+        self.assertEqual(parse_goal_reply('进入合约管理并创建合同。'), '进入合约管理并创建合同。')
+        with self.assertRaises(TaskError):
+            parse_goal_reply('{"step_content":"not plain text"}')
     def test_paste_json_or_fenced_code(self):
         source_with_document_like_data = 'async def run(ctx, inputs):\n    return ctx.result(data={"step_content": "business value"})\n'
         for reply in [SOURCE, source_with_document_like_data, '```python\n' + SOURCE + '```', json.dumps({'step_content': SOURCE, 'explanation': '说明'}), '```json\n'+json.dumps({'step_content': SOURCE})+'\n```']:
@@ -30,6 +38,8 @@ class WebChatTests(unittest.TestCase):
             step = app.repo.save_step(task, {'step_content': SOURCE})
             result = app.dispatch('step.generate', {'step_id':step['step_id'], 'expected_hash':step['content_hash'], 'export_only':True, 'contexts':[{'kind':'text', 'content':'中文'*6000}]})
             self.assertIn('中文'*6000, result['prompt'])
+            self.assertIn(r'\u0020', result['prompt'])
+            self.assertIn(r'\"operator\"', result['prompt'])
 
     def test_oversized_history_keeps_latest_two_rounds(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
