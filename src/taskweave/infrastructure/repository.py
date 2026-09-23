@@ -220,7 +220,8 @@ class Repository(Store):
         return {"deleted": step_id}
 
     def save_environment(
-        self, name, public_config, secret_refs=None, environment_id=None
+        self, name, public_config, secret_refs=None, environment_id=None,
+        descriptions=None,
     ):
         public_config = dict(public_config)
         secret_refs = dict(secret_refs or {})
@@ -243,8 +244,8 @@ class Repository(Store):
             ).fetchone():
                 raise TaskError("ENVIRONMENT_LOCKED")
             db.execute(
-                "INSERT INTO environments VALUES(?,?,?,?) ON CONFLICT(environment_id) DO UPDATE SET name=excluded.name,public_config_json=excluded.public_config_json,secret_refs_json=excluded.secret_refs_json",
-                (environment_id, name, dumps(public_config), dumps(secret_refs)),
+                "INSERT INTO environments(environment_id,name,public_config_json,secret_refs_json,descriptions_json) VALUES(?,?,?,?,?) ON CONFLICT(environment_id) DO UPDATE SET name=excluded.name,public_config_json=excluded.public_config_json,secret_refs_json=excluded.secret_refs_json,descriptions_json=excluded.descriptions_json",
+                (environment_id, name, dumps(public_config), dumps(secret_refs), dumps(descriptions or {})),
             )
         return {"environment_id": environment_id}
 

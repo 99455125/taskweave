@@ -39,6 +39,9 @@ class ValueForm:
             if kind != "boolean":
                 control.props('placeholder="未配置默认值，请录入"')
             control.classes("w-full")
+            description = spec.get("description", "").strip()
+            if description:
+                ui.label(description).classes("text-xs text-gray-500 -mt-2")
             self.controls[name] = (kind, control)
             self.defaults[name] = control.value
 
@@ -104,8 +107,13 @@ class SchemaEditor:
                     if "default" in spec and spec.get("type") != "string"
                     else spec.get("default", ""),
                 ).classes("grow")
+                description = ui.input(
+                    "说明（可选）",
+                    value=spec.get("description", ""),
+                    placeholder="说明变量用途或录入要求",
+                ).classes("grow")
                 required_control = ui.checkbox("必填", value=required)
-                record = (name_control, kind, default, required_control, spec)
+                record = (name_control, kind, default, description, required_control, spec)
                 self.rows.append(record)
 
                 def remove():
@@ -116,7 +124,7 @@ class SchemaEditor:
 
     def schema(self):
         properties, required = {}, []
-        for name, kind, default, req, original in self.rows:
+        for name, kind, default, description, req, original in self.rows:
             key = name.value.strip()
             if not key and not default.value and not req.value:
                 continue
@@ -126,6 +134,9 @@ class SchemaEditor:
                 raise TaskError("FORM_INVALID", "参数名称重复：" + key)
             spec = {**original, "type": kind.value}
             spec.pop("default", None)
+            spec.pop("description", None)
+            if description.value and description.value.strip():
+                spec["description"] = description.value.strip()
             if default.value != "":
                 try:
                     spec["default"] = (

@@ -63,7 +63,25 @@ class VariablesTests(unittest.TestCase):
     def test_empty_parameter_rows_do_not_block_saving(self):
         editor=object.__new__(SchemaEditor)
         editor.original={'type':'object','properties':{}}
-        def row(name,default=''):
-            return (SimpleNamespace(value=name),SimpleNamespace(value='string'),SimpleNamespace(value=default),SimpleNamespace(value=False),{'type':'string'})
+        def row(name,default='',description=''):
+            return (SimpleNamespace(value=name),SimpleNamespace(value='string'),SimpleNamespace(value=default),SimpleNamespace(value=description),SimpleNamespace(value=False),{'type':'string'})
         editor.rows=[row(''),row('loginurl','https://example.test')]
         self.assertEqual(list(editor.schema()['properties']), ['loginurl'])
+
+    def test_parameter_description_is_persisted_in_schema(self):
+        editor=object.__new__(SchemaEditor)
+        editor.original={'type':'object','properties':{}}
+        editor.rows=[(
+            SimpleNamespace(value='org_code'), SimpleNamespace(value='string'),
+            SimpleNamespace(value=''), SimpleNamespace(value='登录机构代码'),
+            SimpleNamespace(value=True), {'type':'string'},
+        )]
+        schema=editor.schema()
+        self.assertEqual(schema['properties']['org_code']['description'], '登录机构代码')
+        self.assertEqual(schema['required'], ['org_code'])
+
+    def test_environment_variable_descriptions_are_persisted(self):
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            saved=app.repo.save_environment('uat', {'org_code':'000027'}, descriptions={'org_code':'登录机构代码'})
+            row=next(item for item in app.repo.list_environments() if item['environment_id']==saved['environment_id'])
+            self.assertEqual(json.loads(row['descriptions_json']), {'org_code':'登录机构代码'})

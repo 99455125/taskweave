@@ -103,6 +103,7 @@ DROP TABLE runtime_lease;
 ALTER TABLE runtime_lease_new RENAME TO runtime_lease;
 """
 CONTROL_V7 = "ALTER TABLE steps ADD COLUMN ai_authoring_notes TEXT NOT NULL DEFAULT '';"
+CONTROL_V8 = "ALTER TABLE environments ADD COLUMN descriptions_json TEXT NOT NULL DEFAULT '{}';"
 
 
 @contextmanager
@@ -156,8 +157,8 @@ def initialize(path, name):
         migrate(
             db,
             path,
-            7 if name == "control" else 2,
-            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7},
+            8 if name == "control" else 2,
+            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8},
         )
 
 
