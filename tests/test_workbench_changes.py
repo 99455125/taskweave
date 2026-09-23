@@ -94,13 +94,14 @@ class WorkbenchChanges(unittest.TestCase):
         page = {"kind": "text", "source": "playwright.page", "content": "page"}
         schema = {"kind": "text", "source": "tidb.schema", "content": "orders"}
         second_schema = {"kind": "text", "source": "tidb.schema", "content": "items"}
-        asyncio.run(workbench.append_contexts("playwright.page", [page], "draft"))
-        asyncio.run(workbench.append_contexts("tidb.schema", [schema, second_schema], "trial_feedback"))
+        asyncio.run(workbench.append_contexts("playwright.page", [page], "draft", "登录页"))
+        asyncio.run(workbench.append_contexts("tidb.schema", [schema, second_schema], "trial_feedback", "账单表"))
         self.assertEqual(workbench.contexts, [page, schema, second_schema])
         self.assertEqual(
             [entry["provider_id"] for entry in workbench.context_entries],
             ["playwright.page", "tidb.schema", "tidb.schema"],
         )
+        self.assertEqual([entry['name'] for entry in workbench.context_entries], ['登录页', '账单表 1', '账单表 2'])
         asyncio.run(workbench.remove_context_entry(workbench.context_entries[1]))
         self.assertEqual(workbench.contexts, [page, second_schema])
 

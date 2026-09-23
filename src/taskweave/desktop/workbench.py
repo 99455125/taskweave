@@ -507,7 +507,9 @@ class Workbench:
         async def render(selected, overrides=None, step_overrides=None):
             nonlocal form, step_form
             environments = await self.controller.call('environment.list')
-            env = next((json.loads(e['public_config_json']) for e in environments if e['environment_id'] == selected), {})
+            selected_environment = next((e for e in environments if e['environment_id'] == selected), None)
+            env = json.loads(selected_environment['public_config_json']) if selected_environment else {}
+            env_descriptions = json.loads(selected_environment.get('descriptions_json') or '{}') if selected_environment else {}
             defaults = {k: v['default'] for k, v in task_schema.get('properties', {}).items() if 'default' in v}
             task_values = {**env, **defaults, **(overrides or {})}
             area.clear()
@@ -518,6 +520,8 @@ class Workbench:
                     for key, value in env.items():
                         suffix = '（被任务变量覆盖）' if key in defaults or key in (overrides or {}) else ''
                         ui.label(f'{key} = {document_text(value)} · 环境{suffix}').classes('tw-code w-full')
+                        if env_descriptions.get(key):
+                            ui.label(env_descriptions[key]).classes('text-xs text-gray-500')
                 with ui.expansion('任务变量 · 本次运行输入', icon='edit', value=bool(task_schema.get('required')) and focus in {None, 'task'}).classes('w-full border rounded'):
                     form = ValueForm(task_schema, task_values)
                     if readonly_other and focus != 'task':
@@ -768,7 +772,7 @@ class Workbench:
                     await self.paint()
 
                 with toolbar:
-                    self.button("+", add, flat=True).tooltip("添加步骤")
+                    self.button("+", add, flat=True).classes('flex-1 min-w-0').tooltip("添加步骤")
                 for delta, label in [(-1, "上移"), (1, "下移")]:
 
                     async def reorder(d=delta):
@@ -785,7 +789,7 @@ class Workbench:
                             await self.paint()
 
                     with toolbar:
-                        self.button("↑" if delta < 0 else "↓", reorder, flat=True).tooltip(label)
+                        self.button("↑" if delta < 0 else "↓", reorder, flat=True).classes('flex-1 min-w-0').tooltip(label)
 
                 async def delete():
                     with ui.dialog() as dialog, ui.card():
@@ -803,7 +807,7 @@ class Workbench:
                         await self.paint()
 
                 with toolbar:
-                    self.button("−", delete, flat=True).tooltip("移除步骤")
+                    self.button("−", delete, flat=True).classes('flex-1 min-w-0').tooltip("移除步骤")
 
                 async def confirm_all():
                     await self.save_editor()
@@ -825,27 +829,31 @@ class Workbench:
                     ui.notify("全部步骤已确认", type="positive")
 
                 with toolbar:
-                    self.button("✓", confirm_all, flat=True).tooltip("一键确认全部步骤")
-            with ui.column().classes("tw-panel tw-content w-full").style('transition: margin-right .2s ease') as editor_panel:
+                    self.button("✓", confirm_all, flat=True).classes('flex-1 min-w-0').tooltip("一键确认全部步骤")
+            with ui.column().classes("tw-panel tw-content w-full relative overflow-hidden").style('position: relative; min-height: calc(100vh - 260px)') as editor_panel:
                 async def toggle_debug_drawer():
                     opening = not debug_panel.visible
                     if opening:
                         saved = await self.save_editor()
                         await self.refresh_trial_inputs(saved, preserve_values=False)
                     debug_panel.set_visibility(opening)
-                    editor_panel.style('margin-right: 720px' if opening else 'margin-right: 0')
+                    editor_body.style('width: calc(100% - min(720px, 48%))' if opening else 'width: 100%')
+                    debug_toggle.style('right: min(720px, 48%)' if opening else 'right: 0')
+                    debug_toggle.props(
+                        ('icon=chevron_right aria-label=收起调试' if opening else 'icon=chevron_left aria-label=展开调试')
+                    )
 
-                with ui.tabs().classes("w-full") as tabs:
+                editor_body = ui.column().classes('h-full overflow-y-auto').style('width: 100%; transition: width .2s ease')
+                with editor_body, ui.tabs().classes("w-full") as tabs:
                     self.editor_tabs = tabs
                     content = ui.tab("步骤详情")
                     action = ui.tab("动作表单")
                     bindings = ui.tab("输入依赖")
                     settings = ui.tab("时间设置")
                     trial = content  # Debug is a drawer; callbacks keep the editor visible.
-                with ui.tab_panels(tabs, value=content).classes("w-full"):
+                with editor_body, ui.tab_panels(tabs, value=content).classes("w-full"):
                     with ui.tab_panel(content):
                         with ui.row().classes("w-full justify-end items-center gap-2"):
-                            self.button('调试', toggle_debug_drawer)
                             self.save_state = ui.label("已保存").classes("tw-save-state text-sm text-gray-500")
                         name = ui.input("步骤名称", value=step["name"]).classes(
                             "w-full"
@@ -1092,20 +1100,16 @@ class Workbench:
                             step=1,
                         ).classes("w-full")
                         self.button("保存步骤设置", self.save_editor, primary=True)
-                with ui.column().classes('fixed right-0 top-0 bottom-0 bg-white border-l shadow-lg p-4 gap-3').style('width: min(720px, 92vw); z-index: 3000; overflow-y: auto') as debug_panel:
+                debug_toggle = ui.button(icon='chevron_left', on_click=toggle_debug_drawer).props(
+                    'flat round aria-label=展开调试'
+                ).classes('absolute top-1/2 z-20 bg-white border').style(
+                    'position: absolute; top: 50%; right: 0; z-index: 20; transform: translate(50%, -50%); transition: right .2s ease'
+                ).tooltip('调试')
+                with ui.column().classes('absolute right-0 top-0 bottom-0 bg-white border-l p-4 gap-3').style('position: absolute; right: 0; top: 0; bottom: 0; width: min(720px, 48%); overflow-y: auto') as debug_panel:
                     with ui.row().classes('w-full items-center justify-between gap-2'):
                         with ui.column().classes('gap-0'):
                             ui.label('调试 · ' + step['name']).classes('text-lg font-medium')
                             ui.label('浏览器与插件资源由本任务的调试实例保留').classes('text-xs text-gray-500')
-                        async def close_debug_drawer():
-                            debug_panel.set_visibility(False)
-                            editor_panel.style('margin-right: 0')
-                        ui.button(icon='close', on_click=close_debug_drawer).props('flat round aria-label=收起调试').tooltip('收起调试')
-                    with ui.row().classes('w-full items-center gap-2 flex-wrap'):
-                        ui.label('步骤插件上下文').classes('font-medium')
-                        self.button('采集插件上下文', lambda: self.collect_context(source_page='trial_feedback'))
-                    self.trial_context_panel = ui.column().classes('w-full')
-                    self.render_collected_contexts(self.trial_context_panel)
                     self.trial_ai_supplement = ui.textarea(
                         'AI 补充说明（可选）',
                         value=getattr(self, 'debug_supplements', {}).get(self.step_id, ''),
@@ -1121,20 +1125,24 @@ class Workbench:
                         self.trial_form = await self.trial_variables(step, environment)
                     self.trial_start_status = ui.label().classes('text-sm text-gray-500')
                     self.trial_actions = {}
-                    with ui.row().classes('w-full items-center gap-2 flex-wrap'):
+                    with ui.row().classes('w-full items-stretch gap-2 flex-nowrap'):
                         self.trial_actions['single'] = self.button('调试当前步骤', lambda: self.start_trial(tabs, trial, continue_session=True), flat=True)
                         self.trial_actions['flow'] = self.button('从选定步骤调试', self.start_flow_trial, flat=True)
                         self.trial_actions['end'] = self.button('结束调试', self.end_trial, flat=True)
-                        self.button('AI 修复', lambda control=self.trial_ai_supplement: self.choose_trial_ai(control)).classes('w-44')
-                        self.button('清空 AI 修复上下文', self.new_debug_round).classes('w-44')
                     for control in self.trial_actions.values():
-                        control.classes('w-44')
+                        control.classes('flex-1 min-w-0')
+                        control.props('no-wrap')
                         self.style_trial_action(control)
-                        self.trial_area = ui.column().classes("w-full")
-                        ui.timer(1, self.refresh_trial)
+                    with ui.row().classes('w-full items-center gap-2 flex-nowrap'):
+                        self.button('AI 修复', lambda control=self.trial_ai_supplement: self.choose_trial_ai(control)).classes('flex-1 min-w-0')
+                        self.button('清空 AI 修复上下文', self.new_debug_round).classes('flex-1 min-w-0')
+                    self.trial_area = ui.column().classes("w-full")
+                    ui.timer(1, self.refresh_trial)
                 debug_panel.set_visibility(step['validation_state'] != 'VALIDATED')
                 if debug_panel.visible:
-                    editor_panel.style('margin-right: 720px')
+                    editor_body.style('width: calc(100% - min(720px, 48%))')
+                    debug_toggle.style('right: min(720px, 48%); transform: translate(50%, -50%); transition: right .2s ease')
+                    debug_toggle.props('icon=chevron_right aria-label=收起调试')
                 self.edit_controls = {
                     "name": name,
                     "goal": goal,
@@ -1871,15 +1879,20 @@ class Workbench:
                         )
 
     def render_all_context_panels(self):
-        for panel in (getattr(self, 'context_panel', None), getattr(self, 'trial_context_panel', None)):
+        for panel in (getattr(self, 'context_panel', None),):
             if panel is not None and not panel.is_deleted:
                 self.render_collected_contexts(panel)
 
-    async def append_contexts(self, provider, collected, source_page='draft'):
+    async def append_contexts(self, provider, collected, source_page='draft', context_name=''):
         for index, item in enumerate(collected, 1):
             suggested = item.get('source') if isinstance(item, dict) else None
+            name = (
+                context_name if context_name and len(collected) == 1
+                else f'{context_name} {index}' if context_name
+                else suggested or f'{provider} 上下文 {index}'
+            )
             saved = await self.controller.call('context.save', step_id=self.step_id, provider_id=provider,
-                name=suggested or f'{provider} 上下文 {index}', source_page=source_page, item=item)
+                name=name, source_page=source_page, item=item)
             self.context_entries.append(saved)
         self.contexts = [entry["item"] for entry in self.context_entries]
         await self.mark_step_pending()
@@ -1905,6 +1918,10 @@ class Workbench:
             provider = ui.select(ids, label="插件上下文", value=ids[0]).classes(
                 "w-full"
             )
+            context_name = ui.input(
+                "上下文名称（可选）",
+                placeholder="例如：登录页、合约列表页",
+            ).classes("w-full")
             url = ui.input("页面地址（独立观察时填写）").classes("w-full")
             role = ui.input("角色", value="operator")
             run_options = {"": "独立观察（不使用运行会话）"}
@@ -1946,7 +1963,10 @@ class Workbench:
                     environment_id=self.environment_id or None,
                     run_id=None if provider.value in request_forms else run.value or None,
                 )
-                await self.append_contexts(provider.value, collected, source_page)
+                await self.append_contexts(
+                    provider.value, collected, source_page,
+                    (context_name.value or '').strip(),
+                )
                 dialog.close()
                 self.render_all_context_panels()
                 ui.notify(
@@ -2512,6 +2532,7 @@ class Workbench:
         environments = sorted(environments, key=lambda item: (item['environment_id'] != default, item['name']))
         async def dialog(existing=None):
             config = json.loads(existing["public_config_json"]) if existing else {}
+            descriptions = json.loads(existing.get('descriptions_json') or '{}') if existing else {}
             if existing:
                 config.update(json.loads(existing['secret_refs_json']))
             with ui.dialog() as form, ui.card().classes("w-full max-w-3xl"):
@@ -2520,24 +2541,28 @@ class Workbench:
                 ui.label('变量保存在 TaskWeave 本地配置，不修改系统环境变量。步骤通过 inputs["变量名"] 引用；统一优先级为：步骤变量 > 任务变量 > 环境变量。')
                 area = ui.column().classes("w-full")
                 rows = []
-                def add(key="", value=""):
-                    with area, ui.row().classes("w-full") as row:
-                        key_input = ui.input("Key", value=key)
-                        value_input = ui.input("Value", value=value)
-                        record = (key_input, value_input)
+                def add(key="", value="", description=""):
+                    with area, ui.row().classes("w-full items-end flex-nowrap") as row:
+                        key_input = ui.input("Key", value=key).classes('w-40')
+                        value_input = ui.input("Value", value=value).classes('grow')
+                        description_input = ui.input(
+                            "说明（可选）", value=description,
+                            placeholder="说明用途或录入要求",
+                        ).classes('grow')
+                        record = (key_input, value_input, description_input)
                         rows.append(record)
                         def remove():
                             rows.remove(record)
                             row.delete()
                         ui.button("移除",on_click=remove).props("flat")
                 for key,value in config.items():
-                    add(key, value if isinstance(value,str) else json.dumps(value,ensure_ascii=False))
+                    add(key, value if isinstance(value,str) else json.dumps(value,ensure_ascii=False), descriptions.get(key, ''))
                 ui.button("添加变量",on_click=lambda: add()).props("outline")
                 async def save():
                     if not name.value.strip():
                         raise TaskError("FORM_INVALID", "请填写环境名称")
-                    values = {}
-                    for key,value in rows:
+                    values, variable_descriptions = {}, {}
+                    for key,value,description in rows:
                         field = key.value.strip()
                         if not field or field in values:
                             raise TaskError("FORM_INVALID", "Key 不能为空或重复")
@@ -2545,7 +2570,9 @@ class Workbench:
                             values[field] = json.loads(value.value)
                         except ValueError:
                             values[field] = value.value
-                    await self.controller.call("environment.save",name=name.value.strip(),public_config=values,secret_refs={},environment_id=existing["environment_id"] if existing else None)
+                        if description.value and description.value.strip():
+                            variable_descriptions[field] = description.value.strip()
+                    await self.controller.call("environment.save",name=name.value.strip(),public_config=values,secret_refs={},descriptions=variable_descriptions,environment_id=existing["environment_id"] if existing else None)
                     form.close()
                     await self.paint()
                 with ui.row().classes("w-full items-center gap-2 flex-wrap"):

@@ -20,10 +20,10 @@ class InputUi(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix='taskweave-input-ui-') as home:
             with Application(home) as app:
                 app.repo.save_environment('dev', {'url':'dev'})
-                app.repo.save_environment('uat', {'url':'uat'})
-                task=app.repo.create_task('输入验收',{'type':'object','properties':{'org':{'type':'string'}},'required':['org']})['task_id']
+                app.repo.save_environment('uat', {'url':'uat'}, descriptions={'url':'业务系统地址'})
+                task=app.repo.create_task('输入验收',{'type':'object','properties':{'org':{'type':'string','description':'机构代码'}},'required':['org']})['task_id']
                 first=app.repo.save_step(task,{'name':'前一步','step_content':'async def run(ctx, inputs):\n    return ctx.result(data={"image_base64":"sample"})'})
-                second=app.repo.save_step(task,{'name':'当前步骤','input_schema':{'type':'object','properties':{'number':{'type':'integer'}},'required':['number']},'step_content':'async def run(ctx, inputs):\n    return ctx.result(data={"number": inputs["number"], "report": {"passed": True, "message": "核对通过", "tables": [{"title": "核对明细", "columns": [{"key": "number", "label": "录入值"}], "rows": [{"number": inputs["number"]}]}]}}, views=[{"title": "核对报告", "renderer": "core.report", "pointer": "/report"}, {"title": "输入摘要", "renderer": "core.json", "pointer": "/number"}])'})
+                second=app.repo.save_step(task,{'name':'当前步骤','input_schema':{'type':'object','properties':{'number':{'type':'integer','description':'本次核对数量'}},'required':['number']},'step_content':'async def run(ctx, inputs):\n    return ctx.result(data={"number": inputs["number"], "report": {"passed": True, "message": "核对通过", "tables": [{"title": "核对明细", "columns": [{"key": "number", "label": "录入值"}], "rows": [{"number": inputs["number"]}]}]}}, views=[{"title": "核对报告", "renderer": "core.report", "pointer": "/report"}, {"title": "输入摘要", "renderer": "core.json", "pointer": "/number"}])'})
                 for step in [first,second]:
                     app.confirm_step_manual(step['step_id'],step['content_hash'])
                 run=app.trial_step(first['step_id'],{'org':'seed'},uid())
@@ -86,8 +86,12 @@ class InputUi(unittest.TestCase):
                         page.get_by_role('tab',name='步骤详情',exact=True).click()
                         env=page.locator('.q-select').filter(has=page.get_by_text('运行 / 调试环境',exact=True))
                         if not env.is_visible():
-                            page.get_by_role('button', name='调试', exact=True).click()
+                            page.get_by_role('button', name='展开调试', exact=True).click()
                         env.click();page.get_by_role('option',name='uat',exact=True).click()
+                        page.get_by_text('环境变量 · 只读',exact=True).click()
+                        expect(page.get_by_text('业务系统地址',exact=True)).to_be_visible()
+                        expect(page.get_by_text('机构代码',exact=True)).to_be_visible()
+                        expect(page.get_by_text('本次核对数量',exact=True)).to_be_visible()
                         expect(page.get_by_label('org · 必录',exact=True)).to_have_attribute('placeholder','未配置默认值，请录入')
                         expect(page.get_by_label('org · 必录',exact=True)).to_have_value('')
                         expect(page.get_by_label('number · 必录',exact=True)).to_have_value('23')
