@@ -44,7 +44,7 @@ REQ-003 用模拟模型和最小动作适配实现编写/执行/保存，不等�
 
 ## 5. 旧实现迁移结论
 
-旧 `Step.step_content` 是目标描述，`step_sql` 是生成并验证的 SQL；旧 Step 无版本。新模型将目标放 `goal`，可执行 Python 放 `step_content`，不得自动把旧自然语言当 Python 执行。旧总库 `task.db_server`、任务库 `task_<id>.db_server` 保留不动；本轮只给新 schema，不自动迁移旧业务或数据。旧模型只有当前成功状态，新的逐次 run/attempt 记录是新增能力。
+旧 `Step.step_content` 是目标描述，`step_sql` 是生成并验证的 SQL；旧 Step 无版本。新模型将目标放 `step_description`，可执行 Python 放 `step_content`，不得自动把旧自然语言当 Python 执行。旧总库 `task.db_server`、任务库 `task_<id>.db_server` 保留不动；本轮只给新 schema，不自动迁移旧业务或数据。旧模型只有当前成功状态，新的逐次 run/attempt 记录是新增能力。
 
 ## 6. 复用原则
 

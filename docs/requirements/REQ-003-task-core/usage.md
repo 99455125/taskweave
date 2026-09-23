@@ -70,7 +70,7 @@ uv run python examples/req003/api_walkthrough.py
 | result.read / result.delete | result_id |
 | capabilities | 无；查看当前可用动作、工具与结果处理器 |
 | environment.save | name、public_config、可选 secret_refs/environment_id |
-| step.generate | step_id、expected_hash、可选 goal/feedback/contexts |
+| step.generate | step_id、expected_hash、可选 step_description/feedback/contexts |
 | context.read | step_id、provider_id、可选 request/environment_id；返回供用户预览的上下文 |
 | step.diagnose | attempt_id；获取插件诊断建议 |
 | draft.export / draft.import | step_id / task_id、package |
@@ -87,7 +87,7 @@ step.save 的 document：
 ```json
 {
   "name": "使用订单号",
-  "goal": "接收第一步订单号",
+  "step_description": "接收第一步订单号",
   "step_content": "async def run(ctx, inputs):\n    return ctx.result(data={\"order_id\": inputs[\"order_id\"]})\n",
   "bindings": {
     "order_id": {"ref": {"source": "step", "step_id": "第一步的实际UUID", "pointer": "/order_id"}}

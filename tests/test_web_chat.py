@@ -13,9 +13,12 @@ class WebChatTests(unittest.TestCase):
         source, explanation = parse_chat_reply(reply)
         self.assertIn('\n    role = "operator"', source)
         self.assertEqual(explanation, 'ok')
-        self.assertEqual(parse_goal_reply('进入合约管理并创建合同。'), '进入合约管理并创建合同。')
+        self.assertEqual(
+            parse_goal_reply('{"step_description":"进入合约管理并创建合同。","step_notes":"不要重复打开页面"}'),
+            ('进入合约管理并创建合同。', '不要重复打开页面'),
+        )
         with self.assertRaises(TaskError):
-            parse_goal_reply('{"step_content":"not plain text"}')
+            parse_goal_reply('进入合约管理并创建合同。')
     def test_paste_json_or_fenced_code(self):
         source_with_document_like_data = 'async def run(ctx, inputs):\n    return ctx.result(data={"step_content": "business value"})\n'
         for reply in [SOURCE, source_with_document_like_data, '```python\n' + SOURCE + '```', json.dumps({'step_content': SOURCE, 'explanation': '说明'}), '```json\n'+json.dumps({'step_content': SOURCE})+'\n```']:
@@ -39,7 +42,7 @@ class WebChatTests(unittest.TestCase):
             result = app.dispatch('step.generate', {'step_id':step['step_id'], 'expected_hash':step['content_hash'], 'export_only':True, 'contexts':[{'kind':'text', 'content':'中文'*6000}]})
             self.assertIn('中文'*6000, result['prompt'])
             self.assertIn(r'\u0020', result['prompt'])
-            self.assertIn(r'\"operator\"', result['prompt'])
+            self.assertIn(r'\"ok\"', result['prompt'])
 
     def test_oversized_history_keeps_latest_two_rounds(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
@@ -62,10 +65,10 @@ class WebChatTests(unittest.TestCase):
             history = []
             for index in range(3):
                 historical = {
-                    'goal': 'repeated goal', 'step_content': SOURCE,
+                    'step_description': 'repeated goal', 'step_content': SOURCE,
                     'input_schema': {}, 'output_schema': {}, 'available_variables': [],
-                    'user_supplement': 'round-' + str(index),
-                    'contexts': [{'kind':'text', 'content':'x' * 70000}],
+                    'repair_notes': 'round-' + str(index),
+                    'contexts': [{'kind':'text', 'content':'x' * 300000}],
                 }
                 history.extend([
                     {'role':'user', 'content':json.dumps(historical)},
@@ -83,7 +86,7 @@ class WebChatTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
             task = app.repo.create_task('deduplicate')['task_id']
             step = app.repo.save_step(task, {'step_content': SOURCE})
-            prior = {'goal':'old goal', 'step_content':'old source', 'input_schema':{}, 'output_schema':{}, 'available_variables':[], 'user_supplement':'keep me'}
+            prior = {'step_description':'old goal', 'step_content':'old source', 'input_schema':{}, 'output_schema':{}, 'available_variables':[], 'repair_notes':'keep me'}
             app.authoring.conversations[step['step_id']] = [{'role':'user', 'content':json.dumps(prior)}, {'role':'assistant', 'content':'old reply'}]
             common = {'step_id':step['step_id'], 'expected_hash':step['content_hash'], 'export_only':True, 'use_history':True, 'history_rounds':1}
             compact = app.dispatch('step.generate', {**common, 'deduplicate_history':True})
@@ -92,7 +95,7 @@ class WebChatTests(unittest.TestCase):
             full_history = json.loads(full['messages'][2]['content'])
             self.assertNotIn('step_content', compact_history)
             self.assertEqual(full_history['step_content'], 'old source')
-            self.assertEqual(compact_history['user_supplement'], 'keep me')
+            self.assertEqual(compact_history['repair_notes'], 'keep me')
 
     def test_full_current_context_above_old_limit_is_not_compacted(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
@@ -127,7 +130,7 @@ class WebChatTests(unittest.TestCase):
             self.assertNotIn('上一轮失败说明', result['prompt'])
             plugin = json.loads(result['messages'][1]['content'])['plugins'][0]
             self.assertEqual(plugin['tool_ids'], [])
-            repaired = app.dispatch('step.generate', {**args, 'use_history':True, 'feedback':{'error_code':'BROWSER_TIMEOUT'}, 'supplement':'沿用页面'})
+            repaired = app.dispatch('step.generate', {**args, 'use_history':True, 'feedback':{'error_code':'BROWSER_TIMEOUT'}, 'repair_notes':'沿用页面'})
             self.assertIn('上一轮失败说明', repaired['prompt'])
             self.assertIn('沿用页面', repaired['prompt'])
             self.assertIn('BROWSER_TIMEOUT', repaired['prompt'])

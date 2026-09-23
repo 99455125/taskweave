@@ -269,10 +269,15 @@ def resolve(bindings, task_inputs, environment, read_output):
     return values
 
 
+def merge_input_layers(environment, task_values, step_values):
+    """Resolve duplicate input names once, with step values taking precedence."""
+    return {**environment, **task_values, **step_values}
+
+
 def automatic_inputs(schema, environment, task_values, overrides=None):
     """Local variables are accessible through inputs; explicit step values win."""
     defaults = {key: spec['default'] for key, spec in schema.get('properties', {}).items() if 'default' in spec}
-    values = {**environment, **task_values, **defaults, **(overrides or {})}
+    values = merge_input_layers(environment, task_values, {**defaults, **(overrides or {})})
     if schema.get('additionalProperties') is False:
         values = {key: value for key, value in values.items() if key in schema.get('properties', {})}
     return values
@@ -281,8 +286,8 @@ def automatic_inputs(schema, environment, task_values, overrides=None):
 def normalize_step(document):
     defaults = {
         "name": "Step",
-        "goal": "",
-        "ai_authoring_notes": "",
+        "step_description": "",
+        "step_notes": "",
         "step_content": "",
         "input_schema": {"type": "object"},
         "output_schema": {},

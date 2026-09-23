@@ -358,6 +358,16 @@ class PlaywrightPlugin:
             "core_requires": ">=0.1,<1",
             "dependencies": {},
             "resource_descriptions": {"playwright.session": "浏览器、页面及浏览器上下文"},
+            "context_requests": {
+                "playwright.page": {
+                    "type": "object",
+                    "properties": {
+                        "url": {"type": "string", "description": "可选；首次采集时打开的 HTTP/HTTPS 地址，后续留空以采集当前页面"},
+                        "role": {"type": "string", "default": "operator", "description": "需要持续复用的浏览器角色"},
+                    },
+                    "additionalProperties": False,
+                }
+            },
             "config_variables": [
                 {"key": "playwright_headless", "type": "boolean", "default": False, "required": False, "description": "是否无头执行；任务参数优先，环境变量备选。"},
                 {"key": "playwright_timeout_ms", "type": "number", "default": 10000, "required": False, "description": "页面动作超时，毫秒。"},
@@ -464,14 +474,14 @@ class PlaywrightPlugin:
                 "page_inspect",
                 "Observe title and interactive element descriptions",
                 schema(),
-                {"type": "object"},
+                {"type":"object","properties":{"title":STRING,"url":STRING,"captured_at":STRING,"elements":{"type":"array"},"frames":{"type":"array"},"truncated":{"type":"boolean"},"role":STRING,"task_id":STRING,"run_id":STRING},"required":["title","url","captured_at","elements","frames","truncated"]},
                 "READ",
             ),
             (
                 "page_handoff",
                 "Bring browser forward for manual interaction; pause task separately",
                 schema(),
-                {"type": "object"},
+                {"type":"object","properties":{"role":STRING,"ready":{"const":True}},"required":["role","ready"]},
                 "READ",
             ),
         ]
@@ -492,7 +502,7 @@ class PlaywrightPlugin:
                 "page_inspect",
                 "Inspect selected URL without clicking",
                 schema({"url": STRING}, ["url"]),
-                {"type": "object"},
+                {"type":"object","properties":{"title":STRING,"url":STRING,"captured_at":STRING,"elements":{"type":"array"},"frames":{"type":"array"},"truncated":{"type":"boolean"}},"required":["title","url","captured_at","elements","frames","truncated"]},
             )
         }
 
@@ -510,39 +520,35 @@ class PlaywrightPlugin:
 
     def authoring(self, selected_ids):
         return AuthoringContribution(
-            "Use ctx.call with explicit role; roles have separate browser contexts. Continue the current retained page unless the user explicitly requests navigation; never insert page_open just to read. "
-            "Prefer visible, enabled controls from the latest timestamped snapshot; never guess familiar website selectors or reuse hidden controls. Use the supplied selector object and frame scope; avoid ambiguous locators. "
-            "Unnamed images and canvases include an observed DOM-path selector. Use that exact unique selector for page_element_image; do not infer parent classes, image src or document-wide nth-of-type from snapshot ordering. DOM paths may change after rendering; collect a fresh snapshot when they stop matching. "
-            "page_text/page_assert_text read rendered page text, NOT input values; use page_input_value/page_assert_value for input/textarea/select values. "
-            "A successful click is not business success. Wait for and assert an actual URL, title, result text or state via page_assert_url/page_assert_title/page_assert_text. Never assert a constant or a flag you just assigned (submitted=True). "
-            "Repair the exact ActionFailed locator using failure evidence and the fresh current snapshot. Do not repeat the same failed selector without new evidence. "
-            "This browser plugin does not recognize CAPTCHA. With a selected OCR plugin, use page_element_image on the actual CAPTCHA image and pass image_base64 to its recognition action; then fill returned text and assert login success. If no selected capability can recognize it, explicitly explain that the user must fill CAPTCHA manually via page_handoff and then continue; never invent OCR or claim login success before checking the authenticated page. "
-            "Use specific locators and page_wait; never use sleep. Click/fill/download may affect business. "
-            "Check existing business status before a submit; assert resulting ID/status afterwards. "
-            "The runtime action playwright.page_inspect reads the retained current page without navigation. The authoring tool with the same ID observes an explicitly supplied URL in an isolated browser, not the current runtime page. "
-            'Save PNG with output = ctx.output("playwright.image", "capture", screenshot), passing the ENTIRE page_screenshot response object, not screenshot["staged_file"]. Return ctx.result(data={"capture": {"output": "capture"}}, outputs=[output], views=[{"title": "Screenshot", "renderer": "playwright.screenshot", "pointer": "/capture"}]). ctx.output only creates a request; dropping its return value or returning outputs=[] does NOT save an image. A staged_file UUID alone cannot display an image. '
-            "Pause after page_handoff with NEXT/UNTIL for manual interaction; continuing must re-check status.",
+            """通过 ctx.call 使用 Playwright 动作；同一业务会话使用一致的 role，不同 role 对应独立浏览器上下文。
+默认继续已保留页面。只有步骤明确要求导航时调用 page_open，不为读取页面而重新打开登录页或重启流程。
+定位依据对应页面或阶段的已采集上下文。优先使用明确可见、可用且匹配唯一的控件，以及上下文给出的 selector 和 frame；不要根据常见网站习惯猜测选择器。不同页面的控件不能混用。
+未命名图片或 canvas 可以带有观测到的 DOM-path selector；page_element_image 使用该 selector，不从列表序号推断父类名、src 或全局 nth-of-type。定位失效时需要新证据，不能无依据重复失败定位。
+page_wait 支持 attached、detached、visible、hidden；不传不存在的等待状态，不使用 sleep。按操作需要等待控件或目标状态，不能用固定延时掩盖定位错误。
+page_text/page_assert_text 面向可见文本；输入框、textarea、select 的实际值使用 page_input_value/page_assert_value。返回对象按动作 schema 读取。
+page_assert_url 使用 URL glob；路径匹配需要完整URL或明确的 glob，例如 **/TreatyManagement/Treaty/add。page_assert_title 使用标题包含匹配。
+成功检查只针对本步骤：填写检查填写值，导航检查目标页面，提交检查真实业务状态。点击成功或非空页面快照不能代替这些检查；不要额外执行下一步业务。
+Playwright 只负责采集图像和页面操作，不识别验证码。采图、OCR、填写、登录步骤按用户划分分别实现；只有当前步骤明确包含完整登录且能力齐备时才组合。
+page_handoff 只把页面交给用户，步骤代码没有 ctx.pause；恢复后检查实际状态。
+运行时 page_inspect 读取当前保留页面；编写工具中同名动作根据 URL 在独立浏览器观察，二者现场不同。
+保存并展示截图时，把 page_screenshot 的完整返回对象交给 ctx.output("playwright.image", "capture", screenshot)，将 output 放入 outputs，将 {"output":"capture"} 放入 data，并用 playwright.screenshot view 指向该字段。临时 staged_file 不能直接展示；未要求截图时不自动增加。""",
             examples=(
                 """async def run(ctx, inputs):
     await ctx.call("playwright.page_open", {"url": inputs["url"], "role": "operator"})
     title = await ctx.call("playwright.page_title", {"role": "operator"})
-    assert title["title"]
+    assert title["title"], "未取得页面标题"
     return ctx.result(data=title)
+""",
+                """async def run(ctx, inputs):
+    screenshot = await ctx.call("playwright.page_screenshot", {"role": "operator"})
+    output = ctx.output("playwright.image", "capture", screenshot)
+    return ctx.result(data={"capture": {"output": "capture"}}, outputs=[output], views=[{"title": "当前页面", "renderer": "playwright.screenshot", "pointer": "/capture"}])
 """,
             ),
             context_provider_ids=("playwright.page",),
             tool_ids=("playwright.page_inspect",),
             channel_overrides={"web_chat": {"instructions":
-                "你在网页对话中辅助编写 TaskWeave 的 Playwright 步骤，不能访问用户本机、运行浏览器或调用本机工具。"
-                "只使用能力目录中的 ctx.call 动作和输入 schema，不生成独立 Playwright 脚本或 MCP 工具调用。"
-                "根据最新带时间的页面快照和失败动作选择可见、启用且唯一的定位器；缺少定位证据时用中文指出需要采集什么，不编造已观察页面。"
-                "无名称图片和 canvas 已提供实际 DOM 路径，截图直接使用该 selector，不从图片排列猜测 nth-of-type、父节点类名或 src；结构改变时重新采集。"
-                "继续前一步保留的页面，除非用户要求打开地址，不添加 page_open；保留 role 和 frame 范围。"
-                "任务和环境变量自动进入 inputs，使用 inputs[变量名]，不要填写账号密钥常量。"
-                "浏览器插件不识别验证码。选择 OCR 插件时，用 page_element_image 获取实际验证码图片，把 image_base64 传给该插件识别，再填写返回文字；无其他识别能力时，明确说明需用户通过 page_handoff 人工输入后继续，不编造 OCR，不把填写完成当作登录成功。"
-                "输入值用 page_input_value/page_assert_value，不用页面文字读取；点击后用 URL、标题或结果文字等待并验证真实结果。"
-                "返回完整 async def run(ctx, inputs) 内容，用 ctx.result 返回 JSON 数据，无 import、全局代码和 diff。"
-                "代码返回 JSON 对象的 step_content 字段，中文 explanation 说明修改原因和尚未验证的假设。"}},
+                "本渠道不能启动浏览器或验证定位。根据提供的页面证据生成调用代码；缺少关键定位依据时明确指出，不声称已观察未提供的页面。"}},
             constraints={"content_format": "python-async-v1"},
         )
 

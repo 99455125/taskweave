@@ -370,6 +370,20 @@ class Repository(Store):
             db.execute("UPDATE steps SET validation_state='VALIDATED',validation_source='MANUAL',verified_hash=content_hash,validated_environment_id=?,validated_at=? WHERE step_id=?", (environment_id, now(), step_id))
         return self.step(step_id)
 
+    def confirm_imported(self, step_id, expected_hash):
+        """Restore an exported confirmation without copying runtime evidence."""
+        with self.transaction() as db:
+            step = db.execute(
+                "SELECT content_hash FROM steps WHERE step_id=?", (step_id,)
+            ).fetchone()
+            if step is None or step[0] != expected_hash:
+                raise TaskError("EDIT_CONFLICT")
+            db.execute(
+                "UPDATE steps SET validation_state='VALIDATED',validation_source='IMPORTED',verified_hash=content_hash,validated_environment_id=NULL,validated_at=? WHERE step_id=?",
+                (now(), step_id),
+            )
+        return self.step(step_id)
+
     def run_details(self, run_id):
         run = self.run(run_id)
         run.pop("inputs_json")

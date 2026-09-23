@@ -1,0 +1,6 @@
+Metadata-Version: 2.4
+Name: taskweave-playwright
+Version: 0.3.0
+Requires-Python: >=3.10
+Requires-Dist: playwright<1.59,>=1.58; sys_platform == "darwin"
+Requires-Dist: playwright<2,>=1.58; sys_platform != "darwin"

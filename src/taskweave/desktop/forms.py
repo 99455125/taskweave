@@ -17,6 +17,9 @@ class ValueForm:
             label = name + (" · 必录" if name in schema.get("required", []) else "")
             value = values.get(name, spec.get("default"))
             kind = spec.get("type", "string")
+            description = spec.get("description", "").strip()
+            if description:
+                ui.label(description).classes("text-xs text-gray-500 mb-0")
             if "enum" in spec:
                 control = ui.select(spec["enum"], label=label, value=value)
             elif kind == "boolean":
@@ -39,9 +42,6 @@ class ValueForm:
             if kind != "boolean":
                 control.props('placeholder="未配置默认值，请录入"')
             control.classes("w-full")
-            description = spec.get("description", "").strip()
-            if description:
-                ui.label(description).classes("text-xs text-gray-500 -mt-2")
             self.controls[name] = (kind, control)
             self.defaults[name] = control.value
 

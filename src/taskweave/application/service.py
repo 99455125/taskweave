@@ -11,6 +11,10 @@ from taskweave.infrastructure.runtime import CoordinatorPool
 from taskweave.infrastructure.worker import load_registry
 from taskweave.infrastructure.storage import default_home
 from taskweave.application.authoring import Authoring
+from taskweave.application.ai_requests import AISettings
+from taskweave.application.planning import PlanningService
+from taskweave.infrastructure.context_sessions import ContextSessions
+from taskweave.infrastructure.plan_repository import PlanRepository
 
 
 class Application:
@@ -35,13 +39,18 @@ class Application:
                 max_concurrency = 8
             self.coordinator = CoordinatorPool(self.repo, self.registry, registry_factory, max_concurrency=max_concurrency)
             self.repo.finish_pending_deletions()
-            self.authoring = Authoring(self.repo, self.registry, model)
+            self.ai_settings = AISettings(self.home)
+            self.authoring = Authoring(self.repo, self.registry, model, lambda: self.ai_settings.get()["request_limit_bytes"])
+            self.plan_repo = PlanRepository(self.repo)
+            self.context_sessions = ContextSessions(self.registry, self.repo, self.plan_repo)
+            self.planning = PlanningService(self, self.plan_repo, self.context_sessions, self.ai_settings)
         except Exception:
             self.instance.close()
             raise
 
     def close(self):
         try:
+            self.context_sessions.close()
             self.coordinator.close()
         finally:
             self.instance.close()
@@ -154,6 +163,9 @@ class Application:
         return import_task(self, package)
 
     def delete_environment(self, environment_id):
+        for instance in self.context_sessions.list():
+            if self.plan_repo.get(instance["owner_id"]).get("environment_id") == environment_id:
+                raise TaskError("ENVIRONMENT_LOCKED", "该环境仍被计划采集实例使用，请先结束实例")
         runs = self.repo.query('SELECT run_id FROM task_runs WHERE environment_id=?', (environment_id,))
         for run in runs:
             current = self.coordinator.describe_run(run['run_id'])
@@ -182,11 +194,12 @@ class Application:
             raise TaskError("PLUGIN_CONFIG_FIXED")
         if self.repo.query("SELECT 1 FROM runtime_lease") or (
             self.coordinator.thread and self.coordinator.thread.is_alive()
-        ):
+        ) or self.context_sessions.list():
             raise TaskError("PLUGIN_CONFIG_LOCKED")
         registry = PluginManager(self.home).configure(plugin_id, enabled)
         self.coordinator._stop_worker()
         self.registry = self.coordinator.registry = self.authoring.registry = registry
+        self.context_sessions.registry = registry
         return registry.catalog()
 
     def collect_context(
@@ -207,6 +220,14 @@ class Application:
 
         return PluginManager(self.home).catalog()
 
+    def instances(self):
+        return self.coordinator.active_instances() + self.context_sessions.list()
+
+    def end_instance(self, instance_type, owner_id):
+        if instance_type == "plan":
+            return self.context_sessions.end(owner_id)
+        return self.coordinator.control(owner_id, "END")
+
     def dispatch(self, operation, params=None):
         methods = {
             "plugin.configure": self.configure_plugin,
@@ -219,6 +240,21 @@ class Application:
             "task.clear_runs": self.clear_task_runs,
             "task.export": self.export_task,
             "task.import": self.import_task,
+            "plan.create": self.planning.create,
+            "plan.list": self.planning.list,
+            "plan.get": self.planning.get,
+            "plan.update": self.planning.update,
+            "plan.delete": self.planning.delete,
+            "plan.context.collect": self.planning.context_collect,
+            "plan.context.list": self.planning.context_list,
+            "plan.context.update": self.planning.context_update,
+            "plan.context.delete": self.planning.context_delete,
+            "plan.generation.parse": self.planning.parse,
+            "plan.generation.import": self.planning.import_generation,
+            "instance.list": self.instances,
+            "instance.end": self.end_instance,
+            "ai.settings.get": self.ai_settings.get,
+            "ai.settings.update": self.ai_settings.update,
             "task.reorder": self.repo.reorder_tasks,
             "environment.list": self.repo.list_environments,
             "task.create": self.repo.create_task,
@@ -248,7 +284,7 @@ class Application:
             "run.restart": self.coordinator.restart,
             "run.delete": self.coordinator.delete_run,
             "run.control": self.coordinator.control,
-            "run.instances": self.coordinator.active_instances,
+            "run.instances": self.instances,
             "run.reconcile": self.coordinator.reconcile,
             "run.get": self.coordinator.describe_run,
             "run.context.sessions": self.coordinator.context_sessions,
@@ -267,6 +303,7 @@ class Application:
             "step.generate": self.authoring.generate,
             "step.generate_goal": self.authoring.generate_goal,
             "step.diagnose": self.authoring.diagnose,
+            "plan.generate": self.planning.generate,
         }
         if operation in async_methods:
             return asyncio.run(async_methods[operation](**(params or {})))
@@ -289,6 +326,11 @@ class Application:
             "task.export",
             "feedback.export",
             "context.list",
+            "plan.list", "plan.get", "plan.context.list", "instance.list",
+            "ai.settings.get", "plan.generation.parse", "plan.generation.import",
+            "plan.context.collect", "plan.context.update", "plan.context.delete",
+            "plan.create", "plan.update", "plan.delete", "instance.end",
+            "ai.settings.update",
         }:
             return methods[operation](**(params or {}))
         with self.coordinator.lock:

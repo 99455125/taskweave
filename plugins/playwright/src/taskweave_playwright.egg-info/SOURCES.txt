@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+src/taskweave_playwright/__init__.py
+src/taskweave_playwright.egg-info/PKG-INFO
+src/taskweave_playwright.egg-info/SOURCES.txt
+src/taskweave_playwright.egg-info/dependency_links.txt
+src/taskweave_playwright.egg-info/entry_points.txt
+src/taskweave_playwright.egg-info/requires.txt
+src/taskweave_playwright.egg-info/top_level.txt

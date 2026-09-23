@@ -1,0 +1,2 @@
+[taskweave.plugins]
+ocr = taskweave_ocr:OcrPlugin

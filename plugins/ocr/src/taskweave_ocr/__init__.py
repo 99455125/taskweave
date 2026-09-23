@@ -85,8 +85,8 @@ class OcrPlugin:
     def result_handlers(self):
         return {}
     def authoring(self, selected_ids):
-        common = 'ocr.recognize accepts image_base64 (raw PNG/JPEG/WebP/BMP bytes encoded as Base64), optional expected_length; returns text, engine, needs_verification. It is offline CPU OCR for simple image text, not sliders/click puzzles or arithmetic solving. Recognition is a candidate, never proof of successful login. Obtain the current image from a selected image-producing plugin, fill returned text and verify the actual authenticated page after submit. Do not invent image paths, bypass step APIs, retry indefinitely or silently refresh CAPTCHA. If image evidence or recognition is unavailable, explain and use a selected manual handoff capability.'
-        return AuthoringContribution(common, channel_overrides={'web_chat':{'instructions':common+' You cannot run local OCR in this web chat. Generate ctx.call code using the available image action and ocr.recognize, not a guessed CAPTCHA string.'}}, constraints={'content_format':'python-async-v1'})
+        common = 'ocr.recognize 接收 image_base64，以及可选 expected_length；图片必须是实际 PNG/JPEG/WebP/BMP 字节的 Base64，不是路径或猜测文字。返回 text、engine、needs_verification，text 是识别候选，不代表业务验证通过。当前步骤只负责识别时，读取已有图像输入，调用识别并返回结果；不要擅自增加采图、填写、刷新验证码或登录。只有当前步骤明确要求并授权相关能力时才组合其他操作。本插件不支持滑块、点选挑战或算术求解；不得伪造结果、无限重试或静默刷新。能力缺失时明确指出。'
+        return AuthoringContribution(common, channel_overrides={'web_chat':{'instructions':'本渠道不能调用本地 OCR。生成 ocr.recognize 调用代码，不把你对图片的猜测写成固定识别结果。'}}, constraints={'content_format':'python-async-v1'})
     async def lint(self, step_document):
         return []
     async def collect_context(self, provider_id, ctx, request):

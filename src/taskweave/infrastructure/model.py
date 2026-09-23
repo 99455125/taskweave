@@ -10,8 +10,10 @@ from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
 from taskweave.core.ports import ModelReply, ToolCall
-from taskweave.core.validation import TaskError
+from taskweave.core.validation import TaskError, validate
 from taskweave.infrastructure.privacy import redact
+from taskweave.application.prompts import FORMAT_CORRECTION
+from taskweave.application.ai_requests import ensure_limit
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +44,11 @@ class HttpModel:
         self.url, self.model, self.api_key = url, model, api_key
 
     def capabilities(self):
-        return {"tools": True, "images": False, "structured_output": True}
+        return {"tools": True, "images": False, "json_object": True, "json_schema": False}
 
-    async def complete(self, messages, tool_specs, response_contract, _repair=False):
+    async def complete(self, messages, tool_specs, response_contract, *, request_limit_bytes=None, _repair=False):
         original_messages = messages
+        invalid_response = {"content": None}
         # Provider function names may disallow dots: map stable IDs to wire aliases.
         aliases = {f"tool_{i}": s.id for i, s in enumerate(tool_specs)}
         reverse = {v: k for k, v in aliases.items()}
@@ -73,6 +76,9 @@ class HttpModel:
                 }
                 for s in tool_specs
             ]
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        if request_limit_bytes is not None:
+            ensure_limit(len(body), request_limit_bytes)
 
         def request():
             logger.info("AI 请求开始：model=%s，工具数=%s", self.model, len(tool_specs))
@@ -83,14 +89,14 @@ class HttpModel:
             try:
                 with urlopen(
                     Request(
-                        self.url, data=json.dumps(payload).encode(), headers=headers
+                        self.url, data=body, headers=headers
                     ),
                     timeout=45,
                     context=model_ssl_context(),
                 ) as response:
                     raw = response.read(2 * 1024 * 1024 + 1)
                 if len(raw) > 2 * 1024 * 1024:
-                    raise ValueError("response limit")
+                    raise TaskError("MODEL_RESPONSE_TOO_LARGE", "模型回复超过 2 MB")
                 try:
                     envelope = json.loads(raw)
                 except json.JSONDecodeError as exc:
@@ -99,6 +105,7 @@ class HttpModel:
                 if choice.get("finish_reason") == "length":
                     raise TaskError("MODEL_OUTPUT_TRUNCATED", "模型输出被截断，请缩短目标或增加输出额度")
                 message = choice["message"]
+                invalid_response["content"] = message.get("content")
                 logger.info("AI 对话回复：%s", json.dumps(redact({"content": message.get("content"), "tool_calls": message.get("tool_calls")}), ensure_ascii=False))
                 calls = tuple(
                     ToolCall(
@@ -109,11 +116,17 @@ class HttpModel:
                     for c in (message.get("tool_calls") or [])
                 )
                 content = parse_content(message.get("content")) if not calls else {}
-                if not calls and not isinstance(content.get("step_content"), str):
-                    raise TaskError("MODEL_CONTENT_MISSING", "模型未返回 step_content，请重试生成")
+                if not calls:
+                    try:
+                        validate(content, response_contract)
+                    except TaskError as exc:
+                        raise TaskError(
+                            "MODEL_RESPONSE_CONTRACT_INVALID",
+                            "模型回复不符合当前响应格式：" + str(exc),
+                        ) from exc
                 logger.info("AI 响应解析成功：工具调用数=%s", len(calls))
                 return ModelReply(
-                    content.get("step_content"), content.get("explanation", ""), calls
+                    content.get("step_content"), content.get("explanation", ""), calls, content
                 )
             except TaskError as exc:
                 logger.warning("AI 响应错误：%s", exc)
@@ -151,13 +164,22 @@ class HttpModel:
         try:
             return await asyncio.to_thread(request)
         except TaskError as exc:
-            if exc.code not in {"MODEL_JSON_INVALID", "MODEL_CONTENT_EMPTY"} or _repair:
+            if exc.code not in {"MODEL_JSON_INVALID", "MODEL_CONTENT_EMPTY", "MODEL_RESPONSE_CONTRACT_INVALID"} or _repair:
                 raise
             logger.warning("模型内容未满足 JSON 契约，自动修正重试一次")
-            example = json.dumps({"step_content": "async def run(ctx, inputs):\n    return ctx.result(data={\"connected\": True})", "explanation": "ok"})
+            contract = json.dumps(response_contract, ensure_ascii=False)
+            correction = FORMAT_CORRECTION.format(
+                response_contract=contract,
+                validation_error=str(exc),
+            )
+            prior = invalid_response["content"]
+            repair_messages = list(original_messages)
+            if isinstance(prior, str):
+                repair_messages.append({"role": "assistant", "content": prior})
+            repair_messages.append({"role": "user", "content": correction})
             return await self.complete(
-                original_messages + [{"role": "user", "content": "Your last response could not be parsed. Return only a valid JSON object with step_content and explanation. Escape newlines and quotes inside JSON strings. No markdown. Preserve the original task goal. Example JSON: " + example}],
-                tool_specs, response_contract, _repair=True,
+                repair_messages, tool_specs, response_contract,
+                request_limit_bytes=request_limit_bytes, _repair=True,
             )
 
 
