@@ -88,13 +88,22 @@ def parse_chat_reply(text):
 
 
 def parse_goal_reply(text):
-    """Parse the plain-text web-chat contract for a step description."""
-    value = text.strip()
-    fenced = re.fullmatch(
-        r'```(?:text|markdown)?\s*\n(.*?)\n```', value, re.DOTALL | re.IGNORECASE
-    )
-    if fenced:
-        value = fenced.group(1).strip()
-    if not value or value.startswith('{') or 'async def run(' in value:
-        raise TaskError('CHAT_REPLY_INVALID', '网页 AI 必须只返回步骤描述纯文本')
-    return value
+    """Parse the strict web-chat contract for description authoring."""
+    value = None
+    decoder = json.JSONDecoder()
+    for start, character in enumerate((text or '').strip()):
+        if character != '{':
+            continue
+        try:
+            candidate, _ = decoder.raw_decode((text or '').strip()[start:])
+        except ValueError:
+            continue
+        if isinstance(candidate, dict):
+            value = candidate
+            break
+    if value is None:
+        raise TaskError('CHAT_REPLY_INVALID', '网页回复必须是包含 step_description 和 step_notes 的 JSON')
+    description, notes = value.get('step_description'), value.get('step_notes')
+    if not isinstance(description, str) or not description.strip() or not isinstance(notes, str):
+        raise TaskError('CHAT_REPLY_INVALID', '网页回复必须包含 step_description 和 step_notes')
+    return description.strip(), notes.strip()

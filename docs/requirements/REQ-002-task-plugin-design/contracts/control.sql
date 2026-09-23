@@ -13,7 +13,7 @@ CREATE TABLE tasks (
 );
 CREATE TABLE steps (
  step_id TEXT PRIMARY KEY, task_id TEXT NOT NULL REFERENCES tasks(task_id),
- name TEXT NOT NULL, goal TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL CHECK(position>=0),
+ name TEXT NOT NULL, step_description TEXT NOT NULL DEFAULT '', step_notes TEXT NOT NULL DEFAULT '', position INTEGER NOT NULL CHECK(position>=0),
  content_format TEXT NOT NULL DEFAULT 'python-async-v1', step_content TEXT NOT NULL,
  input_schema_json TEXT NOT NULL, output_schema_json TEXT NOT NULL,
  bindings_json TEXT NOT NULL DEFAULT '{}', capabilities_json TEXT NOT NULL DEFAULT '[]',

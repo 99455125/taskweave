@@ -19,7 +19,7 @@ SQL 基线：[control.sql](contracts/control.sql) 与 [task-data.sql](contracts/
 | 总库表 | 内容 |
 |---|---|
 | tasks | 名称、输入 schema、节点图与布局 |
-| steps | 当前 goal/step_content、绑定、schema、验证 hash/state；无 revision |
+| steps | 当前 step_description/step_content、绑定、schema、验证 hash/state；无 revision |
 | environments | 非秘密配置及凭据引用，秘密在本机凭据适配中 |
 | task_runs | task、环境、模式、状态、定义 hash、父运行、输入摘要 |
 | step_attempts | 每次尝试、执行路径、状态、effect_state、错误摘要、时间 |

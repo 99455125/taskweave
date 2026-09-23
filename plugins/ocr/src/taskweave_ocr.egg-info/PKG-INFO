@@ -1,0 +1,8 @@
+Metadata-Version: 2.4
+Name: taskweave-ocr
+Version: 0.1.0
+Requires-Python: >=3.10
+Requires-Dist: ddddocr==1.6.1
+Requires-Dist: onnxruntime==1.20.1
+Requires-Dist: opencv-python==4.11.0.86; sys_platform == "darwin" or sys_platform == "win32"
+Requires-Dist: opencv-python-headless==4.11.0.86; sys_platform == "linux"

@@ -5,7 +5,7 @@
 | 字段 | 类型/默认 | 说明 |
 |---|---|---|
 | step_id / task_id | UUID 字符串 | 稳定标识；不随排序改变 |
-| name / goal | string | 名称、自然语言目标；goal 不作为可执行代码 |
+| name / step_description | string | 名称、自然语言步骤描述；step_description 不作为可执行代码 |
 | node_kind | `action` | 后续预留 condition/loop/subflow |
 | position | 非负整数 | 当前层顺序 |
 | content_format | `python-async-v1` | 内容语法标识，不是步骤版本 |
@@ -51,12 +51,12 @@ JSON Pointer 使用 / 分隔及 ~0/~1 转义；空串表示根；缺失路径是
 ## 4. 服务接口与竞争修改
 
 - `save_step(task_id, step_id, document, expected_hash)`：创建/覆盖当前内容，状态 DRAFT。expected_hash 为当前内容指纹，用于拒绝过时编辑；不是历史版本。新建传 null。
-- `generate_step(task_id, step_id, goal, selected_capabilities, feedback, expected_hash)`：返回 proposed_content、diagnostics、authoring_session_id；不自动保存/执行。手动编辑不依赖此接口。
+- `generate_step(task_id, step_id, step_description, selected_capabilities, feedback, expected_hash)`：返回 proposed_content、diagnostics、authoring_session_id；不自动保存/执行。手动编辑不依赖此接口。
 - `validate_step(step_id)`：静态结构、绑定、schema 和插件 lint，返回 diagnostics；仅静态通过不标记 VALIDATED。
 - `trial_step(step_id, inputs, environment_id, command_id)`：用户明确启动试跑，生成 mode=TRIAL 的 run/attempt；结果与普通执行用同一协议。
 - `confirm_step(step_id, attempt_id, expected_hash)`：仅试跑成功、指纹一致、插件/环境匹配时标记 VALIDATED；不重复执行。
 
-指纹对 goal、规范化源码（UTF-8/LF）、input/output schema、bindings、capabilities 和当前插件依赖标识的规范 JSON 求 SHA-256；UI 布局不参与。用户/AI 修改后旧试跑不能用来确认。AI 返回时如果指纹已变，作为建议显示，不覆盖用户编辑。
+指纹对 step_description、规范化源码（UTF-8/LF）、input/output schema、bindings、capabilities 和当前插件依赖标识的规范 JSON 求 SHA-256；UI 布局不参与。用户/AI 修改后旧试跑不能用来确认。AI 返回时如果指纹已变，作为建议显示，不覆盖用户编辑。
 
 运行租约持有期间任务配置不可覆盖；步骤调试需先结束活跃正式运行。TRIAL 输入从显式样本或已选择的任务结果提供，不偷偷执行前置步骤。验证记录只证明所用样本/环境，正式执行仍 preflight。导入另一台机器后校验依赖与环境，标记为待本地验证。
 

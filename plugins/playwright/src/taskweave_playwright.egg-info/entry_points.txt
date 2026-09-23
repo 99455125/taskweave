@@ -1,0 +1,2 @@
+[taskweave.plugins]
+playwright = taskweave_playwright:PlaywrightPlugin

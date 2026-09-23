@@ -104,6 +104,34 @@ ALTER TABLE runtime_lease_new RENAME TO runtime_lease;
 """
 CONTROL_V7 = "ALTER TABLE steps ADD COLUMN ai_authoring_notes TEXT NOT NULL DEFAULT '';"
 CONTROL_V8 = "ALTER TABLE environments ADD COLUMN descriptions_json TEXT NOT NULL DEFAULT '{}';"
+CONTROL_V9 = """
+ALTER TABLE steps RENAME COLUMN goal TO step_description;
+ALTER TABLE steps RENAME COLUMN ai_authoring_notes TO step_notes;
+"""
+CONTROL_V10 = """
+CREATE TABLE plans (
+ plan_id TEXT PRIMARY KEY, name TEXT NOT NULL, plan_description TEXT NOT NULL DEFAULT '',
+ environment_id TEXT REFERENCES environments(environment_id) ON DELETE SET NULL,
+ plugin_ids_json TEXT NOT NULL DEFAULT '[]', revision INTEGER NOT NULL DEFAULT 1,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE plan_contexts (
+ context_id TEXT PRIMARY KEY, plan_id TEXT NOT NULL REFERENCES plans(plan_id) ON DELETE CASCADE,
+ provider_id TEXT NOT NULL, name TEXT NOT NULL, context_notes TEXT NOT NULL DEFAULT '',
+ order_index INTEGER NOT NULL, captured_at TEXT NOT NULL, source_session_id TEXT NOT NULL,
+ item_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX plan_contexts_plan_order ON plan_contexts(plan_id,order_index);
+CREATE TABLE plan_generations (
+ generation_id TEXT PRIMARY KEY, plan_id TEXT NOT NULL REFERENCES plans(plan_id) ON DELETE CASCADE,
+ plan_revision INTEGER NOT NULL, channel TEXT NOT NULL CHECK(channel IN ('api','web_chat')),
+ request_snapshot_path TEXT NOT NULL, response_path TEXT,
+ status TEXT NOT NULL CHECK(status IN ('GENERATING','READY','BLOCKED','FAILED','IMPORTED')),
+ candidate_json TEXT, diagnostics_json TEXT NOT NULL DEFAULT '[]', imported_task_id TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX plan_generations_plan_created ON plan_generations(plan_id,created_at);
+"""
 
 
 @contextmanager
@@ -157,8 +185,8 @@ def initialize(path, name):
         migrate(
             db,
             path,
-            8 if name == "control" else 2,
-            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8},
+            10 if name == "control" else 2,
+            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8, 9: CONTROL_V9, 10: CONTROL_V10},
         )
 
 

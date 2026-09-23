@@ -14,6 +14,22 @@ from taskweave.infrastructure.storage import uid
 
 
 class WorkbenchChanges(unittest.TestCase):
+    def test_planning_ui_uses_planning_copy_chips_and_saves_before_actions(self):
+        source = (Path(__file__).parents[1] / 'src/taskweave/desktop/planning.py').read_text()
+        self.assertIn('ui.label("规划")', source)
+        self.assertIn('.props("use-chips")', source)
+        self.assertIn('async def collect_after_save()', source)
+        self.assertIn('async def generate_after_save(channel)', source)
+
+    def test_navigation_marketplace_and_execution_multi_task_filter_are_present(self):
+        source = (Path(__file__).parents[1] / 'src/taskweave/desktop/workbench.py').read_text()
+        self.assertIn('("marketplace", "集市")', source)
+        self.assertIn('async def marketplace(self):', source)
+        self.assertIn('label="任务筛选（可多选）"', source)
+        self.assertIn('multiple=True', source)
+        self.assertIn('use-input', source)
+        self.assertIn('label="选择任务"', source)
+
     def test_step_contexts_persist_and_can_be_renamed_or_deleted(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
             task = app.repo.create_task('contexts')['task_id']
@@ -146,7 +162,7 @@ class WorkbenchChanges(unittest.TestCase):
                     app.confirm_step_manual(bad['step_id'],bad['content_hash'])
                 good=app.repo.save_step(task,{'name':'good','step_content':'async def run(ctx, inputs):\n    return ctx.result(data={})'})
                 app.confirm_step_manual(good['step_id'],good['content_hash'])
-                edited=app.repo.save_step(task,{**good,'goal':'changed'},good['step_id'],good['content_hash'])
+                edited=app.repo.save_step(task,{**good,'step_description':'changed'},good['step_id'],good['content_hash'])
                 self.assertEqual(edited['validation_state'],'DRAFT')
                 self.assertIsNone(edited['validation_source'])
 

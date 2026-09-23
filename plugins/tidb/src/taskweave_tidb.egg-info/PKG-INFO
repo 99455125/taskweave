@@ -1,0 +1,7 @@
+Metadata-Version: 2.4
+Name: taskweave-tidb
+Version: 0.1.0
+Requires-Python: >=3.10
+Requires-Dist: PyMySQL<2,>=1.1
+Requires-Dist: sqlglot<31,>=26
+Requires-Dist: certifi>=2024.8.30

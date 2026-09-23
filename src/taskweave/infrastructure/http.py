@@ -28,9 +28,15 @@ def make_server(app, port=0, token=None):
                 return
             try:
                 size = int(self.headers.get("Content-Length", "0"))
-                if not 0 < size <= 2 * 1024 * 1024:
+                if not 0 < size <= 8 * 1024 * 1024:
                     raise TaskError("REQUEST_SIZE_INVALID")
                 request = json.loads(self.rfile.read(size))
+                large_operations = {
+                    "step.generate", "step.generate_goal", "step.diagnose",
+                    "plan.generate", "plan.generation.parse",
+                }
+                if size > 2 * 1024 * 1024 and request.get("operation") not in large_operations:
+                    raise TaskError("REQUEST_SIZE_INVALID")
                 response = {
                     "ok": True,
                     "result": app.dispatch(

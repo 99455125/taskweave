@@ -13,7 +13,6 @@ import sys
 from uuid import uuid4
 
 from taskweave.core.validation import TaskError, normalize_step
-from taskweave.application.prompts import MODEL_JSON_CORRECTION
 from taskweave.infrastructure.model import HttpModel
 
 
@@ -336,7 +335,7 @@ class DesktopController:
             [
                 {
                     "role": "system",
-                    "content": MODEL_JSON_CORRECTION + " Example: " + json.dumps({"step_content": 'async def run(ctx, inputs):\n    return ctx.result(data={"connected": True})', "explanation": "connected"}),
+                    "content": "只返回 JSON 对象，包含完整的 step_content 和简短 explanation，不要 Markdown。",
                 },
                 {
                     "role": "user",
@@ -344,7 +343,14 @@ class DesktopController:
                 },
             ],
             [],
-            {"type": "object"},
+            {
+                "type": "object",
+                "properties": {
+                    "step_content": {"type": "string"},
+                    "explanation": {"type": "string"},
+                },
+                "required": ["step_content"],
+            },
         )
         try:
             tree = ast.parse(reply.proposed_content or "")

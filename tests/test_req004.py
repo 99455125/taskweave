@@ -457,7 +457,7 @@ class BrowserTests(unittest.TestCase):
         proposal = asyncio.run(self.app.authoring.generate(second['step_id'], second['content_hash'], feedback=feedback, contexts=contexts, use_history=True))
         prompt = json.loads(model.requests[-1][-1]['content'])
         self.assertEqual(json.loads(prompt['contexts'][0]['content'])['captured_at'], data['captured_at'])
-        self.assertIn('never guess', json.dumps(model.requests[-1]).lower())
+        self.assertIn('不要根据常见网站习惯猜测选择器', json.dumps(model.requests[-1], ensure_ascii=False))
         revised = asyncio.run(controller.save_draft(first['task_id'], {**second, 'step_content': proposal['proposed_content']}, second))
         repeated = asyncio.run(controller.repeat_trial(revised, failed['run_id']))
         done = self.app.coordinator.wait(repeated['run_id'])

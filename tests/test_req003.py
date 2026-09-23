@@ -135,7 +135,7 @@ class AppTests(unittest.TestCase):
             self.app.create_run(task)
         old = self.confirm(step)
         new = self.app.repo.save_step(
-            task, {**old, "goal": "new goal"}, old["step_id"], old["content_hash"]
+            task, {**old, "step_description": "new goal"}, old["step_id"], old["content_hash"]
         )
         self.assertEqual(new["validation_state"], "DRAFT")
         with self.assertRaisesRegex(TaskError, "EDIT_CONFLICT"):
@@ -431,7 +431,7 @@ class AppTests(unittest.TestCase):
             task,
             bad,
             capabilities=["demo.echo", "text.upper"],
-            goal="Return the inputs",
+            step_description="Return the inputs",
         )
         trial = self.app.trial_step(step["step_id"], {}, uid())
         done = self.app.coordinator.wait(trial["run_id"])
@@ -613,7 +613,7 @@ class AppTests(unittest.TestCase):
         )
         pending = self.app.create_run(task, {"v": "later"})
         self.app.repo.save_step(
-            task, {**step, "goal": "changed"}, step["step_id"], step["content_hash"]
+            task, {**step, "step_description": "changed"}, step["step_id"], step["content_hash"]
         )
         with self.assertRaisesRegex(TaskError, "RUN_CONFIG_CHANGED"):
             self.app.coordinator.start(pending["run_id"], uid())

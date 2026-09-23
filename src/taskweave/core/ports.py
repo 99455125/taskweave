@@ -204,15 +204,18 @@ class ModelReply:
     proposed_content: str | None = None
     explanation: str = ""
     tool_calls: Sequence[ToolCall] = ()
+    structured_content: Mapping[str, JSON] = field(default_factory=dict)
 
 
 class ModelPort(Protocol):
     def capabilities(
         self,
-    ) -> Mapping[str, bool]: ...  # tools, images, structured_output
+    ) -> Mapping[str, JSON]: ...  # tools, images, json_object, json_schema
     async def complete(
         self,
         messages: Sequence[JSON],
         tool_specs: Sequence[CapabilitySpec],
         response_contract: JSON,
+        *,
+        request_limit_bytes: int | None = None,
     ) -> ModelReply: ...

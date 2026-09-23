@@ -38,7 +38,7 @@
     {
       "step_id": "00000000-0000-4000-8000-000000000002",
       "name": "Open, read title, optional screenshot",
-      "goal": "打开指定地址，读取标题，按参数选择截图",
+      "step_description": "打开指定地址，读取标题，按参数选择截图",
       "position": 0,
       "content_format": "python-async-v1",
       "step_content": "async def run(ctx, inputs):\n    await ctx.call(\"playwright.page_open\", {\"role\": inputs[\"role\"], \"url\": inputs[\"url\"]})\n    page = await ctx.call(\"playwright.page_title\", {\"role\": inputs[\"role\"]})\n    if not page[\"title\"].strip():\n        raise ValueError(\"Page title is empty\")\n    outputs = []\n    if inputs[\"capture\"]:\n        shot = await ctx.call(\"playwright.page_screenshot\", {\"role\": inputs[\"role\"]})\n        outputs.append(ctx.output(\"playwright.image\", \"page\", shot))\n    return ctx.result(data={\"title\": page[\"title\"]}, outputs=outputs)\n",

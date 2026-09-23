@@ -1,0 +1,9 @@
+README.md
+pyproject.toml
+src/taskweave_ocr/__init__.py
+src/taskweave_ocr.egg-info/PKG-INFO
+src/taskweave_ocr.egg-info/SOURCES.txt
+src/taskweave_ocr.egg-info/dependency_links.txt
+src/taskweave_ocr.egg-info/entry_points.txt
+src/taskweave_ocr.egg-info/requires.txt
+src/taskweave_ocr.egg-info/top_level.txt

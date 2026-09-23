@@ -4,22 +4,19 @@ import asyncio
 from dataclasses import asdict, replace
 import json
 import logging
-from taskweave.core.validation import TaskError, content_tree, normalize_step
+from taskweave.core.validation import (
+    SAFE_BUILTINS, TaskError, content_tree, merge_input_layers, normalize_step,
+)
 from taskweave.core.ports import Scope
 from taskweave.infrastructure.privacy import redact
 from taskweave.infrastructure.storage import uid, Results
 from taskweave.infrastructure.worker import PluginContext, Resources
 from taskweave.application.prompts import (
-    STEP_CODE_RULES, STEP_DESCRIPTION_RULES, WEB_CHAT_JSON_RULES,
-    WEB_CHAT_DESCRIPTION_RULES, REPAIR_RULES,
-    CAPABILITY_CORRECTION,
+    DOMAIN_RULES, EXECUTABLE_STEP_RULES, STEP_CONTENT_RULES,
+    STEP_DESCRIPTION_RULES, STEP_RESPONSE_RULES, WEB_CHAT_RULES,
+    WEB_CHAT_CODE_RULES, REPAIR_RULES, CAPABILITY_CORRECTION,
 )
-
-# This is a transport guard, not the model's context window. The former 64 KiB
-# limit rejected ordinary capability catalogs plus a fresh browser snapshot
-# before the provider could evaluate them.
-AUTHORING_REQUEST_LIMIT = 128 * 1024
-
+from taskweave.application.ai_requests import ensure_limit, utf8_size
 
 def last_dialogue_rounds(history, count=2):
     if count == 0:
@@ -36,7 +33,7 @@ def dialogue_history(messages):
     """
     result = json.loads(json.dumps(messages))
     repeated = {
-        "goal", "ai_authoring_notes", "step_content", "input_schema", "output_schema",
+        "step_description", "step_notes", "step_content", "input_schema", "output_schema",
         "available_variables",
     }
     for message in result:
@@ -63,9 +60,25 @@ def parameter_schema(schema):
     return schema
 
 
+def _input_dependencies(bindings):
+    return {
+        name: value
+        for name, value in (bindings or {}).items()
+        if isinstance(value, dict)
+        and isinstance(value.get("ref"), dict)
+        and value["ref"].get("source") == "step"
+    }
+
+
+def _context_payload(contexts):
+    """Keep both context body and user-authored metadata intact."""
+    return [json.loads(json.dumps(item)) for item in (contexts or [])]
+
+
 class Authoring:
-    def __init__(self, repo, registry, model=None):
+    def __init__(self, repo, registry, model=None, request_limit=None):
         self.repo, self.registry, self.model = repo, registry, model
+        self.request_limit = request_limit or (lambda: 512 * 1024)
         self.conversations = {}
 
     def reset_conversation(self, step_id):
@@ -80,54 +93,121 @@ class Authoring:
             diagnostics.extend(asdict(d) for d in await plugin.lint(step))
         return diagnostics
 
-    async def generate_goal(self, step_id, expected_hash, supplement="", contexts=None, export_only=False):
-        """Generate only a concise human goal; never generate or execute code."""
+    def _variable_catalog(self, step, environment_id):
+        task_schema = json.loads(self.repo.task(step['task_id'])['input_schema_json'])
+        public, secrets = self.repo.environment(environment_id)
+        descriptions = {}
+        if environment_id:
+            row = next((item for item in self.repo.list_environments() if item['environment_id'] == environment_id), None)
+            descriptions = json.loads(row.get('descriptions_json') or '{}') if row else {}
+        environment_variables = {
+            name: {'schema': {'type': type(value).__name__, 'description': descriptions.get(name, '')}, 'required': False}
+            for name, value in public.items()
+        }
+        environment_variables.update({
+            name: {'schema': {'type': 'string', 'description': descriptions.get(name, '')}, 'required': False, 'secret': True}
+            for name in secrets
+        })
+        declared = []
+        for schema in (task_schema, step['input_schema']):
+            required = set(schema.get('required', []))
+            declared.append({name: {
+                'schema': parameter_schema(spec), 'required': name in required,
+            } for name, spec in schema.get('properties', {}).items()})
+        merged = merge_input_layers(environment_variables, *declared)
+        return [{'name': name, **details} for name, details in merged.items()]
+
+    def _catalog(self, step, tools=None):
+        selected = step["capabilities"]
+        plugins = self.registry.selected_plugins(selected)
+        plugin_ids = {plugin.manifest()["id"] for plugin in plugins}
+        return {
+            "runtime_api": [
+                "await ctx.call(action_id, inputs)",
+                "ctx.result(data=None, outputs=(), views=())",
+                "ctx.output(handler_id, name, payload)",
+                "ctx.log(message)",
+                "ctx.cancelled()",
+            ],
+            "runtime_builtins": sorted(SAFE_BUILTINS),
+            "actions": [
+                asdict(self.registry.actions[c].spec)
+                for c in selected if c in self.registry.actions
+            ],
+            "authoring_tools": [
+                asdict((tools or {})[key].spec) for key in sorted(tools or {})
+            ],
+            "result_handlers": [
+                key for key in selected if key in self.registry.handlers
+            ],
+            "result_views": {
+                key: value for key, value in self.registry.views.items()
+                if key.startswith("core.") or key.split(".", 1)[0] in plugin_ids
+            },
+            "plugin_versions": {
+                key: self.registry.versions[key] for key in sorted(plugin_ids)
+            },
+        }
+
+    async def generate_goal(self, step_id, expected_hash, supplement="", contexts=None, environment_id=None, export_only=False):
+        """Generate the description and its durable authoring notes; never code."""
         step = self.repo.step(step_id)
         if step["content_hash"] != expected_hash:
             raise TaskError("EDIT_CONFLICT")
-        contributions = [asdict(item) for item in self.registry.contributions(step["capabilities"])]
-        task_schema = json.loads(self.repo.task(step['task_id'])['input_schema_json'])
+        contributions = [
+            {'context_provider_ids': list(item.context_provider_ids)}
+            for item in self.registry.contributions(step["capabilities"])
+        ]
         request = {
-            "current_goal": step["goal"],
+            "step_description": step["step_description"],
             "user_requirement": supplement or "",
-            "ai_authoring_notes": step.get("ai_authoring_notes", ""),
-            "input_schema": parameter_schema(step["input_schema"]),
+            "step_notes": step.get("step_notes", ""),
             "output_schema": parameter_schema(step["output_schema"]),
-            "bindings": step["bindings"],
-            "available_variables": [
-                {"name": name, "source": source, "type": spec.get("type", "string")}
-                for source, schema in (("task", task_schema), ("step", step["input_schema"]))
-                for name, spec in schema.get("properties", {}).items()
-            ],
+            "input_dependencies": _input_dependencies(step["bindings"]),
+            "available_variables": self._variable_catalog(step, environment_id),
             "capabilities": [
                 asdict(self.registry.actions[action].spec)
                 for action in step["capabilities"] if action in self.registry.actions
             ],
             "plugin_guidance": contributions,
-            "plugin_contexts": contexts or [],
+            "plugin_contexts": _context_payload(contexts),
         }
-        system = STEP_DESCRIPTION_RULES + ("\n" + WEB_CHAT_DESCRIPTION_RULES if export_only else "\n严格返回 JSON 对象：step_content 为步骤描述纯文本，explanation 为简短整理说明。")
+        system = DOMAIN_RULES + "\n" + STEP_DESCRIPTION_RULES
+        if export_only:
+            system += "\n" + WEB_CHAT_RULES
         messages = [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(redact(request), ensure_ascii=False)}]
         if export_only:
             prompt = "\n\n".join(item["role"] + ":\n" + item["content"] for item in messages)
             return {"prompt": prompt, "expected_hash": expected_hash}
         if self.model is None:
             raise TaskError("MODEL_NOT_CONFIGURED")
-        reply = await self.model.complete(messages, [], {"type": "object"})
-        text = (reply.proposed_content or "").strip()
-        if not text or "async def" in text:
+        contract = {'type':'object','properties':{'step_description':{'type':'string'},'step_notes':{'type':'string'}},'required':['step_description','step_notes'],'additionalProperties':False}
+        reply = await self._complete(messages, [], contract)
+        text = (reply.structured_content.get('step_description') or '').strip()
+        notes = (reply.structured_content.get('step_notes') or '').strip()
+        if not text or "async def" in text or "async def" in notes:
             raise TaskError("MODEL_CONTENT_INVALID", "AI 未返回有效步骤描述")
-        return {"goal": text, "explanation": reply.explanation, "expected_hash": expected_hash}
+        return {"step_description": text, "step_notes": notes, "expected_hash": expected_hash}
+
+    async def _complete(self, messages, tools, contract):
+        """Pass the frozen workspace budget while accepting legacy model fixtures."""
+        try:
+            return await self.model.complete(messages, tools, contract, request_limit_bytes=self.request_limit())
+        except TypeError as exc:
+            if "request_limit_bytes" not in str(exc):
+                raise
+            return await self.model.complete(messages, tools, contract)
 
     async def generate(
         self,
         step_id,
         expected_hash,
-        goal=None,
+        step_description=None,
         feedback=None,
         contexts=None,
         environment_id=None,
-        supplement=None,
+        repair_notes=None,
+        purpose=None,
         use_history=False,
         history_rounds=None,
         deduplicate_history=True,
@@ -142,6 +222,10 @@ class Authoring:
         if expected_hash != step["content_hash"]:
             raise TaskError("EDIT_CONFLICT")
         self.registry.check(step)
+        if purpose is None:
+            purpose = "repair" if feedback is not None or repair_notes is not None or use_history or history_rounds not in (None, 0) else "content"
+        if purpose not in {"content", "repair"}:
+            raise TaskError("FORM_INVALID", "步骤生成 purpose 只能是 content 或 repair")
         selected = step["capabilities"]
         tools = {}
         contributions = []
@@ -151,35 +235,33 @@ class Authoring:
             overrides = contribution.pop("channel_overrides", {}).get(channel, {})
             if not isinstance(overrides, dict) or set(overrides) - {"instructions", "examples"}:
                 raise TaskError("AUTHORING_CHANNEL_INVALID", "插件对话适配仅支持 instructions 和 examples")
-            contribution.update(overrides)
+            if overrides.get('instructions'):
+                contribution['instructions'] = (contribution.get('instructions', '') + '\n' + overrides['instructions']).strip()
+            if overrides.get('examples'):
+                contribution['examples'] = list(contribution.get('examples', ())) + list(overrides['examples'])
             if export_only:
                 contribution["tool_ids"] = []  # Web chat cannot invoke local tools.
             contributions.append(contribution)
             for tid in c.tool_ids:
                 if tid in selected and tid in self.registry.tools:
                     tools[tid] = self.registry.tools[tid]
-        contexts = contexts or []
+        contexts = _context_payload(contexts)
         if any(
             c.get("kind") == "image" for c in contexts
         ) and not export_only and not self.model.capabilities().get("images", False):
             raise TaskError("MODEL_IMAGE_UNSUPPORTED")
-        task_schema = json.loads(self.repo.task(step['task_id'])['input_schema_json'])
-        environment, secret_refs = self.repo.environment(environment_id)
-        available_variables = [{"name": key, "source": "environment", "type": type(value).__name__} for key, value in environment.items()]
-        available_variables.extend({"name": key, "source": "task", "type": spec.get('type', 'string')} for key, spec in task_schema.get('properties', {}).items())
+        available_variables = self._variable_catalog(step, environment_id)
+        system = DOMAIN_RULES + "\n" + EXECUTABLE_STEP_RULES + "\n" + (REPAIR_RULES if purpose == "repair" else STEP_CONTENT_RULES) + "\n" + STEP_RESPONSE_RULES
+        if export_only:
+            system += "\n" + WEB_CHAT_RULES + "\n" + WEB_CHAT_CODE_RULES
         messages = [
-            {"role": "system", "content": STEP_CODE_RULES + ("\n" + REPAIR_RULES if feedback else "")},
+            {"role": "system", "content": system},
             {
                 "role": "system",
                 "content": json.dumps(
                     {
                         "plugins": contributions,
-                        "result_views": {key: value for key, value in self.registry.views.items() if key.startswith("core.") or any(key.startswith(plugin.manifest()["id"] + ".") for plugin in self.registry.selected_plugins(selected))},
-                        "capabilities": [
-                            asdict(self.registry.actions[c].spec)
-                            for c in selected
-                            if c in self.registry.actions
-                        ],
+                        **self._catalog(step, tools),
                     },
                     ensure_ascii=False,
                 ),
@@ -189,14 +271,12 @@ class Authoring:
                 "content": json.dumps(
                     redact(
                         {
-                            "goal": goal or step["goal"],
-                            "ai_authoring_notes": step.get("ai_authoring_notes", ""),
+                            "step_description": step_description or step["step_description"],
+                            "step_notes": step.get("step_notes", ""),
                             "step_content": step["step_content"],
-                            "input_schema": step["input_schema"],
                             "output_schema": step["output_schema"],
-                            "feedback": feedback or {},
                             "contexts": contexts,
-                            "user_supplement": supplement or "",
+                            "input_dependencies": _input_dependencies(step["bindings"]),
                         }
                     ),
                     ensure_ascii=False,
@@ -204,9 +284,11 @@ class Authoring:
             },
         ]
         payload = json.loads(messages[-1]['content'])
-        payload['input_schema'] = parameter_schema(step['input_schema'])
         payload['output_schema'] = parameter_schema(step['output_schema'])
         payload['available_variables'] = available_variables
+        if purpose == "repair":
+            payload['feedback'] = feedback or {}
+            payload['repair_notes'] = repair_notes or ""
         messages[-1]['content'] = json.dumps(payload, ensure_ascii=False)
         if history_rounds is None:
             history_rounds = -1 if use_history else 0
@@ -218,11 +300,9 @@ class Authoring:
         if use_history:
             messages[2:2] = dialogue_history(history) if deduplicate_history else history
         history_trimmed = len(history) < len(stored_history)
-        if len(json.dumps(messages, ensure_ascii=False).encode()) > AUTHORING_REQUEST_LIMIT:
-            raise TaskError("CONTEXT_TOO_LARGE", "本次完整请求超过 128 KiB，请选择更少的历史轮次（0 表示不带历史）或删除不需要的已采集上下文")
         if export_only:
-            instruction = "请按以下项目规范生成或修订当前步骤。你无法调用本机插件工具，请使用提供的能力目录、页面上下文和日志，不要假设工具已执行。\n" + WEB_CHAT_JSON_RULES
-            text = instruction + "\n\n" + "\n\n".join(message['role'] + ":\n" + message.get('content', '') for message in messages)
+            text = "\n\n".join(message['role'] + ":\n" + message.get('content', '') for message in messages)
+            ensure_limit(utf8_size(text), self.request_limit())
             logging.getLogger(__name__).info("网页 AI 对话内容：%s", redact(text))
             return {"prompt": text, "messages": messages, "expected_hash": expected_hash, "history_trimmed": history_trimmed}
         import threading
@@ -247,14 +327,15 @@ class Authoring:
                 "step_content": {"type": "string"},
                 "explanation": {"type": "string"},
             },
-            "required": ["step_content"],
+            "required": ["step_content", "explanation"],
+            "additionalProperties": False,
         }
 
         async def session():
             corrected = False
             for _ in range(8):
                 specs = [replace(t.spec, id=k) for k, t in tools.items()]
-                reply = await self.model.complete(messages, specs, contract)
+                reply = await self._complete(messages, specs, contract)
                 if reply.tool_calls:
                     messages.append(
                         {
@@ -306,12 +387,13 @@ class Authoring:
                                 "content": json.dumps(redact(value)),
                             }
                         )
-                    if len(json.dumps(messages, ensure_ascii=False).encode()) > AUTHORING_REQUEST_LIMIT:
-                        raise TaskError("CONTEXT_TOO_LARGE")
                     continue
-                proposal = normalize_step(
-                    {**step, "step_content": reply.proposed_content or ""}
-                )
+                if not (reply.proposed_content or "").strip():
+                    explanation = (reply.explanation or "").strip()
+                    if explanation.startswith("缺少必要信息："):
+                        raise TaskError("AUTHORING_INFORMATION_MISSING", explanation)
+                    raise TaskError("MODEL_CONTENT_INVALID", "AI 未返回完整步骤内容")
+                proposal = normalize_step({**step, "step_content": reply.proposed_content})
                 messages.append({"role": "assistant", "content": json.dumps({"step_content": reply.proposed_content, "explanation": reply.explanation}, ensure_ascii=False)})
                 try:
                     diagnostics = await self.validate_step(proposal)
@@ -321,7 +403,7 @@ class Authoring:
                             raise TaskError(exc.code, f"AI 使用了未授权动作：{exc}。允许动作：{', '.join(selected)}") from exc
                         raise
                     corrected = True
-                    messages.append({"role": "user", "content": CAPABILITY_CORRECTION + "\nError: " + str(exc) + "\nAllowed action IDs: " + json.dumps(selected)})
+                    messages.append({"role": "user", "content": CAPABILITY_CORRECTION.format(allowed_ids=json.dumps(selected, ensure_ascii=False), validation_error=str(exc))})
                     continue
                 return {
                     "proposed_content": proposal["step_content"],

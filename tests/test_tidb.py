@@ -60,4 +60,4 @@ class TiDBTests(unittest.TestCase):
         self.assertIn('tidb.verification', registry.views)
         contribution = TiDBPlugin().authoring(['tidb.query'])
         self.assertIn('views=', contribution.examples[0])
-        self.assertIn('Web chat cannot', contribution.channel_overrides['web_chat']['instructions'])
+        self.assertIn('本渠道不能访问本地数据库', contribution.channel_overrides['web_chat']['instructions'])
