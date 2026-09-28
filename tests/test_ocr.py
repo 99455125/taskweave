@@ -78,10 +78,10 @@ class OcrTests(unittest.TestCase):
                 self.assertEqual(result['status'],'SUCCEEDED', result['attempts'])
                 self.assertEqual(app.repo.read_output(run['run_id'],step['step_id']),{'logged_in':True})
                 contexts = app.dispatch('context.read', {'step_id':step['step_id'], 'provider_id':'playwright.page', 'run_id':run['run_id']})
-                data = json.loads(contexts[0]['content'])
+                data = json.loads(contexts['items'][0]['content'])
                 elements = {item['id']:item for item in data['elements']}
                 self.assertEqual(elements['ocr']['selector'], {'kind':'css','value':'#ocr'})
                 self.assertEqual(elements['secret']['type'], 'password')
-                self.assertNotIn('never-forwarded', contexts[0]['content'])
+                self.assertNotIn('never-forwarded', contexts['items'][0]['content'])
         finally:
             server.shutdown(); server.server_close(); thread.join()

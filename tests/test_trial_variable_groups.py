@@ -3,11 +3,12 @@ import json
 import tempfile
 import unittest
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 from taskweave.application.service import Application
 from taskweave.desktop.controller import DesktopController
 from taskweave.desktop.workbench import Workbench
+from taskweave.desktop.components.step_debug import StepDebugSession
 from taskweave.infrastructure.storage import uid
 
 
@@ -30,12 +31,12 @@ class TrialVariableGroups(unittest.TestCase):
             fake_ui.label.side_effect=lambda text: labels.append(text) or MagicMock()
             def build(schema, values):
                 controls = {key: ('string', SimpleNamespace(value=values.get(key, spec.get('default')))) for key, spec in schema['properties'].items()}
-                form=SimpleNamespace(controls=controls, defaults={key:control.value for key, (_,control) in controls.items()},
+                form=SimpleNamespace(schema=schema, controls=controls, defaults={key:control.value for key, (_,control) in controls.items()},
                     values=lambda:{key:control.value for key, (_,control) in controls.items() if control.value is not None})
                 forms.append(form)
                 return form
             step={'input_schema':{'properties':{'url':{'type':'string'},'code':{'type':'string'},'result':{'default':7}}},'bindings':{}}
-            with patch('taskweave.desktop.workbench.ui',fake_ui),patch('taskweave.desktop.workbench.ValueForm',side_effect=build):
+            with patch('taskweave.desktop.components.trial_inputs.ui',fake_ui),patch('taskweave.desktop.components.trial_inputs.ValueForm',side_effect=build):
                 form=await bench.trial_variables(step,environment)
                 self.assertEqual(form.values(),{'code':'uat','url':'uat','result':7})
                 labels.clear()
@@ -53,32 +54,36 @@ class TrialVariableGroups(unittest.TestCase):
         async def scenario():
             for previous_env, can_end in [('uat', True), ('dev', True), ('uat', False)]:
                 with self.subTest(previous_env=previous_env, can_end=can_end):
-                    bench=object.__new__(Workbench)
                     saved={'step_id':'step'}
-                    bench.save_editor=AsyncMock(return_value=saved)
-                    bench.trials={'step':'previous'}
-                    bench.trial_environment=SimpleNamespace(value='uat')
-                    bench.trial_form=SimpleNamespace(values=lambda:{'code':'edited'})
-                    bench.confirm_end=AsyncMock(return_value=True)
-                    bench.refresh_trial=AsyncMock()
-                    bench.settle_trial_start=AsyncMock()
+                    trials={'step':'previous'}
+                    form=SimpleNamespace(values=lambda:{'code':'edited'}, task_values=lambda:{'code':'edited'}, step_values=lambda:{})
+                    environment=SimpleNamespace(value='uat')
                     previous={'environment_id':previous_env,'status':'SUCCEEDED','can_end':can_end,'attempts':[]}
-                    bench.controller=SimpleNamespace(call=AsyncMock(return_value=previous),
-                        trial=AsyncMock(return_value={'run_id':'new'}),
-                        repeat_trial=AsyncMock(return_value={'run_id':'repeat'}))
+                    controller=SimpleNamespace(call=AsyncMock(return_value=previous), run_request=AsyncMock(return_value={}),
+                        trial=AsyncMock(return_value={'run_id':'new'}), repeat_trial=AsyncMock(return_value={'run_id':'repeat'}))
+                    confirm_end=AsyncMock(return_value=True); refresh=AsyncMock(); settle=AsyncMock(); update_env=Mock(); reset=AsyncMock()
+                    session=StepDebugSession(controller=controller, identity=lambda:('task','step',1,1), task_id=lambda:'task',
+                        save_editor=AsyncMock(return_value=saved), trial_form=lambda:form, trial_environment=lambda:environment,
+                        environment_select=AsyncMock(), trial_variables=AsyncMock(), trials=trials, button=AsyncMock(),
+                        confirm_end=confirm_end, resume_inputs=AsyncMock(), refresh_trial=refresh,
+                        refresh_trial_inputs=AsyncMock(), update_environment=update_env, reset_feedback=reset,
+                        trial_start_status=lambda:None, debug_state=__import__("taskweave.desktop.state", fromlist=["DebugState"]).DebugState())
+                    session.settle_trial_start = settle
                     tabs=SimpleNamespace(value=None)
-                    with patch('taskweave.desktop.workbench.ui',MagicMock()) as fake_ui:
-                        await bench.start_trial(tabs,'feedback',continue_session=True)
+                    with patch('taskweave.desktop.components.step_debug.ui',MagicMock()) as fake_ui:
+                        await session.start_trial(tabs,'feedback',continue_session=True)
                         fake_ui.dialog.assert_not_called()
                     if previous_env=='uat' and can_end:
-                        bench.controller.repeat_trial.assert_awaited_once_with(saved,'previous',overrides={'code':'edited'})
-                        bench.controller.trial.assert_not_awaited()
+                        controller.repeat_trial.assert_awaited_once_with(saved,'previous',overrides={'code':'edited'})
+                        controller.trial.assert_not_awaited()
                     else:
-                        bench.controller.trial.assert_awaited_once_with(saved,{'code':'edited'},'uat')
-                        bench.controller.repeat_trial.assert_not_awaited()
+                        controller.trial.assert_awaited_once_with(saved,{'code':'edited'},'uat')
+                        controller.repeat_trial.assert_not_awaited()
                     if previous_env!='uat' and can_end:
-                        bench.confirm_end.assert_awaited_once_with(previous)
-                        self.assertEqual(bench.controller.call.await_args.kwargs['operation'],'abandon')
+                        confirm_end.assert_awaited_once_with(previous)
+                        self.assertEqual(controller.call.await_args.kwargs['operation'],'abandon')
+                    if previous_env=='uat' and can_end:
+                        update_env.assert_called_once_with('uat')
         asyncio.run(scenario())
 
     def test_repeated_trial_uses_edited_task_input(self):

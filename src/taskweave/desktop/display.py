@@ -2,6 +2,24 @@
 import json
 
 
+def decode_inline_image(encoded, mime):
+    """Reject damaged inline captures before the browser displays black pixels."""
+    import base64
+    import binascii
+
+    if mime not in {'image/png', 'image/jpeg', 'image/webp'} or len(encoded) > 14 * 1024 * 1024:
+        raise ValueError('图片格式不支持或超过 10MB')
+    try:
+        data = base64.b64decode(encoded, validate=True)
+    except (binascii.Error, ValueError) as exc:
+        raise ValueError('截图数据不完整，请重新采集上下文') from exc
+    if len(data) > 10 * 1024 * 1024:
+        raise ValueError('图片格式不支持或超过 10MB')
+    if mime == 'image/png' and (not data.startswith(b'\x89PNG\r\n\x1a\n') or not data.endswith(b'\x00\x00\x00\x00IEND\xaeB`\x82')):
+        raise ValueError('截图数据不完整，请重新采集上下文')
+    return data
+
+
 def step_names(run, fallback=()):
     definition = json.loads(run.get('definition_json') or '{}')
     return {step['step_id']: f"{index}. {step.get('name') or '未命名步骤'}"
@@ -63,4 +81,3 @@ def image_reference(payload, stored):
     if len(images) == 1:
         return {'output': images[0]}
     raise ValueError('图片引用无法唯一匹配；请使用 {output: 文件结果名称}，并保存截图输出')
-

@@ -14,7 +14,28 @@
 
 插件可以同时提供给 AI 编写阶段使用的工具和给固定步骤执行的能力；两者可复用底层实现，但权限和调用入口分开。模型若需要点击或提交，进入明确的试跑流程，不因“AI 工具调用”而绕过执行控制。
 
+## 现存资源目标选择
+
+可选插件钩子 `list_context_targets(provider_id, ctx, request)` 枚举当前实例已有资源，返回 `{target_id, label, request}` 列表。宿主只展示 label，并按“表单 → 高级参数 → 目标 request”顺序合并采集参数；不解释浏览器、角色或数据库字段。没有钩子的插件仍可按原参数采集，不因打开选择界面而启动资源。
+
+目标选择界面由提供器 schema 的 `x-taskweave-context-targets` 驱动。插件声明选择器名称、参数模式名称、是否自动选中唯一目标、选中目标后是否隐藏参数表单。没有声明的提供器不显示目标选择器；因此 TiDB 直接显示表名/数据库表单，Playwright 才显示页面目标和“新建页面”。
+
+选中现有目标时，插件还可用 `keep_parameters_when_selected` 指定仍需用户选择的采集参数。Playwright 保留 `scope`（当前视口/完整页面），只隐藏新建页面所需的 URL 和角色；采集 request 合并所选范围与目标参数。
+
+- `plan.context.targets(plan_id, provider_id, request?)` 只读取该规划自己的采集资源。
+- `context.targets(step_id, provider_id, run_id?, request?)` 只读取用户所选、属于该步骤任务的保留运行；独立观察没有保留资源，返回空列表。
+- 两个入口返回 `{session_id, targets}`；不存在实例时 `session_id=null`、`targets=[]`。
+- `plan.context.collect` 和 `context.read` 支持可选 `expected_session_id`。选择目标后携带列表返回的 session_id，实例结束或变化时返回 `CONTEXT_SESSION_CHANGED`；插件目标已关闭时返回 `CONTEXT_TARGET_UNAVAILABLE`。
+
+列表和采集在持有资源的事件循环内串行调用，空草稿不需要通过可执行代码编译才能观察现存资源。观察不会接管资源所有权，也不会把其他规划、调试或正式执行的资源合并。结束忙碌规划采集会话会明确失败，并保留实例引用供稍后关闭。
+
 编写服务支持受限轮次的工具观察 → 生成 → 用户试跑 → 反馈修正。它不让模型无限自主规划业务或在每次固定任务执行时重写步骤。
+
+## 上下文采集与预览
+
+采集器统一返回 `ContextCollection(items, views)`。`items` 是发给 AI 的证据；`views` 是用户预览，二者分开保存。预览项为 `{title, renderer, data}`，renderer 必须由核心或插件注册，宿主只按注册类型渲染，不判断 Playwright、TiDB 等插件类型。调用方通过 `include_view` 决定本次是否生成预览；插件在 context request schema 中用 `x-taskweave-context-view.default` 声明界面默认值。
+
+Playwright 的 `playwright.page` 提供 `scope=viewport|full_page`，默认完整页面，并可返回 `playwright.screenshot`；TiDB 的 `tidb.schema` 可返回 `tidb.table`。没有预览能力的插件只返回 items，现有表单和采集流程不受影响。
 
 旧项目已有 tools_json 的函数描述与 ToolsHandler 的工具执行分发，说明 AI 与工具交互并非全新方向；目前分发硬编码 Excel/SQL。新设计改为统一插件注册，使 Playwright 和后续插件可贡献工具与上下文，不改核心 if/else。
 

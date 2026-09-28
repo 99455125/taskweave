@@ -1,7 +1,7 @@
 """Shared contracts for task execution, authoring and plugin contributions."""
 
 from dataclasses import dataclass, field
-from typing import Any, AsyncContextManager, Mapping, Protocol, Sequence
+from typing import Any, AsyncContextManager, Mapping, Protocol, Sequence, TypedDict
 
 JSON = Any  # Wire values must be null/bool/number/string/list/string-keyed dict.
 
@@ -84,6 +84,23 @@ class ContextItem:
     content: str  # text or controlled image reference
     source: str
     truncated: bool = False
+
+
+@dataclass(frozen=True)
+class ContextView:
+    """Plugin-defined preview stored beside context evidence."""
+
+    title: str
+    renderer: str
+    data: JSON
+
+
+@dataclass(frozen=True)
+class ContextCollection:
+    """One atomic authoring capture and its optional user previews."""
+
+    items: Sequence[ContextItem]
+    views: Sequence[ContextView] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -176,6 +193,20 @@ class ResourceProvider(Protocol):
     async def close(self, resource: Any) -> None: ...
 
 
+class ContextTarget(TypedDict):
+    target_id: str
+    label: str
+    request: Mapping[str, JSON]
+
+
+class ContextTargetProvider(Protocol):
+    """Optional plugin extension; enumerate retained resources without opening any."""
+
+    async def list_context_targets(
+        self, provider_id: str, ctx: PluginContext, request: JSON
+    ) -> Sequence[ContextTarget]: ...
+
+
 class Plugin(Protocol):
     def manifest(self) -> Mapping[str, JSON]: ...
     def actions(self) -> Mapping[str, Action]: ...
@@ -184,8 +215,8 @@ class Plugin(Protocol):
     def resource_providers(self) -> Mapping[str, ResourceProvider]: ...
     def authoring(self, selected_ids: Sequence[str]) -> AuthoringContribution: ...
     async def collect_context(
-        self, provider_id: str, ctx: PluginContext, request: JSON
-    ) -> Sequence[ContextItem]: ...
+        self, provider_id: str, ctx: PluginContext, request: JSON, *, include_view: bool = True
+    ) -> ContextCollection: ...
     async def lint(self, step_document: Mapping[str, JSON]) -> Sequence[Diagnostic]: ...
     async def diagnose(
         self, error: ErrorInfo, refs: Sequence[ResultRef]

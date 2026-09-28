@@ -62,9 +62,11 @@ class DesktopController:
         return self.application.registry.views
 
     async def execution_inputs(self, run_id):
-        stored = await asyncio.to_thread(self.application.repo.run, run_id)
-        return {'task': json.loads(stored['inputs_json']),
-                'steps': json.loads(stored['request_json']).get('step_inputs', {})}
+        return await asyncio.to_thread(self.application.runs.input_values, run_id)
+
+    async def run_request(self, run_id):
+        """Read private request state for the local workbench, outside run.get."""
+        return await asyncio.to_thread(self.application.runs.request, run_id)
 
     async def trial_feedback(self, run_id, step_id):
         from taskweave.infrastructure.privacy import redact
@@ -113,8 +115,11 @@ class DesktopController:
         contexts, errors = [], []
         for provider in providers:
             try:
-                items = await self.call('context.read', step_id=step['step_id'], provider_id=provider, run_id=session['run_id'], request=request)
-                contexts.extend(items)
+                capture = await self.call(
+                    'context.read', step_id=step['step_id'], provider_id=provider,
+                    run_id=session['run_id'], request=request, include_view=False,
+                )
+                contexts.extend(capture['items'])
             except Exception as exc:
                 errors.append({'provider_id': provider, 'error_code': getattr(exc, 'code', type(exc).__name__)})
         return contexts, {'available': bool(contexts), 'run_id': session['run_id'], 'errors': errors}
@@ -156,7 +161,7 @@ class DesktopController:
         from taskweave.core.validation import pointer
         inputs = dict(inputs)
         configured = await self.configured_inputs(step['task_id'], environment_id) if step.get('bindings') else {}
-        environment = (self.application.repo.environment(environment_id)[0] if step.get('bindings') else {})
+        environment = (self.application.runs.environment(environment_id)[0] if step.get('bindings') else {})
         for key, binding in step.get('bindings', {}).items():
             if key in inputs:
                 continue
@@ -180,14 +185,14 @@ class DesktopController:
         )
 
     async def repeat_trial(self, step, run_id, overrides=None):
-        previous = await asyncio.to_thread(self.application.repo.run, run_id)
+        previous = await asyncio.to_thread(self.application.runs.stored, run_id)
         if previous['mode'] != 'TRIAL' or previous['trial_step_id'] != step['step_id']:
             raise TaskError('VALIDATION_EVIDENCE_INVALID')
         inputs = json.loads(previous['inputs_json'])
         if json.loads(previous['request_json']).get('flow_trial'):
             from taskweave.core.validation import resolve
-            environment, _ = self.application.repo.environment(previous['environment_id'])
-            inputs = resolve(step['bindings'], inputs, environment, lambda sid, output: self.application.repo.read_output(run_id, sid, output, self.application.registry))
+            environment, _ = self.application.runs.environment(previous['environment_id'])
+            inputs = resolve(step['bindings'], inputs, environment, lambda sid, output: self.application.runs.output(run_id, sid, output))
         inputs.update(json.loads(previous['request_json']).get('step_inputs', {}).get(step['step_id'], {}))
         inputs.update(overrides or {})
         return await self.trial(step, inputs, previous['environment_id'], continue_session=True)
@@ -241,7 +246,16 @@ class DesktopController:
         path = self.application.home / 'workbench.json'
         settings = json.loads(path.read_text()) if path.exists() else {}
         settings.setdefault('executor_max_threads', 8)
+        settings.update(self.application.privacy_settings.get())
         return settings
+
+    def privacy_settings(self):
+        return self.application.privacy_settings.get()
+
+    async def save_privacy_settings(self, *, redact_on_display, redact_for_ai):
+        return self.application.privacy_settings.update(
+            redact_on_display=redact_on_display, redact_for_ai=redact_for_ai,
+        )
 
     async def save_executor_max_threads(self, value):
         value = self.application.coordinator.set_max_concurrency(value)
@@ -388,6 +402,18 @@ class DesktopController:
         def save():
             directory.mkdir(parents=True, exist_ok=True)
             path = directory / ('taskweave-task-' + uuid4().hex[:12] + '.json')
+            with path.open('x', encoding='utf-8') as output:
+                output.write(text)
+            return path
+        path = await asyncio.to_thread(save)
+        await self.open_path(directory)
+        return path
+
+    async def save_plan_prompt(self, text):
+        directory = self.application.home / 'exports'
+        def save():
+            directory.mkdir(parents=True, exist_ok=True)
+            path = directory / ('taskweave-plan-' + uuid4().hex[:12] + '.txt')
             with path.open('x', encoding='utf-8') as output:
                 output.write(text)
             return path

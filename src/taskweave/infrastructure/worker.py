@@ -89,6 +89,11 @@ class PluginContext:
         return self.cancel.is_set()
 
 
+async def list_plugin_context_targets(plugin, provider_id, ctx, request):
+    hook = getattr(plugin, "list_context_targets", None)
+    return redact(list(await hook(provider_id, ctx, request or {}))) if hook else []
+
+
 class StepContext:
     def __init__(self, step, plugin_ctx, registry):
         self.step, self.context, self.registry = step, plugin_ctx, registry
@@ -214,13 +219,7 @@ def worker_main(connection, cancellation, home, factory, parent_pid):
 
                 beat = asyncio.create_task(heartbeat())
                 try:
-                    registry.check(message["step"])
-                    tree = content_tree(
-                        message["step"]["step_content"], message["step"]["capabilities"]
-                    )
-                    ns = {"__builtins__": SAFE_BUILTINS}
-                    exec(compile(tree, "<step>", "exec"), ns)
-                    if message["kind"] == "context":
+                    if message["kind"] in {"context", "context_targets"}:
                         provider_id = message["provider_id"]
                         plugin = next(
                             (
@@ -237,16 +236,25 @@ def worker_main(connection, cancellation, home, factory, parent_pid):
                         )
                         if plugin is None:
                             raise TaskError("CONTEXT_PROVIDER_UNAVAILABLE")
-                        from dataclasses import asdict
-
-                        items = await plugin.collect_context(
-                            provider_id, pc, message.get("request", {})
+                        if message["kind"] == "context_targets":
+                            targets = await list_plugin_context_targets(
+                                plugin, provider_id, pc, message.get("request", {})
+                            )
+                            emit("ContextTargetsCompleted", {"targets": targets})
+                            return
+                        capture = await plugin.collect_context(
+                            provider_id, pc, message.get("request", {}),
+                            include_view=message.get("include_view", True),
                         )
-                        emit(
-                            "ContextCompleted",
-                            {"items": redact([asdict(c) for c in items])},
-                        )
+                        from taskweave.core.context_collection import serialize_context_collection
+                        emit("ContextCompleted", serialize_context_collection(capture, registry.views))
                         return
+                    registry.check(message["step"])
+                    tree = content_tree(
+                        message["step"]["step_content"], message["step"]["capabilities"]
+                    )
+                    ns = {"__builtins__": SAFE_BUILTINS}
+                    exec(compile(tree, "<step>", "exec"), ns)
                     validate(message["inputs"], message["step"]["input_schema"])
                     result = await ns["run"](ctx, message["inputs"])
                     if not isinstance(result, StepResult):
@@ -272,7 +280,7 @@ def worker_main(connection, cancellation, home, factory, parent_pid):
                         if (
                             hook
                             and ctx.phase != "persist"
-                            and message["kind"] != "context"
+                            and message["kind"] not in {"context", "context_targets"}
                         ):
                             try:
                                 requests = await asyncio.wait_for(

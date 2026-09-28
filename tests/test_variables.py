@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from types import SimpleNamespace
 from taskweave.application.service import Application
-from taskweave.core.validation import automatic_inputs
+from taskweave.core.validation import TaskError, automatic_inputs
 from taskweave.desktop.forms import SchemaEditor, ValueForm
 from taskweave.infrastructure.storage import uid
 
@@ -51,6 +51,17 @@ class VariablesTests(unittest.TestCase):
         form.apply_defaults({'url':'new-url','code':'new-code'})
         self.assertEqual(url.value,'new-url')
         self.assertEqual(code.value,'edited-code')
+
+    def test_value_form_rejects_empty_required_string(self):
+        form = object.__new__(ValueForm)
+        form.schema = {
+            'type': 'object',
+            'properties': {'url': {'type': 'string'}},
+            'required': ['url'],
+        }
+        form.controls = {'url': ('string', SimpleNamespace(value=''))}
+        with self.assertRaisesRegex(TaskError, 'url 为必录项'):
+            form.values()
 
     def test_input_precedence_and_closed_schema(self):
         schema={'type':'object','properties':{'x':{'type':'string'}},'additionalProperties':False}

@@ -1,0 +1,1780 @@
+{
+  "playwright": {
+    "manifest": {
+      "id": "playwright",
+      "api_version": 1,
+      "package_version": "0.3.0",
+      "core_requires": ">=0.1,<1",
+      "dependencies": {},
+      "resource_descriptions": {
+        "playwright.session": "浏览器、页面及浏览器上下文"
+      },
+      "context_requests": {
+        "playwright.page": {
+          "type": "object",
+          "x-taskweave-context-targets": {
+            "selector_label": "上下文实例 / 页面",
+            "parameter_mode_label": "新建页面",
+            "auto_select_single": true,
+            "hide_parameters_when_selected": true,
+            "keep_parameters_when_selected": [
+              "scope"
+            ]
+          },
+          "properties": {
+            "url": {
+              "type": "string",
+              "description": "可选；首次采集时打开的 HTTP/HTTPS 地址，后续留空以采集当前页面"
+            },
+            "role": {
+              "type": "string",
+              "default": "operator",
+              "description": "需要持续复用的浏览器角色"
+            },
+            "scope": {
+              "type": "string",
+              "enum": [
+                "viewport",
+                "full_page"
+              ],
+              "default": "full_page",
+              "description": "采集当前可见区域或整个页面"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false,
+          "x-taskweave-context-surface-defaults": {
+            "planning": {
+              "scope": "viewport"
+            }
+          },
+          "x-taskweave-context-view": {
+            "default": true
+          }
+        }
+      },
+      "config_variables": [
+        {
+          "key": "playwright_headless",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "description": "是否无头执行；任务参数优先，环境变量备选。"
+        },
+        {
+          "key": "playwright_timeout_ms",
+          "type": "number",
+          "default": 10000,
+          "required": false,
+          "description": "页面动作超时，毫秒。"
+        },
+        {
+          "key": "playwright_role",
+          "type": "string",
+          "default": "operator",
+          "required": false,
+          "description": "默认浏览器角色；动作显式 role 优先。"
+        },
+        {
+          "key": "playwright_executable_path",
+          "type": "string",
+          "required": false,
+          "description": "自定义匹配 Chromium 路径，通常无需设置。"
+        },
+        {
+          "key": "playwright_locale",
+          "type": "string",
+          "default": "zh-CN",
+          "required": false,
+          "description": "BrowserContext 语言区域，新建浏览器上下文时应用；不通过页面操作切换语言。"
+        }
+      ]
+    },
+    "actions": [
+      {
+        "id": "playwright.page_open",
+        "description": "Navigate to URL",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "null"
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_title",
+        "description": "Read current page title",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_text",
+        "description": "Read locator text",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "css",
+                        "role",
+                        "label",
+                        "placeholder"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exact": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_fill",
+        "description": "Fill an input",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "css",
+                        "role",
+                        "label",
+                        "placeholder"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exact": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "selector",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "null"
+        },
+        "effect": "WRITE",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_click",
+        "description": "Click an element; may submit business",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "css",
+                        "role",
+                        "label",
+                        "placeholder"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exact": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "selector"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "null"
+        },
+        "effect": "WRITE",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_press",
+        "description": "Press a key on a uniquely located control; for example Enter after filling a search box",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "css",
+                        "role",
+                        "label",
+                        "placeholder"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exact": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "key": {
+              "enum": [
+                "Enter",
+                "Tab",
+                "Escape",
+                "ArrowDown",
+                "ArrowUp",
+                "Space"
+              ]
+            }
+          },
+          "required": [
+            "selector",
+            "key"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "null"
+        },
+        "effect": "WRITE",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_select_option",
+        "description": "Select one native HTML select option by observed value or label",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "css",
+                        "role",
+                        "label",
+                        "placeholder"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exact": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "option": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "properties": {
+                    "value": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "value"
+                  ],
+                  "additionalProperties": false
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "label": {
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "label"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "selector",
+            "option"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "null"
+        },
+        "effect": "WRITE",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_wait",
+        "description": "Wait for locator state",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "css",
+                        "role",
+                        "label",
+                        "placeholder"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exact": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "state": {
+              "enum": [
+                "attached",
+                "detached",
+                "visible",
+                "hidden"
+              ]
+            }
+          },
+          "required": [
+            "selector"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "null"
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_assert_text",
+        "description": "Assert business text",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "css",
+                        "role",
+                        "label",
+                        "placeholder"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exact": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "selector",
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "matched": {
+              "const": true
+            }
+          },
+          "required": [
+            "matched"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_screenshot",
+        "description": "Capture PNG into task artifact",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "staged_file": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "staged_file"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_download",
+        "description": "Download by clicking",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "css",
+                        "role",
+                        "label",
+                        "placeholder"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exact": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "selector"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "staged_file": {
+              "type": "string"
+            },
+            "suggested_filename": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "staged_file",
+            "suggested_filename"
+          ]
+        },
+        "effect": "WRITE",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_inspect",
+        "description": "Observe title and interactive element descriptions",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "url": {
+              "type": "string"
+            },
+            "captured_at": {
+              "type": "string"
+            },
+            "elements": {
+              "type": "array"
+            },
+            "frames": {
+              "type": "array"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "role": {
+              "type": "string"
+            },
+            "task_id": {
+              "type": "string"
+            },
+            "run_id": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "title",
+            "url",
+            "captured_at",
+            "elements",
+            "frames",
+            "truncated"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_handoff",
+        "description": "Bring browser forward for manual interaction; pause task separately",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string"
+            },
+            "ready": {
+              "const": true
+            }
+          },
+          "required": [
+            "role",
+            "ready"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_element_image",
+        "description": "Read a visible uniquely located element as PNG Base64, for local image-processing plugins",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "css",
+                        "role",
+                        "label",
+                        "placeholder"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exact": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "selector"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "image_base64": {
+              "type": "string"
+            },
+            "mime_type": {
+              "const": "image/png"
+            }
+          },
+          "required": [
+            "image_base64",
+            "mime_type"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_input_value",
+        "description": "Read the actual value of an input, textarea or select; never use page_text for values",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "css",
+                        "role",
+                        "label",
+                        "placeholder"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exact": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            }
+          },
+          "required": [
+            "selector"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "value"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_assert_value",
+        "description": "Wait until the control value equals the expected value",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "selector": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "object",
+                  "properties": {
+                    "kind": {
+                      "enum": [
+                        "css",
+                        "role",
+                        "label",
+                        "placeholder"
+                      ]
+                    },
+                    "value": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "name": {
+                      "type": "string"
+                    },
+                    "frame": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "exact": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "kind",
+                    "value"
+                  ],
+                  "additionalProperties": false
+                }
+              ]
+            },
+            "value": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "selector",
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "matched": {
+              "const": true
+            }
+          },
+          "required": [
+            "matched"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_assert_title",
+        "description": "Wait until page title contains expected text",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "text": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "text"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "matched": {
+              "const": true
+            }
+          },
+          "required": [
+            "matched"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      },
+      {
+        "id": "playwright.page_assert_url",
+        "description": "Wait for a URL glob such as **/search?**; credentials must not be in URL",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "role": {
+              "type": "string",
+              "minLength": 1
+            },
+            "url": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "url"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "matched": {
+              "const": true
+            }
+          },
+          "required": [
+            "matched"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "playwright.session"
+        ]
+      }
+    ]
+  },
+  "ocr": {
+    "manifest": {
+      "id": "ocr",
+      "api_version": 1,
+      "package_version": "0.1.0",
+      "core_requires": ">=0.1,<1",
+      "dependencies": {},
+      "resource_descriptions": {
+        "ocr.engine": "本地 OCR 模型及识别线程"
+      },
+      "config_variables": [
+        {
+          "key": "ocr_beta",
+          "type": "boolean",
+          "default": false,
+          "required": false,
+          "description": "使用备选本地模型；不影响其他任务。"
+        }
+      ]
+    },
+    "actions": [
+      {
+        "id": "ocr.recognize",
+        "description": "本地识别普通图片文字验证码（无网络、无 API Key）",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "image_base64": {
+              "type": "string",
+              "maxLength": 1400000
+            },
+            "expected_length": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 16
+            }
+          },
+          "required": [
+            "image_base64"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "text": {
+              "type": "string"
+            },
+            "engine": {
+              "const": "ddddocr"
+            },
+            "needs_verification": {
+              "const": true
+            }
+          },
+          "required": [
+            "text",
+            "engine",
+            "needs_verification"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": [
+          "ocr.engine"
+        ]
+      }
+    ]
+  },
+  "tidb": {
+    "manifest": {
+      "id": "tidb",
+      "api_version": 1,
+      "package_version": "0.1.0",
+      "core_requires": ">=0.1,<1",
+      "context_requests": {
+        "tidb.schema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string"
+            },
+            "database": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "table"
+          ],
+          "x-taskweave-context-view": {
+            "default": true
+          }
+        }
+      },
+      "config_variables": [
+        {
+          "key": "tidb_connection_url",
+          "type": "string",
+          "required": false,
+          "description": "可选 mysql://账号:密码@主机:4000/数据库；也可分项配置"
+        },
+        {
+          "key": "tidb_host",
+          "type": "string",
+          "required": false,
+          "description": "数据库主机；不用连接串时必填"
+        },
+        {
+          "key": "tidb_port",
+          "type": "integer",
+          "required": false,
+          "description": "端口，默认 4000"
+        },
+        {
+          "key": "tidb_database",
+          "type": "string",
+          "required": false,
+          "description": "数据库名称；不用连接串时必填"
+        },
+        {
+          "key": "tidb_username",
+          "type": "string",
+          "required": false,
+          "description": "数据库账号；不用连接串时必填"
+        },
+        {
+          "key": "tidb_password",
+          "type": "string",
+          "required": false,
+          "description": "数据库密码，本地变量配置"
+        },
+        {
+          "key": "tidb_tls",
+          "type": "boolean",
+          "required": false,
+          "description": "TLS，默认 true；本地未启用 TLS 的数据库可设置 false"
+        },
+        {
+          "key": "tidb_ssl_ca",
+          "type": "string",
+          "required": false,
+          "description": "可选 CA 证书路径"
+        },
+        {
+          "key": "tidb_timeout_seconds",
+          "type": "integer",
+          "required": false,
+          "description": "连接及读写超时，默认 15 秒，最大 60"
+        },
+        {
+          "key": "tidb_max_rows",
+          "type": "integer",
+          "required": false,
+          "description": "最多保存行数，默认 1000，最大 10000"
+        }
+      ]
+    },
+    "actions": [
+      {
+        "id": "tidb.query",
+        "description": "参数化只读查询，返回可展示的表格和查询信息",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sql": {
+              "type": "string",
+              "minLength": 1
+            },
+            "params": {
+              "type": "array"
+            },
+            "title": {
+              "type": "string"
+            },
+            "max_rows": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 10000
+            }
+          },
+          "required": [
+            "sql"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "label"
+                ]
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "row_count": {
+              "type": "integer"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "query_info": {
+              "type": "object",
+              "properties": {
+                "sql": {
+                  "type": "string"
+                },
+                "parameter_count": {
+                  "type": "integer"
+                },
+                "database": {
+                  "type": "string"
+                },
+                "elapsed_ms": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "sql",
+                "parameter_count",
+                "database",
+                "elapsed_ms"
+              ]
+            }
+          },
+          "required": [
+            "title",
+            "columns",
+            "rows",
+            "row_count",
+            "truncated",
+            "query_info"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 65000,
+        "retry_safe": true,
+        "resource_ids": []
+      },
+      {
+        "id": "tidb.describe_table",
+        "description": "读取表字段、类型、默认值与注释",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "table": {
+              "type": "string",
+              "minLength": 1
+            },
+            "database": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "table"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "label"
+                ]
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "row_count": {
+              "type": "integer"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "query_info": {
+              "type": "object",
+              "properties": {
+                "sql": {
+                  "type": "string"
+                },
+                "parameter_count": {
+                  "type": "integer"
+                },
+                "database": {
+                  "type": "string"
+                },
+                "elapsed_ms": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "sql",
+                "parameter_count",
+                "database",
+                "elapsed_ms"
+              ]
+            }
+          },
+          "required": [
+            "title",
+            "columns",
+            "rows",
+            "row_count",
+            "truncated",
+            "query_info"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 65000,
+        "retry_safe": true,
+        "resource_ids": []
+      },
+      {
+        "id": "tidb.test_connection",
+        "description": "测试数据库连接，返回版本与当前数据库",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "title": {
+              "type": "string"
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "type": "string"
+                  },
+                  "label": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "key",
+                  "label"
+                ]
+              }
+            },
+            "rows": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            },
+            "row_count": {
+              "type": "integer"
+            },
+            "truncated": {
+              "type": "boolean"
+            },
+            "query_info": {
+              "type": "object",
+              "properties": {
+                "sql": {
+                  "type": "string"
+                },
+                "parameter_count": {
+                  "type": "integer"
+                },
+                "database": {
+                  "type": "string"
+                },
+                "elapsed_ms": {
+                  "type": "number"
+                }
+              },
+              "required": [
+                "sql",
+                "parameter_count",
+                "database",
+                "elapsed_ms"
+              ]
+            }
+          },
+          "required": [
+            "title",
+            "columns",
+            "rows",
+            "row_count",
+            "truncated",
+            "query_info"
+          ]
+        },
+        "effect": "READ",
+        "timeout_ms": 65000,
+        "retry_safe": true,
+        "resource_ids": []
+      }
+    ]
+  },
+  "utility": {
+    "manifest": {
+      "id": "utility",
+      "api_version": 1,
+      "package_version": "0.1.0",
+      "core_requires": ">=0.1,<1",
+      "dependencies": {},
+      "resource_descriptions": {},
+      "config_variables": []
+    },
+    "actions": [
+      {
+        "id": "utility.now",
+        "description": "读取当前时间并按指定时区返回 ISO 时间与秒级编号片段",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "timezone": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 64
+            }
+          },
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "iso": {
+              "type": "string"
+            },
+            "compact": {
+              "type": "string",
+              "pattern": "^[0-9]{14}$"
+            },
+            "timezone": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "iso",
+            "compact",
+            "timezone"
+          ],
+          "additionalProperties": false
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": []
+      },
+      {
+        "id": "utility.uuid",
+        "description": "生成 UUID v4 标识",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "format": "uuid"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": false,
+        "resource_ids": []
+      },
+      {
+        "id": "utility.decimal",
+        "description": "精确十进制四则运算，按指定小数位舍入并返回字符串",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "operation": {
+              "enum": [
+                "add",
+                "subtract",
+                "multiply",
+                "divide"
+              ]
+            },
+            "left": {
+              "type": "string",
+              "pattern": "^-?[0-9]{1,30}(?:\\.[0-9]{1,18})?$"
+            },
+            "right": {
+              "type": "string",
+              "pattern": "^-?[0-9]{1,30}(?:\\.[0-9]{1,18})?$"
+            },
+            "scale": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 12
+            },
+            "rounding": {
+              "enum": [
+                "HALF_UP",
+                "HALF_EVEN",
+                "DOWN"
+              ]
+            }
+          },
+          "required": [
+            "operation",
+            "left",
+            "right",
+            "scale"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "pattern": "^-?[0-9]{1,64}(?:\\.[0-9]{1,12})?$"
+            }
+          },
+          "required": [
+            "value"
+          ],
+          "additionalProperties": false
+        },
+        "effect": "READ",
+        "timeout_ms": 30000,
+        "retry_safe": true,
+        "resource_ids": []
+      }
+    ]
+  }
+}

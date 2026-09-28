@@ -1,0 +1,3289 @@
+{
+  "scope": "All desktop Python files; UI controls and controller operations are evidence, not proof of product behavior",
+  "files": [
+    {
+      "path": "src/taskweave/desktop/__init__.py",
+      "sha256": "46e44e31ced61ef18102fa7011d59ac99ecbaef568eba57d017779489c50156f"
+    },
+    {
+      "path": "src/taskweave/desktop/chat.py",
+      "sha256": "53cf133232caf91f304e10f74a206e746be50a09d36029b6f37c78798463626b"
+    },
+    {
+      "path": "src/taskweave/desktop/components/__init__.py",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "src/taskweave/desktop/components/execution_details.py",
+      "sha256": "198bf033c1e25b9607cd3c4e57bc12e3e82f20ce60e20f8a84f56ce621ecb235"
+    },
+    {
+      "path": "src/taskweave/desktop/components/result_viewer.py",
+      "sha256": "0d3b9e30b14efe712c56cf5331e50e903bd4b80abe71e7ca99c6bc97c52c5275"
+    },
+    {
+      "path": "src/taskweave/desktop/components/run_inputs.py",
+      "sha256": "4182edc2ce30a3d48e00e443f304f406b18c22665c2d6252e5f98e9496a1d931"
+    },
+    {
+      "path": "src/taskweave/desktop/components/step_ai.py",
+      "sha256": "f1cb8a864151fa3b998fc2da02912bac7df90bee6562d644e6bb529f1af340e0"
+    },
+    {
+      "path": "src/taskweave/desktop/components/step_contexts.py",
+      "sha256": "7ce5da278a127e9b87cb7975b9eefd020caaaa0b86962e1dca6931e5be27146f"
+    },
+    {
+      "path": "src/taskweave/desktop/components/step_debug.py",
+      "sha256": "6f6e9b1c778a349b904c982a1cba5c40517dc44284224f626b723ca6c85058a7"
+    },
+    {
+      "path": "src/taskweave/desktop/components/step_editor.py",
+      "sha256": "dad9ce47cbd0a7d0a106ac1876df6a6d24b485b5b3834ef35fcf6f17675e249f"
+    },
+    {
+      "path": "src/taskweave/desktop/components/step_list.py",
+      "sha256": "c6acbefcbf720399686da603ecea7ef8607f0b460f7f1929afecfbd8703affb8"
+    },
+    {
+      "path": "src/taskweave/desktop/components/trial_inputs.py",
+      "sha256": "8b54799bb516ebb9e0c252c640a253a68a973db89e9cc1b99aae50cee8555d97"
+    },
+    {
+      "path": "src/taskweave/desktop/contexts.py",
+      "sha256": "74279caec1cd364956e6327b3c03bb3e8967125a720093ced6f6e13112c497d8"
+    },
+    {
+      "path": "src/taskweave/desktop/controller.py",
+      "sha256": "7ef36255001caacea7a0b047fc7a82987bf0cf73f5e4ac718482f6dd623ab90d"
+    },
+    {
+      "path": "src/taskweave/desktop/dependencies.py",
+      "sha256": "fc23098eb2c945cba28d3004929848ef1a8a8ddd58a1b124fa0cd5992bf03d9d"
+    },
+    {
+      "path": "src/taskweave/desktop/display.py",
+      "sha256": "c3d50b7cbf0f974e38d7c04ba5427aef21f172d40ac2dae9c6cf60acb584e1a0"
+    },
+    {
+      "path": "src/taskweave/desktop/forms.py",
+      "sha256": "b3b57e7ce9ffb707896ade5afe98aafed581c48b48f49f289a165c88b32a6772"
+    },
+    {
+      "path": "src/taskweave/desktop/launcher.py",
+      "sha256": "01bd25260410cde1f9dde467d0aa5adab7a16926f4a1dd624bb0238a3004357f"
+    },
+    {
+      "path": "src/taskweave/desktop/pages/__init__.py",
+      "sha256": "a2a1de1faa7190e5cbfad88f5fec0525e0a62c48689bc34ee1c74c4dd744f4fb"
+    },
+    {
+      "path": "src/taskweave/desktop/pages/base.py",
+      "sha256": "c30cc4dcb4ea55c81d96f34f31fd96277bea65d5a1f4b84175ca8c8c9c43eab7"
+    },
+    {
+      "path": "src/taskweave/desktop/pages/environments.py",
+      "sha256": "f57fd6602b50abd20333f36fbc782d7445a242600b7f0df942e5038af3c5b927"
+    },
+    {
+      "path": "src/taskweave/desktop/pages/executions.py",
+      "sha256": "d1635095c09d328266a4ad8b8b68a6ed4fa59e1e212039562d4cbe1f1c5b3b71"
+    },
+    {
+      "path": "src/taskweave/desktop/pages/history.py",
+      "sha256": "6b1ed80164f195832ab1db717e47f8c2a8afd3275c4713fc115683b0deedde8d"
+    },
+    {
+      "path": "src/taskweave/desktop/pages/marketplace.py",
+      "sha256": "4584b3cce011ea22453ec8dc4173e954300e7f39be93a4ff4b5c140a13697ee7"
+    },
+    {
+      "path": "src/taskweave/desktop/pages/plugins.py",
+      "sha256": "e392d4bd3064b08b15f9bb2a077d055b9060a3da490ee8f6462bdb46f77a8f90"
+    },
+    {
+      "path": "src/taskweave/desktop/pages/settings.py",
+      "sha256": "7c69e7d0161f82932d30c14ee701e2ac3141a5c9f6926eb49685de044dfca9f8"
+    },
+    {
+      "path": "src/taskweave/desktop/pages/tasks.py",
+      "sha256": "1b40ebe9bc4f20a1143a023c2c7ccc6fa231b1013422a88b69a49f2ed7755cf0"
+    },
+    {
+      "path": "src/taskweave/desktop/planning.py",
+      "sha256": "7241d9e6e71e3efd21c9b7aa486368c4ae00ba354ef314b81689b249f2694f43"
+    },
+    {
+      "path": "src/taskweave/desktop/security.py",
+      "sha256": "4ca3bc7ebc798a00f3bab2e4d794526883c2ad2d0b1c68176e87a00f9abd12d7"
+    },
+    {
+      "path": "src/taskweave/desktop/server_logs.py",
+      "sha256": "6ebb2f5b91ce9851eea6858a77579fd4a306893fe0c066868122e089ec63c50b"
+    },
+    {
+      "path": "src/taskweave/desktop/state.py",
+      "sha256": "d763953e46508cf31e08dc1b44ac988d6abb9793dac41f8e2dbdda57734c8925"
+    },
+    {
+      "path": "src/taskweave/desktop/theme.py",
+      "sha256": "edfe6c630bdcae74603607ceeb04c4504f7ef47e2a633d7957a0baea8db1ad06"
+    },
+    {
+      "path": "src/taskweave/desktop/workbench.py",
+      "sha256": "11be5f9d281d77696e9a7deab47b7521470be7cc8947e8254dbd33a7004ca17b"
+    }
+  ],
+  "entries": [
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 65,
+      "control": "call",
+      "label_or_operation": "'run.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 75,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 85,
+      "control": "call",
+      "label_or_operation": "'environment.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 88,
+      "control": "call",
+      "label_or_operation": "'task.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 118,
+      "control": "button",
+      "label_or_operation": "'执行历史'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 121,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 147,
+      "control": "button",
+      "label_or_operation": "'结束执行'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 151,
+      "control": "button",
+      "label_or_operation": "'暂停'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 129,
+      "control": "button",
+      "label_or_operation": "f\"{index + 1}. {step['name']}\""
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 135,
+      "control": "button",
+      "label_or_operation": "''"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 138,
+      "control": "button",
+      "label_or_operation": "''"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "render_rows",
+      "line": 119,
+      "control": "button",
+      "label_or_operation": "''"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 168,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 210,
+      "control": "button",
+      "label_or_operation": "'收起详情'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 296,
+      "control": "call",
+      "label_or_operation": "'run.events'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 230,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 295,
+      "control": "expansion",
+      "label_or_operation": "'运行日志'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 242,
+      "control": "expansion",
+      "label_or_operation": "step['name'] + ' · ' + (STATUS[latest['status']] if latest else '待执行')"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 251,
+      "control": "button",
+      "label_or_operation": "'查看结果'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 263,
+      "control": "tab",
+      "label_or_operation": "'有效输入'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 264,
+      "control": "tab",
+      "label_or_operation": "'输出'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 265,
+      "control": "tab",
+      "label_or_operation": "'错误 / 核对'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 253,
+      "control": "button",
+      "label_or_operation": "'查看错误'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "refresh",
+      "line": 291,
+      "control": "button",
+      "label_or_operation": "'核对外部业务结果'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "delete",
+      "line": 104,
+      "control": "call",
+      "label_or_operation": "'run.delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "delete",
+      "line": 101,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "delete",
+      "line": 102,
+      "control": "button",
+      "label_or_operation": "'确认删除执行'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "end",
+      "line": 144,
+      "control": "call",
+      "label_or_operation": "'run.control'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/execution_details.py",
+      "function": "pause",
+      "line": 150,
+      "control": "call",
+      "label_or_operation": "'run.control'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/result_viewer.py",
+      "function": "step_result_dialog",
+      "line": 19,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/result_viewer.py",
+      "function": "step_result_dialog",
+      "line": 26,
+      "control": "call",
+      "label_or_operation": "'result.read'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/result_viewer.py",
+      "function": "step_result_dialog",
+      "line": 40,
+      "control": "tab",
+      "label_or_operation": "'原始数据'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/result_viewer.py",
+      "function": "step_result_dialog",
+      "line": 54,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/result_viewer.py",
+      "function": "step_result_dialog",
+      "line": 39,
+      "control": "tab",
+      "label_or_operation": "v['title']"
+    },
+    {
+      "source": "src/taskweave/desktop/components/result_viewer.py",
+      "function": "render_result_view",
+      "line": 74,
+      "control": "tab",
+      "label_or_operation": "table['title']"
+    },
+    {
+      "source": "src/taskweave/desktop/components/result_viewer.py",
+      "function": "render_result_view",
+      "line": 80,
+      "control": "expansion",
+      "label_or_operation": "'查询信息'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/result_viewer.py",
+      "function": "result_dialog",
+      "line": 101,
+      "control": "call",
+      "label_or_operation": "'result.read'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/result_viewer.py",
+      "function": "result_dialog",
+      "line": 130,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/result_viewer.py",
+      "function": "result_dialog",
+      "line": 119,
+      "control": "button",
+      "label_or_operation": "'打开文件'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/result_viewer.py",
+      "function": "result_dialog",
+      "line": 122,
+      "control": "button",
+      "label_or_operation": "'打开所在位置'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/run_inputs.py",
+      "function": "resume_inputs",
+      "line": 68,
+      "control": "call",
+      "label_or_operation": "'run.inputs'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/run_inputs.py",
+      "function": "resume_inputs",
+      "line": 77,
+      "control": "call",
+      "label_or_operation": "'run.start'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/run_inputs.py",
+      "function": "show",
+      "line": 164,
+      "control": "button",
+      "label_or_operation": "'补充必录参数'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/run_inputs.py",
+      "function": "show",
+      "line": 100,
+      "control": "button",
+      "label_or_operation": "'补充必录参数'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/run_inputs.py",
+      "function": "show",
+      "line": 147,
+      "control": "button",
+      "label_or_operation": "'提交输入并继续'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/run_inputs.py",
+      "function": "show",
+      "line": 148,
+      "control": "button",
+      "label_or_operation": "'稍后填写'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "choose_generation_mode",
+      "line": 24,
+      "control": "button",
+      "label_or_operation": "'使用 API'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "choose_generation_mode",
+      "line": 25,
+      "control": "button",
+      "label_or_operation": "'使用 Chat 网页'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "choose_generation_mode",
+      "line": 26,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "choose_repair_mode",
+      "line": 43,
+      "control": "checkbox",
+      "label_or_operation": "'精简重复静态字段'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "choose_repair_mode",
+      "line": 42,
+      "control": "select",
+      "label_or_operation": "{-1: '全部历史', 0: '不带历史', **{i: f'最近 {i} 轮' for i in range(1, 11)}}"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "choose_repair_mode",
+      "line": 44,
+      "control": "textarea",
+      "label_or_operation": "'本轮补充说明（可编辑）'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "choose_repair_mode",
+      "line": 47,
+      "control": "button",
+      "label_or_operation": "'API 修复'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "choose_repair_mode",
+      "line": 48,
+      "control": "button",
+      "label_or_operation": "'Chat 网页修复'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "choose_repair_mode",
+      "line": 49,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "confirm_step",
+      "line": 92,
+      "control": "call",
+      "label_or_operation": "'step.confirm.manual'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "confirm_step",
+      "line": 89,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "confirm_step",
+      "line": 90,
+      "control": "button",
+      "label_or_operation": "'确认验证通过并保存'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_content",
+      "line": 161,
+      "control": "call",
+      "label_or_operation": "'step.generate'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_content",
+      "line": 125,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_content",
+      "line": 145,
+      "control": "call",
+      "label_or_operation": "'context.ai'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "present_content_candidate",
+      "line": 206,
+      "control": "button",
+      "label_or_operation": "'采纳到编辑器'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "present_content_candidate",
+      "line": 207,
+      "control": "button",
+      "label_or_operation": "'舍弃'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "web_chat_dialog",
+      "line": 224,
+      "control": "button",
+      "label_or_operation": "'复制对话内容'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "web_chat_dialog",
+      "line": 291,
+      "control": "button",
+      "label_or_operation": "'解析并预览'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "web_chat_dialog",
+      "line": 292,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "web_chat_dialog",
+      "line": 220,
+      "control": "textarea",
+      "label_or_operation": "'复制到网页 AI 的内容'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "web_chat_dialog",
+      "line": 225,
+      "control": "textarea",
+      "label_or_operation": "'粘贴网页 AI 回复'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_goal_dialog",
+      "line": 320,
+      "control": "call",
+      "label_or_operation": "'step.generate_goal'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_goal_dialog",
+      "line": 317,
+      "control": "call",
+      "label_or_operation": "'context.ai'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_goal_dialog",
+      "line": 340,
+      "control": "button",
+      "label_or_operation": "'复制对话内容'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_goal_dialog",
+      "line": 341,
+      "control": "button",
+      "label_or_operation": "'解析并预览'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_goal_dialog",
+      "line": 310,
+      "control": "button",
+      "label_or_operation": "'使用 API'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_goal_dialog",
+      "line": 311,
+      "control": "button",
+      "label_or_operation": "'使用 Chat 网页'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_goal_dialog",
+      "line": 312,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_goal_dialog",
+      "line": 305,
+      "control": "textarea",
+      "label_or_operation": "'你想让这个步骤完成什么'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_goal_dialog",
+      "line": 342,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_goal_dialog",
+      "line": 331,
+      "control": "textarea",
+      "label_or_operation": "'复制到网页 AI'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "generate_goal_dialog",
+      "line": 332,
+      "control": "textarea",
+      "label_or_operation": "'粘贴网页回复'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "preview_goal",
+      "line": 374,
+      "control": "button",
+      "label_or_operation": "'采纳步骤描述'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "preview_goal",
+      "line": 375,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "preview_reply",
+      "line": 228,
+      "control": "call",
+      "label_or_operation": "'step.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "preview_reply",
+      "line": 287,
+      "control": "button",
+      "label_or_operation": "'采纳到编辑器'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "preview_reply",
+      "line": 288,
+      "control": "button",
+      "label_or_operation": "'返回修改粘贴内容'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "accept",
+      "line": 359,
+      "control": "call",
+      "label_or_operation": "'step.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_ai.py",
+      "function": "adopt",
+      "line": 254,
+      "control": "call",
+      "label_or_operation": "'step.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "save_batch",
+      "line": 63,
+      "control": "call",
+      "label_or_operation": "'context.save_batch'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "move_group",
+      "line": 82,
+      "control": "call",
+      "label_or_operation": "'context.reorder'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "delete_capture",
+      "line": 90,
+      "control": "call",
+      "label_or_operation": "'context.capture.delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "move_capture",
+      "line": 96,
+      "control": "call",
+      "label_or_operation": "'context.capture.reorder'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "update_capture_label",
+      "line": 102,
+      "control": "call",
+      "label_or_operation": "'context.capture.label'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "reload",
+      "line": 108,
+      "control": "call",
+      "label_or_operation": "'context.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "remove_group",
+      "line": 119,
+      "control": "call",
+      "label_or_operation": "'context.delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "preview_capture",
+      "line": 127,
+      "control": "call",
+      "label_or_operation": "'context.capture.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "preview_capture",
+      "line": 151,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 276,
+      "control": "checkbox",
+      "label_or_operation": "'同时生成预览'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 398,
+      "control": "button",
+      "label_or_operation": "'采集一项'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 196,
+      "control": "call",
+      "label_or_operation": "'context.capture.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 219,
+      "control": "call",
+      "label_or_operation": "'run.context.sessions'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 211,
+      "control": "input",
+      "label_or_operation": "'上下文名称'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 216,
+      "control": "select",
+      "label_or_operation": "ids"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 225,
+      "control": "select",
+      "label_or_operation": "run_options"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 210,
+      "control": "button",
+      "label_or_operation": "'close'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 282,
+      "control": "expansion",
+      "label_or_operation": "'高级参数 JSON（可选）'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 283,
+      "control": "textarea",
+      "label_or_operation": "'JSON 对象'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 401,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 402,
+      "control": "button",
+      "label_or_operation": "'确认保存'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 212,
+      "control": "textarea",
+      "label_or_operation": "'操作说明（可选）'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "save",
+      "line": 164,
+      "control": "call",
+      "label_or_operation": "'context.group.update'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "load_targets",
+      "line": 247,
+      "control": "call",
+      "label_or_operation": "'context.targets'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "preview_item",
+      "line": 289,
+      "control": "call",
+      "label_or_operation": "'context.capture.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "preview_item",
+      "line": 307,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "render_staged",
+      "line": 320,
+      "control": "button",
+      "label_or_operation": "'查看内容 / 预览'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "render_staged",
+      "line": 323,
+      "control": "button",
+      "label_or_operation": "'delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "render_staged",
+      "line": 330,
+      "control": "button",
+      "label_or_operation": "'撤销删除'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "render_staged",
+      "line": 317,
+      "control": "input",
+      "label_or_operation": "'采集项标题'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "render_staged",
+      "line": 321,
+      "control": "button",
+      "label_or_operation": "'arrow_upward'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "render_staged",
+      "line": 322,
+      "control": "button",
+      "label_or_operation": "'arrow_downward'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "collect",
+      "line": 343,
+      "control": "call",
+      "label_or_operation": "'context.read'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "confirm_discard",
+      "line": 361,
+      "control": "button",
+      "label_or_operation": "'继续编辑'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_contexts.py",
+      "function": "confirm_discard",
+      "line": 362,
+      "control": "button",
+      "label_or_operation": "'丢弃并关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "settle_trial_start",
+      "line": 61,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "start_flow_trial",
+      "line": 88,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "start_flow_trial",
+      "line": 115,
+      "control": "button",
+      "label_or_operation": "'开始调试'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "start_flow_trial",
+      "line": 96,
+      "control": "select",
+      "label_or_operation": "{step['step_id']: f\"{i + 1}. {step['name']}\" for i, step in enumerate(eligible)}"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "start_flow_trial",
+      "line": 116,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "start_trial",
+      "line": 207,
+      "control": "button",
+      "label_or_operation": "'开始调试'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "start_trial",
+      "line": 133,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "start_trial",
+      "line": 142,
+      "control": "call",
+      "label_or_operation": "'run.control'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "start_trial",
+      "line": 208,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "start_trial",
+      "line": 162,
+      "control": "button",
+      "label_or_operation": "'确认再次调试'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "start_trial",
+      "line": 163,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "refresh_trial",
+      "line": 242,
+      "control": "call",
+      "label_or_operation": "'run.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "refresh_trial",
+      "line": 248,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "refresh_trial",
+      "line": 265,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "refresh_trial",
+      "line": 281,
+      "control": "button",
+      "label_or_operation": "'打开失败步骤'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "refresh_trial",
+      "line": 301,
+      "control": "call",
+      "label_or_operation": "'run.events'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "refresh_trial",
+      "line": 278,
+      "control": "button",
+      "label_or_operation": "'查看结果'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "refresh_trial",
+      "line": 273,
+      "control": "call",
+      "label_or_operation": "'run.output'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "refresh_trial",
+      "line": 288,
+      "control": "expansion",
+      "label_or_operation": "'本次报错上下文'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "refresh_trial",
+      "line": 293,
+      "control": "expansion",
+      "label_or_operation": "title"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "refresh_trial",
+      "line": 299,
+      "control": "button",
+      "label_or_operation": "'delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "render_actions",
+      "line": 333,
+      "control": "button",
+      "label_or_operation": "'调试当前步骤'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "render_actions",
+      "line": 334,
+      "control": "button",
+      "label_or_operation": "'从选定步骤调试'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "render_actions",
+      "line": 335,
+      "control": "button",
+      "label_or_operation": "'结束调试'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "end",
+      "line": 364,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "end",
+      "line": 372,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "end",
+      "line": 384,
+      "control": "call",
+      "label_or_operation": "'run.control'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "end",
+      "line": 388,
+      "control": "call",
+      "label_or_operation": "'run.control'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "sync_end",
+      "line": 325,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_debug.py",
+      "function": "launch",
+      "line": 102,
+      "control": "call",
+      "label_or_operation": "'step.trial.flow'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "mark_step_pending",
+      "line": 116,
+      "control": "call",
+      "label_or_operation": "'step.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 193,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 208,
+      "control": "button",
+      "label_or_operation": "'添加步骤'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 216,
+      "control": "call",
+      "label_or_operation": "'context.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 218,
+      "control": "call",
+      "label_or_operation": "'capabilities'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 242,
+      "control": "tab",
+      "label_or_operation": "'步骤详情'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 243,
+      "control": "tab",
+      "label_or_operation": "'动作表单'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 244,
+      "control": "tab",
+      "label_or_operation": "'输入依赖'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 245,
+      "control": "tab",
+      "label_or_operation": "'时间设置'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 359,
+      "control": "button",
+      "label_or_operation": "'插入到步骤内容'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 493,
+      "control": "button",
+      "label_or_operation": "'保存步骤设置'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 256,
+      "control": "button",
+      "label_or_operation": "'AI 生成步骤描述'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 289,
+      "control": "button",
+      "label_or_operation": "'AI 生成内容'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 291,
+      "control": "button",
+      "label_or_operation": "'采集插件上下文'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 310,
+      "control": "button",
+      "label_or_operation": "'校验内容'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 311,
+      "control": "button",
+      "label_or_operation": "'确认验证并保存'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 251,
+      "control": "input",
+      "label_or_operation": "'步骤名称'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 314,
+      "control": "select",
+      "label_or_operation": "list(actions)"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 465,
+      "control": "button",
+      "label_or_operation": "'添加绑定'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 472,
+      "control": "number",
+      "label_or_operation": "'上一步成功后等待（秒）'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 486,
+      "control": "number",
+      "label_or_operation": "'步骤执行超时（秒，不包含间隔）'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 525,
+      "control": "button",
+      "label_or_operation": "'AI 修复'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 527,
+      "control": "button",
+      "label_or_operation": "'清空 AI 修复上下文'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 503,
+      "control": "textarea",
+      "label_or_operation": "'AI 补充说明（可选）'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 257,
+      "control": "textarea",
+      "label_or_operation": ""
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 261,
+      "control": "textarea",
+      "label_or_operation": "'步骤补充说明'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 279,
+      "control": "select",
+      "label_or_operation": "options"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "render",
+      "line": 494,
+      "control": "button",
+      "label_or_operation": "'chevron_left'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "add_first",
+      "line": 197,
+      "control": "call",
+      "label_or_operation": "'step.save'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "add_binding",
+      "line": 379,
+      "control": "input",
+      "label_or_operation": "'步骤输入名称'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "add_binding",
+      "line": 380,
+      "control": "select",
+      "label_or_operation": "{'literal': '固定值', 'step': '前序结果', 'task': '任务参数', 'environment': '环境配置'}"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "add_binding",
+      "line": 390,
+      "control": "input",
+      "label_or_operation": "'固定值（文本或 JSON 值）'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "add_binding",
+      "line": 402,
+      "control": "input",
+      "label_or_operation": "'结果容器（通常为 data）'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "add_binding",
+      "line": 459,
+      "control": "button",
+      "label_or_operation": "'移除此绑定'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "add_binding",
+      "line": 397,
+      "control": "select",
+      "label_or_operation": "previous"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "add_binding",
+      "line": 405,
+      "control": "select",
+      "label_or_operation": "{ref.get('pointer', ''): ref.get('pointer', '') or '全部结果'}"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_editor.py",
+      "function": "lint",
+      "line": 301,
+      "control": "call",
+      "label_or_operation": "'step.validate'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "render",
+      "line": 42,
+      "control": "button",
+      "label_or_operation": "f\"{index + 1}. {step['name']}\""
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "render",
+      "line": 81,
+      "control": "button",
+      "label_or_operation": "'+'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "render",
+      "line": 127,
+      "control": "button",
+      "label_or_operation": "'−'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "render",
+      "line": 154,
+      "control": "button",
+      "label_or_operation": "'✓'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "render",
+      "line": 107,
+      "control": "button",
+      "label_or_operation": "'↑' if delta < 0 else '↓'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "add",
+      "line": 64,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "add",
+      "line": 72,
+      "control": "call",
+      "label_or_operation": "'step.save'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "delete",
+      "line": 119,
+      "control": "call",
+      "label_or_operation": "'step.delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "delete",
+      "line": 113,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "delete",
+      "line": 114,
+      "control": "button",
+      "label_or_operation": "'移除'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "confirm_all",
+      "line": 133,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "confirm_all",
+      "line": 136,
+      "control": "call",
+      "label_or_operation": "'step.validate'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "confirm_all",
+      "line": 147,
+      "control": "call",
+      "label_or_operation": "'step.confirm.manual'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "reorder",
+      "line": 88,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/step_list.py",
+      "function": "reorder",
+      "line": 98,
+      "control": "call",
+      "label_or_operation": "'step.reorder'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/trial_inputs.py",
+      "function": "render",
+      "line": 87,
+      "control": "call",
+      "label_or_operation": "'task.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/trial_inputs.py",
+      "function": "render_environment",
+      "line": 96,
+      "control": "call",
+      "label_or_operation": "'environment.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/trial_inputs.py",
+      "function": "render_environment",
+      "line": 107,
+      "control": "expansion",
+      "label_or_operation": "'环境变量 · 只读'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/trial_inputs.py",
+      "function": "render_environment",
+      "line": 115,
+      "control": "expansion",
+      "label_or_operation": "'任务变量 · 本次运行输入'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/trial_inputs.py",
+      "function": "render_environment",
+      "line": 123,
+      "control": "expansion",
+      "label_or_operation": "'步骤变量与依赖 · 本次步骤输入'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/trial_inputs.py",
+      "function": "render_environment",
+      "line": 164,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/components/trial_inputs.py",
+      "function": "render_environment",
+      "line": 169,
+      "control": "call",
+      "label_or_operation": "'run.output'"
+    },
+    {
+      "source": "src/taskweave/desktop/contexts.py",
+      "function": "__init__",
+      "line": 161,
+      "control": "expansion",
+      "label_or_operation": "self.title()"
+    },
+    {
+      "source": "src/taskweave/desktop/contexts.py",
+      "function": "add",
+      "line": 182,
+      "control": "expansion",
+      "label_or_operation": "entry['name']"
+    },
+    {
+      "source": "src/taskweave/desktop/contexts.py",
+      "function": "add",
+      "line": 201,
+      "control": "button",
+      "label_or_operation": "'重新采集'"
+    },
+    {
+      "source": "src/taskweave/desktop/contexts.py",
+      "function": "add",
+      "line": 195,
+      "control": "button",
+      "label_or_operation": "'delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/contexts.py",
+      "function": "add",
+      "line": 193,
+      "control": "button",
+      "label_or_operation": "'arrow_upward'"
+    },
+    {
+      "source": "src/taskweave/desktop/contexts.py",
+      "function": "add",
+      "line": 194,
+      "control": "button",
+      "label_or_operation": "'arrow_downward'"
+    },
+    {
+      "source": "src/taskweave/desktop/contexts.py",
+      "function": "remove",
+      "line": 225,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/contexts.py",
+      "function": "remove",
+      "line": 226,
+      "control": "button",
+      "label_or_operation": "'确认删除'"
+    },
+    {
+      "source": "src/taskweave/desktop/contexts.py",
+      "function": "__init__",
+      "line": 271,
+      "control": "select",
+      "label_or_operation": "{'': self.options['parameter_mode_label']}"
+    },
+    {
+      "source": "src/taskweave/desktop/contexts.py",
+      "function": "__init__",
+      "line": 277,
+      "control": "button",
+      "label_or_operation": "'refresh'"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "_add_control",
+      "line": 30,
+      "control": "select",
+      "label_or_operation": "spec['enum']"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "_add_control",
+      "line": 32,
+      "control": "checkbox",
+      "label_or_operation": "label"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "_add_control",
+      "line": 34,
+      "control": "number",
+      "label_or_operation": "label"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "_add_control",
+      "line": 42,
+      "control": "textarea",
+      "label_or_operation": "label"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "_add_control",
+      "line": 47,
+      "control": "input",
+      "label_or_operation": "label"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "__init__",
+      "line": 110,
+      "control": "button",
+      "label_or_operation": "'添加参数'"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "add",
+      "line": 133,
+      "control": "checkbox",
+      "label_or_operation": "'必填'"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "add",
+      "line": 116,
+      "control": "input",
+      "label_or_operation": "'名称'"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "add",
+      "line": 117,
+      "control": "select",
+      "label_or_operation": "['string', 'integer', 'number', 'boolean', 'object', 'array', 'null']"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "add",
+      "line": 122,
+      "control": "input",
+      "label_or_operation": "'默认值'"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "add",
+      "line": 128,
+      "control": "input",
+      "label_or_operation": "'说明（可选）'"
+    },
+    {
+      "source": "src/taskweave/desktop/forms.py",
+      "function": "add",
+      "line": 141,
+      "control": "button",
+      "label_or_operation": "'移除'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "save_environment",
+      "line": 32,
+      "control": "call",
+      "label_or_operation": "'environment.save'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "render",
+      "line": 88,
+      "control": "button",
+      "label_or_operation": "'新建环境'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "render",
+      "line": 41,
+      "control": "call",
+      "label_or_operation": "'environment.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "render",
+      "line": 105,
+      "control": "button",
+      "label_or_operation": "'编辑'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "render",
+      "line": 104,
+      "control": "button",
+      "label_or_operation": "'设为默认'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "render",
+      "line": 121,
+      "control": "button",
+      "label_or_operation": "''"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "dialog",
+      "line": 84,
+      "control": "button",
+      "label_or_operation": "'保存环境'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "dialog",
+      "line": 51,
+      "control": "input",
+      "label_or_operation": "'环境名称'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "dialog",
+      "line": 73,
+      "control": "button",
+      "label_or_operation": "'添加变量'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "dialog",
+      "line": 85,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "add",
+      "line": 59,
+      "control": "input",
+      "label_or_operation": "'Key'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "add",
+      "line": 60,
+      "control": "input",
+      "label_or_operation": "'Value'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "add",
+      "line": 61,
+      "control": "input",
+      "label_or_operation": "'说明（可选）'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "add",
+      "line": 69,
+      "control": "button",
+      "label_or_operation": "'移除'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "delete",
+      "line": 115,
+      "control": "call",
+      "label_or_operation": "'environment.delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "delete",
+      "line": 111,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/environments.py",
+      "function": "delete",
+      "line": 112,
+      "control": "button",
+      "label_or_operation": "'确认删除环境'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "render",
+      "line": 20,
+      "control": "call",
+      "label_or_operation": "'task.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "render",
+      "line": 57,
+      "control": "button",
+      "label_or_operation": "'清除筛选'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "render",
+      "line": 28,
+      "control": "select",
+      "label_or_operation": "{task['task_id']: task['name'] for task in tasks}"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "render",
+      "line": 35,
+      "control": "select",
+      "label_or_operation": "{key: value for key, value in STATUS.items() if key in {'READY', 'RUNNING', 'PAUSED', 'FAILED', 'INTERRUPTED', 'SUCCEEDED', 'CANCELLED'}}"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "render",
+      "line": 93,
+      "control": "call",
+      "label_or_operation": "'task.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "render",
+      "line": 147,
+      "control": "button",
+      "label_or_operation": "'新建执行'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "render",
+      "line": 97,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "create",
+      "line": 144,
+      "control": "button",
+      "label_or_operation": "'创建并执行'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "create",
+      "line": 115,
+      "control": "select",
+      "label_or_operation": "{step['step_id']: f\"{i + 1}. {step['name']}\" for i, step in enumerate(steps)}"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "create",
+      "line": 145,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "create",
+      "line": 108,
+      "control": "select",
+      "label_or_operation": "{task['task_id']: task['name'] for task in eligible}"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "save",
+      "line": 136,
+      "control": "call",
+      "label_or_operation": "'run.create'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/executions.py",
+      "function": "save",
+      "line": 140,
+      "control": "call",
+      "label_or_operation": "'run.start'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/history.py",
+      "function": "render",
+      "line": 33,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/history.py",
+      "function": "render",
+      "line": 62,
+      "control": "button",
+      "label_or_operation": "'查看记录'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/history.py",
+      "function": "render",
+      "line": 30,
+      "control": "call",
+      "label_or_operation": "'run.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/history.py",
+      "function": "details",
+      "line": 39,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/history.py",
+      "function": "details",
+      "line": 59,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/history.py",
+      "function": "details",
+      "line": 57,
+      "control": "call",
+      "label_or_operation": "'run.events'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/history.py",
+      "function": "details",
+      "line": 49,
+      "control": "expansion",
+      "label_or_operation": "title"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/history.py",
+      "function": "details",
+      "line": 53,
+      "control": "button",
+      "label_or_operation": "'查看结果'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/history.py",
+      "function": "details",
+      "line": 55,
+      "control": "button",
+      "label_or_operation": "'查看错误'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/plugins.py",
+      "function": "render",
+      "line": 18,
+      "control": "call",
+      "label_or_operation": "'capabilities'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/plugins.py",
+      "function": "render",
+      "line": 19,
+      "control": "call",
+      "label_or_operation": "'plugin.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/plugins.py",
+      "function": "render",
+      "line": 31,
+      "control": "button",
+      "label_or_operation": "'停用' if plugin['enabled'] else '启用'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/plugins.py",
+      "function": "render",
+      "line": 23,
+      "control": "expansion",
+      "label_or_operation": "('已启用 · ' if plugin['enabled'] else '未启用 · ') + name"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/plugins.py",
+      "function": "render",
+      "line": 46,
+      "control": "expansion",
+      "label_or_operation": "spec['id']"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/plugins.py",
+      "function": "toggle",
+      "line": 28,
+      "control": "call",
+      "label_or_operation": "'plugin.configure'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 15,
+      "control": "call",
+      "label_or_operation": "'ai.settings.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 29,
+      "control": "button",
+      "label_or_operation": "'保存 AI 请求设置'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 48,
+      "control": "button",
+      "label_or_operation": "'迁移工作空间'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 49,
+      "control": "button",
+      "label_or_operation": "'打开数据目录'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 56,
+      "control": "checkbox",
+      "label_or_operation": "'展示插件上下文时脱敏'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 57,
+      "control": "checkbox",
+      "label_or_operation": "'发送给 AI 时脱敏'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 66,
+      "control": "button",
+      "label_or_operation": "'保存脱敏设置'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 85,
+      "control": "button",
+      "label_or_operation": "'保存执行器设置'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 123,
+      "control": "button",
+      "label_or_operation": "'保存连接'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 124,
+      "control": "button",
+      "label_or_operation": "'测试连接（实际调用一次模型）'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 18,
+      "control": "number",
+      "label_or_operation": "'AI 请求大小上限（KB）'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 34,
+      "control": "input",
+      "label_or_operation": "'新的工作空间目录'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 69,
+      "control": "number",
+      "label_or_operation": "'最大并发执行线程数'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 89,
+      "control": "input",
+      "label_or_operation": "'完整 Chat Completions 接口地址'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 92,
+      "control": "input",
+      "label_or_operation": "'模型名称'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 95,
+      "control": "input",
+      "label_or_operation": "'API Key（本地保存，留空保留当前密钥）'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "render",
+      "line": 100,
+      "control": "input",
+      "label_or_operation": "'API Key 所在环境变量名'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "save_ai_limit",
+      "line": 27,
+      "control": "call",
+      "label_or_operation": "'ai.settings.update'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "migrate_workspace",
+      "line": 41,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/settings.py",
+      "function": "migrate_workspace",
+      "line": 42,
+      "control": "button",
+      "label_or_operation": "'确认迁移'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "task_list",
+      "line": 49,
+      "control": "call",
+      "label_or_operation": "'task.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "task_list",
+      "line": 47,
+      "control": "button",
+      "label_or_operation": "'导入任务'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "task_list",
+      "line": 48,
+      "control": "button",
+      "label_or_operation": "'新建任务'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "task_list",
+      "line": 51,
+      "control": "input",
+      "label_or_operation": "'搜索任务'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "open_task",
+      "line": 93,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "copy_task",
+      "line": 97,
+      "control": "call",
+      "label_or_operation": "'task.copy'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "save_task",
+      "line": 111,
+      "control": "call",
+      "label_or_operation": "'task.create'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "save_task",
+      "line": 106,
+      "control": "call",
+      "label_or_operation": "'task.update'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "export_task_dialog",
+      "line": 121,
+      "control": "call",
+      "label_or_operation": "'task.export'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "export_task_dialog",
+      "line": 140,
+      "control": "button",
+      "label_or_operation": "'复制 JSON'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "export_task_dialog",
+      "line": 141,
+      "control": "button",
+      "label_or_operation": "'下载 JSON'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "export_task_dialog",
+      "line": 142,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "export_task_dialog",
+      "line": 126,
+      "control": "textarea",
+      "label_or_operation": "'任务 JSON'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "import_task_dialog",
+      "line": 164,
+      "control": "button",
+      "label_or_operation": "'导入为新任务'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "import_task_dialog",
+      "line": 165,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "import_task_dialog",
+      "line": 149,
+      "control": "textarea",
+      "label_or_operation": "'任务 JSON'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "clear_task_runs",
+      "line": 176,
+      "control": "call",
+      "label_or_operation": "'task.clear_runs'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "clear_task_runs",
+      "line": 173,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "clear_task_runs",
+      "line": 174,
+      "control": "button",
+      "label_or_operation": "'确认清理'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "delete_task",
+      "line": 188,
+      "control": "call",
+      "label_or_operation": "'task.delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "delete_task",
+      "line": 185,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "delete_task",
+      "line": 186,
+      "control": "button",
+      "label_or_operation": "'确认删除'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "task_dialog",
+      "line": 194,
+      "control": "call",
+      "label_or_operation": "'task.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "task_dialog",
+      "line": 215,
+      "control": "button",
+      "label_or_operation": "'保存'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "task_dialog",
+      "line": 197,
+      "control": "input",
+      "label_or_operation": "'任务名称'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "task_dialog",
+      "line": 198,
+      "control": "textarea",
+      "label_or_operation": "'说明'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "task_dialog",
+      "line": 216,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "render_tasks",
+      "line": 81,
+      "control": "button",
+      "label_or_operation": "'打开'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "render_tasks",
+      "line": 82,
+      "control": "button",
+      "label_or_operation": "'复制'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "render_tasks",
+      "line": 83,
+      "control": "button",
+      "label_or_operation": "'导出'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "render_tasks",
+      "line": 84,
+      "control": "button",
+      "label_or_operation": "'清理运行'"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "render_tasks",
+      "line": 85,
+      "control": "button",
+      "label_or_operation": "''"
+    },
+    {
+      "source": "src/taskweave/desktop/pages/tasks.py",
+      "function": "import_package",
+      "line": 158,
+      "control": "call",
+      "label_or_operation": "'task.import'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render",
+      "line": 64,
+      "control": "call",
+      "label_or_operation": "'plan.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render",
+      "line": 69,
+      "control": "button",
+      "label_or_operation": "'新建规划'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render",
+      "line": 72,
+      "control": "input",
+      "label_or_operation": "'搜索规划'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render",
+      "line": 114,
+      "control": "call",
+      "label_or_operation": "'plan.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "copy_plan",
+      "line": 127,
+      "control": "call",
+      "label_or_operation": "'plan.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "copy_plan",
+      "line": 128,
+      "control": "call",
+      "label_or_operation": "'plan.copy'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "delete_plan",
+      "line": 140,
+      "control": "call",
+      "label_or_operation": "'plan.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "delete_plan",
+      "line": 150,
+      "control": "call",
+      "label_or_operation": "'plan.delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "delete_plan",
+      "line": 145,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "delete_plan",
+      "line": 146,
+      "control": "button",
+      "label_or_operation": "'确认删除'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "create",
+      "line": 162,
+      "control": "call",
+      "label_or_operation": "'plan.create'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 210,
+      "control": "button",
+      "label_or_operation": "'保存规划'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 178,
+      "control": "call",
+      "label_or_operation": "'environment.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 180,
+      "control": "call",
+      "label_or_operation": "'capabilities'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 221,
+      "control": "button",
+      "label_or_operation": "'采集上下文'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 285,
+      "control": "button",
+      "label_or_operation": "'API 生成任务'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 286,
+      "control": "button",
+      "label_or_operation": "'网页 Chat'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 287,
+      "control": "button",
+      "label_or_operation": "'结束采集实例'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 175,
+      "control": "input",
+      "label_or_operation": "'规划名称'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 176,
+      "control": "textarea",
+      "label_or_operation": "'规划描述'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 179,
+      "control": "select",
+      "label_or_operation": "{x['environment_id']: x['name'] for x in environments}"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 287,
+      "control": "call",
+      "label_or_operation": "'instance.end'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 177,
+      "control": "textarea",
+      "label_or_operation": "'操作说明（可选）'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "editor",
+      "line": 181,
+      "control": "select",
+      "label_or_operation": "list(catalog['manifests'])"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 363,
+      "control": "checkbox",
+      "label_or_operation": "'同时生成预览'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 463,
+      "control": "button",
+      "label_or_operation": "'采集一项'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 291,
+      "control": "call",
+      "label_or_operation": "'plan.context.capture.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 305,
+      "control": "input",
+      "label_or_operation": "'上下文名称'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 312,
+      "control": "select",
+      "label_or_operation": "sorted(available)"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 294,
+      "control": "call",
+      "label_or_operation": "'plan.context.capture.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 304,
+      "control": "button",
+      "label_or_operation": "'close'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 376,
+      "control": "expansion",
+      "label_or_operation": "'高级参数 JSON（可选）'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 377,
+      "control": "textarea",
+      "label_or_operation": "'JSON 对象'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 466,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 467,
+      "control": "button",
+      "label_or_operation": "'确认保存'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect_dialog",
+      "line": 306,
+      "control": "textarea",
+      "label_or_operation": "'操作说明（可选）'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "show_context_preview",
+      "line": 487,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "context_preview",
+      "line": 491,
+      "control": "call",
+      "label_or_operation": "'plan.context.capture.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "context_preview",
+      "line": 510,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "generate",
+      "line": 514,
+      "control": "call",
+      "label_or_operation": "'plan.generate'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "generate",
+      "line": 534,
+      "control": "button",
+      "label_or_operation": "'复制提示词'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "generate",
+      "line": 535,
+      "control": "button",
+      "label_or_operation": "'下载提示词'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "generate",
+      "line": 536,
+      "control": "button",
+      "label_or_operation": "'解析并预览'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "generate",
+      "line": 537,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "generate",
+      "line": 520,
+      "control": "textarea",
+      "label_or_operation": "'粘贴网页回复 JSON'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "generate",
+      "line": 519,
+      "control": "textarea",
+      "label_or_operation": "'完整提示词'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "preview",
+      "line": 569,
+      "control": "button",
+      "label_or_operation": "'导入为任务'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "preview",
+      "line": 570,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "preview",
+      "line": 558,
+      "control": "expansion",
+      "label_or_operation": "f\"{row['index']}. {step['name']} · {row['status']}\""
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "save_if_changed",
+      "line": 205,
+      "control": "call",
+      "label_or_operation": "'plan.update'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "save_context",
+      "line": 226,
+      "control": "call",
+      "label_or_operation": "'plan.context.update'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "delete_context",
+      "line": 234,
+      "control": "call",
+      "label_or_operation": "'plan.context.delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "move_context",
+      "line": 242,
+      "control": "call",
+      "label_or_operation": "'plan.context.reorder'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "delete_capture",
+      "line": 256,
+      "control": "call",
+      "label_or_operation": "'plan.context.capture.delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "move_capture",
+      "line": 260,
+      "control": "call",
+      "label_or_operation": "'plan.context.capture.reorder'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "label_capture",
+      "line": 264,
+      "control": "call",
+      "label_or_operation": "'plan.context.capture.label'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "load_targets",
+      "line": 317,
+      "control": "call",
+      "label_or_operation": "'plan.context.targets'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "preview_item",
+      "line": 385,
+      "control": "call",
+      "label_or_operation": "'plan.context.capture.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render_staged",
+      "line": 398,
+      "control": "button",
+      "label_or_operation": "'查看内容 / 预览'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render_staged",
+      "line": 401,
+      "control": "button",
+      "label_or_operation": "'delete'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render_staged",
+      "line": 408,
+      "control": "button",
+      "label_or_operation": "'撤销删除'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render_staged",
+      "line": 395,
+      "control": "input",
+      "label_or_operation": "'采集项标题'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render_staged",
+      "line": 399,
+      "control": "button",
+      "label_or_operation": "'arrow_upward'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render_staged",
+      "line": 400,
+      "control": "button",
+      "label_or_operation": "'arrow_downward'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "collect",
+      "line": 421,
+      "control": "call",
+      "label_or_operation": "'plan.context.read'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "cancel",
+      "line": 441,
+      "control": "button",
+      "label_or_operation": "'继续编辑'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "cancel",
+      "line": 442,
+      "control": "button",
+      "label_or_operation": "'丢弃并关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "save_batch",
+      "line": 451,
+      "control": "call",
+      "label_or_operation": "'plan.context.save_batch'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render_plan_list",
+      "line": 94,
+      "control": "button",
+      "label_or_operation": "plan['name']"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render_plan_list",
+      "line": 99,
+      "control": "button",
+      "label_or_operation": "''"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "render_plan_list",
+      "line": 102,
+      "control": "button",
+      "label_or_operation": "''"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "parse",
+      "line": 522,
+      "control": "call",
+      "label_or_operation": "'plan.generation.parse'"
+    },
+    {
+      "source": "src/taskweave/desktop/planning.py",
+      "function": "import_task",
+      "line": 567,
+      "control": "call",
+      "label_or_operation": "'plan.generation.import'"
+    },
+    {
+      "source": "src/taskweave/desktop/server_logs.py",
+      "function": "render_logs",
+      "line": 66,
+      "control": "select",
+      "label_or_operation": "{'20': 'INFO 及以上', '30': 'WARNING 及以上', '40': 'ERROR'}"
+    },
+    {
+      "source": "src/taskweave/desktop/server_logs.py",
+      "function": "render_logs",
+      "line": 67,
+      "control": "switch",
+      "label_or_operation": "'暂停显示'"
+    },
+    {
+      "source": "src/taskweave/desktop/server_logs.py",
+      "function": "render_logs",
+      "line": 90,
+      "control": "button",
+      "label_or_operation": "'清空显示'"
+    },
+    {
+      "source": "src/taskweave/desktop/server_logs.py",
+      "function": "render_logs",
+      "line": 92,
+      "control": "button",
+      "label_or_operation": "'打开日志目录'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "__init__",
+      "line": 313,
+      "control": "button",
+      "label_or_operation": "'执行实例'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "__init__",
+      "line": 309,
+      "control": "button",
+      "label_or_operation": "title"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "__init__",
+      "line": 315,
+      "control": "button",
+      "label_or_operation": "'服务日志'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "button",
+      "line": 445,
+      "control": "button",
+      "label_or_operation": "title"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "instance_dialog",
+      "line": 541,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "navigate",
+      "line": 561,
+      "control": "button",
+      "label_or_operation": "'舍弃修改并离开'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "navigate",
+      "line": 558,
+      "control": "button",
+      "label_or_operation": "'继续编辑'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "task_header",
+      "line": 655,
+      "control": "call",
+      "label_or_operation": "'task.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "task_header",
+      "line": 660,
+      "control": "button",
+      "label_or_operation": "'任务配置'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "task_header",
+      "line": 658,
+      "control": "button",
+      "label_or_operation": "'返回任务列表'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "task_header",
+      "line": 666,
+      "control": "button",
+      "label_or_operation": "title"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "_on_task_runs_cleared",
+      "line": 699,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "environment_select",
+      "line": 730,
+      "control": "call",
+      "label_or_operation": "'environment.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "environment_select",
+      "line": 748,
+      "control": "select",
+      "label_or_operation": "options"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "confirm_end",
+      "line": 951,
+      "control": "call",
+      "label_or_operation": "'capabilities'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "confirm_end",
+      "line": 952,
+      "control": "call",
+      "label_or_operation": "'step.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "confirm_end",
+      "line": 970,
+      "control": "button",
+      "label_or_operation": "'确认结束'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "confirm_end",
+      "line": 971,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "choose_run_step",
+      "line": 978,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "choose_run_step",
+      "line": 1000,
+      "control": "call",
+      "label_or_operation": "'run.restart'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "choose_run_step",
+      "line": 1003,
+      "control": "call",
+      "label_or_operation": "'run.start'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "choose_run_step",
+      "line": 990,
+      "control": "button",
+      "label_or_operation": "'从所选步骤重新执行到此步'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "choose_run_step",
+      "line": 992,
+      "control": "button",
+      "label_or_operation": "'从前面未执行的步骤继续到此步'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "choose_run_step",
+      "line": 986,
+      "control": "select",
+      "label_or_operation": "{st['step_id']: f\"{i + 1}. {st['name']}\" for i, st in enumerate(definition[:index + 1])}"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "choose_run_step",
+      "line": 993,
+      "control": "button",
+      "label_or_operation": "'清理本次结果，从头执行到此步'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "choose_run_step",
+      "line": 994,
+      "control": "button",
+      "label_or_operation": "'取消'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "step_error_dialog",
+      "line": 1015,
+      "control": "button",
+      "label_or_operation": "'前往该步骤调试'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "step_error_dialog",
+      "line": 1016,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "reconcile_dialog",
+      "line": 1025,
+      "control": "select",
+      "label_or_operation": "{'completed': '确认已完成', 'not_completed': '确认未完成'}"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "reconcile_dialog",
+      "line": 1045,
+      "control": "button",
+      "label_or_operation": "'保存核对结果'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "reconcile_dialog",
+      "line": 1030,
+      "control": "textarea",
+      "label_or_operation": "'说明（可选）'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "action",
+      "line": 423,
+      "control": "button",
+      "label_or_operation": "'查看实例'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "action",
+      "line": 424,
+      "control": "button",
+      "label_or_operation": "'关闭'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "refresh",
+      "line": 505,
+      "control": "call",
+      "label_or_operation": "'run.instances'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "refresh",
+      "line": 506,
+      "control": "call",
+      "label_or_operation": "'task.list'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "refresh",
+      "line": 538,
+      "control": "button",
+      "label_or_operation": "'结束实例'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "refresh",
+      "line": 521,
+      "control": "button",
+      "label_or_operation": "'结束实例'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "submit",
+      "line": 1035,
+      "control": "call",
+      "label_or_operation": "'run.reconcile'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "end",
+      "line": 530,
+      "control": "call",
+      "label_or_operation": "'run.control'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "end",
+      "line": 532,
+      "control": "call",
+      "label_or_operation": "'run.wait'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "end",
+      "line": 533,
+      "control": "call",
+      "label_or_operation": "'run.get'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "end",
+      "line": 535,
+      "control": "call",
+      "label_or_operation": "'run.control'"
+    },
+    {
+      "source": "src/taskweave/desktop/workbench.py",
+      "function": "end_plan",
+      "line": 519,
+      "control": "call",
+      "label_or_operation": "'instance.end'"
+    }
+  ]
+}

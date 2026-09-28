@@ -24,6 +24,7 @@ include = ["taskweave*"]
 browser = ["taskweave-playwright"]
 ocr = ["taskweave-ocr"]
 database = ["taskweave-tidb"]
+utility = ["taskweave-utility"]
 gui = ["nicegui>=3,<4", "pywebview>=6,<7"]
 
 [dependency-groups]
@@ -34,3 +35,4 @@ taskweave-playwright = { path = "plugins/playwright", editable = true }
 taskweave-ocr = { path = "plugins/ocr", editable = true }
 
 taskweave-tidb = { path = "plugins/tidb", editable = true }
+taskweave-utility = { path = "plugins/utility", editable = true }

@@ -14,21 +14,57 @@ from taskweave.infrastructure.storage import uid
 
 
 class WorkbenchChanges(unittest.TestCase):
-    def test_planning_ui_uses_planning_copy_chips_and_saves_before_actions(self):
-        source = (Path(__file__).parents[1] / 'src/taskweave/desktop/planning.py').read_text()
-        self.assertIn('ui.label("规划")', source)
-        self.assertIn('.props("use-chips")', source)
-        self.assertIn('async def collect_after_save()', source)
-        self.assertIn('async def generate_after_save(channel)', source)
+    def test_reorder_helper_swaps_adjacent_items_and_rejects_boundaries(self):
+        from taskweave.desktop.components.step_list import reordered_ids
 
-    def test_navigation_marketplace_and_execution_multi_task_filter_are_present(self):
-        source = (Path(__file__).parents[1] / 'src/taskweave/desktop/workbench.py').read_text()
-        self.assertIn('("marketplace", "集市")', source)
-        self.assertIn('async def marketplace(self):', source)
-        self.assertIn('label="任务筛选（可多选）"', source)
-        self.assertIn('multiple=True', source)
-        self.assertIn('use-input', source)
-        self.assertIn('label="选择任务"', source)
+        self.assertEqual(reordered_ids(['a', 'b', 'c'], 1, -1), ['b', 'a', 'c'])
+        self.assertEqual(reordered_ids(['a', 'b', 'c'], 1, 1), ['a', 'c', 'b'])
+        self.assertIsNone(reordered_ids(['a', 'b'], 0, -1))
+        self.assertIsNone(reordered_ids(['a', 'b'], 1, 1))
+
+    def test_task_search_matches_name_and_description(self):
+        from taskweave.desktop.workbench import filter_tasks
+
+        tasks = [
+            {'name': '合约录入', 'description': '再保平台'},
+            {'name': '账单核对', 'description': 'TiDB 数据校验'},
+        ]
+        self.assertEqual([task['name'] for task in filter_tasks(tasks, '合约')], ['合约录入'])
+        self.assertEqual([task['name'] for task in filter_tasks(tasks, 'tidb')], ['账单核对'])
+        self.assertEqual(filter_tasks(tasks, '不存在'), [])
+
+    def test_step_reorder_moves_existing_controls_and_updates_visible_positions(self):
+        from taskweave.desktop.components.step_list import move_controls, reordered_ids
+
+        steps = [{'name': 'A'}, {'name': 'B'}, {'name': 'C'}]
+        controls = [SimpleNamespace(text=f'{i}. {row["name"]}', update=lambda: None, move=lambda *_: None) for i, row in enumerate(steps, 1)]
+        moving, adjacent = move_controls(steps, controls, 1, 2, object())
+        self.assertEqual([step['name'] for step in steps], ['A', 'C', 'B'])
+        self.assertIs(controls[2], moving)
+        self.assertIs(controls[1], adjacent)
+        self.assertEqual([control.text for control in controls], ['1. A', '2. C', '3. B'])
+        self.assertIsNone(reordered_ids(['a', 'b'], 1, 1))
+
+    def test_planning_actions_save_draft_before_dependent_workflow(self):
+        from taskweave.desktop.planning import PlanningPage
+        from taskweave.desktop.state import PlanningPageState
+
+        events = []
+        state = PlanningPageState(save_callback=AsyncMock(side_effect=lambda: events.append('save')))
+        page = PlanningPage(AsyncMock(), state, None, None, None, None)
+        action = AsyncMock(side_effect=lambda plan, channel: events.append((plan, channel)))
+        asyncio.run(page.save_then(action, {'plan_id': 'p1'}, 'api'))
+        self.assertEqual(events, ['save', ({'plan_id': 'p1'}, 'api')])
+
+    def test_context_request_merges_form_advanced_and_target_values_in_order(self):
+        from taskweave.desktop.contexts import merge_context_request
+
+        self.assertEqual(
+            merge_context_request({'url': 'form', 'scope': 'form'}, {'scope': 'advanced', 'token': 'raw'}, {'url': 'target'}),
+            {'url': 'target', 'scope': 'advanced', 'token': 'raw'},
+        )
+        with self.assertRaises(TaskError):
+            merge_context_request({}, [], {})
 
     def test_step_contexts_persist_and_can_be_renamed_or_deleted(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
@@ -41,6 +77,7 @@ class WorkbenchChanges(unittest.TestCase):
                 'item': {'kind': 'text', 'content': 'page'},
             })
             self.assertEqual(app.repo.step(step['step_id'])['validation_state'], 'DRAFT')
+
             self.assertEqual(app.dispatch('context.list', {'step_id': step['step_id']})[0]['name'], '登录页')
             app.dispatch('context.save', {
                 'context_id': saved['context_id'], 'step_id': saved['step_id'],
@@ -52,6 +89,19 @@ class WorkbenchChanges(unittest.TestCase):
             app.dispatch('context.delete', {'context_id': saved['context_id']})
             self.assertEqual(app.dispatch('context.list', {'step_id': step['step_id']}), [])
             self.assertEqual(app.repo.step(step['step_id'])['validation_state'], 'DRAFT')
+
+    def test_recollection_advanced_json_keeps_only_non_form_parameters(self):
+        from taskweave.desktop.contexts import context_advanced_overrides
+
+        schema = {"type": "object", "properties": {"url": {}, "scope": {}}}
+        request = {
+            "url": "https://example.test", "scope": "full_page",
+            "target_id": "page-1", "plugin_private": {"mode": "deep"},
+        }
+        self.assertEqual(
+            context_advanced_overrides(schema, request),
+            {"plugin_private": {"mode": "deep"}},
+        )
 
     def test_executor_thread_setting_persists(self):
         from taskweave.desktop.controller import DesktopController
@@ -87,39 +137,30 @@ class WorkbenchChanges(unittest.TestCase):
             self.assertFalse(old.exists())
             self.assertNotIn('remove_after_restart', json.loads(marker.read_text()))
 
-    def test_collected_contexts_accumulate_across_plugins_and_delete_one(self):
+    def test_context_draft_is_committed_once_as_a_batch(self):
         from taskweave.desktop.workbench import Workbench
+        from taskweave.desktop.contexts import ContextCaptureDraft
 
         workbench = Workbench.__new__(Workbench)
-        saved = []
+        calls = []
+        group = {'context_id': 'new-group', 'provider_id': 'fake.page', 'name': '登录页', 'context_notes': '说明', 'revision': 0, 'captures': [{'capture_id': 'saved-one', 'label': '登录页'}]}
         async def call(operation, **params):
-            if operation == 'context.save':
-                entry = {**params, 'context_id': uid()}
-                saved.append(entry)
-                return entry
-            if operation == 'context.delete':
-                saved[:] = [entry for entry in saved if entry['context_id'] != params['context_id']]
-                return {'deleted': True}
-            if operation == 'step.get':
-                return {'step_id': params['step_id'], 'validation_state': 'DRAFT'}
+            calls.append((operation, params))
+            if operation == 'context.save_batch': return {'group': group}
             raise AssertionError(operation)
         workbench.controller = SimpleNamespace(call=call)
         workbench.step_id = uid()
         workbench.contexts = []
         workbench.context_entries = []
-        page = {"kind": "text", "source": "playwright.page", "content": "page"}
-        schema = {"kind": "text", "source": "tidb.schema", "content": "orders"}
-        second_schema = {"kind": "text", "source": "tidb.schema", "content": "items"}
-        asyncio.run(workbench.append_contexts("playwright.page", [page], "draft", "登录页"))
-        asyncio.run(workbench.append_contexts("tidb.schema", [schema, second_schema], "trial_feedback", "账单表"))
-        self.assertEqual(workbench.contexts, [page, schema, second_schema])
-        self.assertEqual(
-            [entry["provider_id"] for entry in workbench.context_entries],
-            ["playwright.page", "tidb.schema", "tidb.schema"],
-        )
-        self.assertEqual([entry['name'] for entry in workbench.context_entries], ['登录页', '账单表 1', '账单表 2'])
-        asyncio.run(workbench.remove_context_entry(workbench.context_entries[1]))
-        self.assertEqual(workbench.contexts, [page, second_schema])
+        workbench.context_cards = SimpleNamespace(sync_group=lambda saved: None)
+        draft = ContextCaptureDraft()
+        draft.append({'items': [{'kind': 'text', 'source': 'fake.page', 'content': 'page'}], 'views': [{'title': '页面预览'}]}, {'scope': 'viewport'}, True, 'session', label='登录页')
+        self.assertEqual(calls, [])
+        asyncio.run(workbench.save_context_batch(None, 'fake.page', '登录页', '说明', draft))
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(calls[0][0], 'context.save_batch')
+        self.assertEqual(calls[0][1]['captures'][0]['capture']['views'][0]['title'], '页面预览')
+        self.assertEqual(workbench.context_entries, [group])
 
     def test_manual_confirmation_execution_and_scoped_restart(self):
         with tempfile.TemporaryDirectory() as home:

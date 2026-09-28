@@ -1,7 +1,5 @@
 # desktop
 
-可选 NiceGUI / pywebview 展示层，提供 Windows / macOS 独立工作台。launcher 仅在显式 workbench 命令调用时启动；controller 经 Application.dispatch 调用真实任务、编写和运行服务；forms 根据 schema 生成参数表单。
+NiceGUI/pywebview 展示层，controller 调用应用操作；Workbench 组合页面和组件，各组件管理自己的状态与生命周期。
 
-服务绑定回环地址，security 同时校验 HTTP 和 Socket.IO 的本次启动凭据。业务浏览器仍由核心 worker 与插件管理。
-
-运行与平台限制见 [REQ-005 指南](../../../docs/requirements/REQ-005-local-workbench/usage.md)。
+当前边界、行为及测试入口见 [桌面 UI 模块](../../../docs/modules/desktop.md)。按页面选择 ui.* 测试；装配改动按需显式选择真实浏览器流程。启动见 [运行与交付](../../../docs/deployment.md)，不在本页复制需求阶段状态。

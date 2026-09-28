@@ -1,0 +1,170 @@
+{
+  "date": "2026-09-26",
+  "scope": "Standalone sample-data NiceGUI prototype, not product regression",
+  "responsive": {
+    "results": [
+      {
+        "view": "home",
+        "viewport": 1440,
+        "document": 1440,
+        "pass": true
+      },
+      {
+        "view": "home",
+        "viewport": 1280,
+        "document": 1280,
+        "pass": true
+      },
+      {
+        "view": "home",
+        "viewport": 1024,
+        "document": 1024,
+        "pass": true
+      },
+      {
+        "view": "home",
+        "viewport": 768,
+        "document": 768,
+        "pass": true
+      },
+      {
+        "view": "tasks",
+        "viewport": 1440,
+        "document": 1440,
+        "pass": true
+      },
+      {
+        "view": "tasks",
+        "viewport": 1280,
+        "document": 1280,
+        "pass": true
+      },
+      {
+        "view": "tasks",
+        "viewport": 1024,
+        "document": 1024,
+        "pass": true
+      },
+      {
+        "view": "tasks",
+        "viewport": 768,
+        "document": 768,
+        "pass": true
+      },
+      {
+        "view": "editor",
+        "viewport": 1440,
+        "document": 1440,
+        "pass": true
+      },
+      {
+        "view": "editor",
+        "viewport": 1280,
+        "document": 1280,
+        "pass": true
+      },
+      {
+        "view": "editor",
+        "viewport": 1024,
+        "document": 1024,
+        "pass": true
+      },
+      {
+        "view": "editor",
+        "viewport": 768,
+        "document": 768,
+        "pass": true
+      },
+      {
+        "view": "runs",
+        "viewport": 1440,
+        "document": 1440,
+        "pass": true
+      },
+      {
+        "view": "runs",
+        "viewport": 1280,
+        "document": 1280,
+        "pass": true
+      },
+      {
+        "view": "runs",
+        "viewport": 1024,
+        "document": 1024,
+        "pass": true
+      },
+      {
+        "view": "runs",
+        "viewport": 768,
+        "document": 768,
+        "pass": true
+      }
+    ],
+    "errors": []
+  },
+  "interactions": {
+    "checks": [
+      {
+        "label": "节点切换详情，没有弹出执行确认",
+        "pass": true
+      },
+      {
+        "label": "第30步可达且详情切换",
+        "pass": true
+      },
+      {
+        "label": "结束先显示确认",
+        "pass": true
+      },
+      {
+        "label": "搜索空态",
+        "pass": true
+      },
+      {
+        "label": "切换调试保留草稿",
+        "pass": true
+      },
+      {
+        "label": "切换页签提示未保存",
+        "pass": true
+      },
+      {
+        "label": "示例保存反馈",
+        "pass": true
+      },
+      {
+        "label": "收藏筛选",
+        "pass": true
+      }
+    ],
+    "errors": []
+  },
+  "states": {
+    "checks": [
+      {
+        "label": "选第30步后保留横向滚动位置",
+        "pass": true
+      },
+      {
+        "label": "待核对的状态动作",
+        "pass": true
+      },
+      {
+        "label": "等待输入的状态动作",
+        "pass": true
+      },
+      {
+        "label": "执行中的状态动作",
+        "pass": true
+      },
+      {
+        "label": "成功的状态动作",
+        "pass": true
+      },
+      {
+        "label": "成功状态进度自洽",
+        "pass": true
+      }
+    ]
+  }
+}
