@@ -90,8 +90,9 @@ class DemoPlugin:
     async def lint(self, document):
         return []
 
-    async def collect_context(self, provider_id, ctx, request):
-        return []
+    async def collect_context(self, provider_id, ctx, request, *, include_view=True):
+        from taskweave.plugins.sdk import ContextCollection
+        return ContextCollection(())
 
     async def diagnose(self, error, refs):
         return []

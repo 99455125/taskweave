@@ -5,6 +5,7 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from taskweave.desktop.workbench import Workbench
+from taskweave.desktop.pages.tasks import TasksPage
 
 
 class TaskConfigRefresh(unittest.TestCase):
@@ -26,10 +27,16 @@ class TaskConfigRefresh(unittest.TestCase):
             workbench.controller = SimpleNamespace(call=AsyncMock(side_effect=call))
             editor = object()
             workbench.edit_controls = editor
+            workbench.editor_tabs = SimpleNamespace(value="输入依赖")
             workbench.task_name_label = SimpleNamespace(text='旧名称')
             workbench.paint = AsyncMock()
             buttons = {}
             workbench.button = lambda label, callback, **kwargs: buttons.update({label: callback})
+            workbench.tasks_page = TasksPage(
+                workbench.controller, workbench.button, AsyncMock(), workbench.paint,
+                before_task_update=workbench._before_task_update,
+                after_task_update=workbench._after_task_update,
+            )
             fields = {}
             fake_ui = MagicMock()
 
@@ -43,7 +50,8 @@ class TaskConfigRefresh(unittest.TestCase):
             fake_ui.input.side_effect = field
             fake_ui.textarea.side_effect = field
             with patch('taskweave.desktop.workbench.ui', fake_ui), \
-                 patch('taskweave.desktop.workbench.SchemaEditor') as schema_editor:
+                 patch('taskweave.desktop.pages.tasks.ui', fake_ui), \
+                 patch('taskweave.desktop.pages.tasks.SchemaEditor') as schema_editor:
                 schema = {'type': 'object', 'properties': {'loginurl': {'type': 'string'}}}
                 schema_editor.return_value.schema.return_value = schema
                 await workbench.task_dialog(stale)

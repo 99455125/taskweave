@@ -8,7 +8,7 @@ from taskweave.core.validation import (
     SAFE_BUILTINS, TaskError, content_tree, merge_input_layers, normalize_step,
 )
 from taskweave.core.ports import Scope
-from taskweave.infrastructure.privacy import redact
+from taskweave.infrastructure.privacy import redact, redact_ai_payload
 from taskweave.infrastructure.storage import uid, Results
 from taskweave.infrastructure.worker import PluginContext, Resources
 from taskweave.application.prompts import (
@@ -16,7 +16,8 @@ from taskweave.application.prompts import (
     STEP_DESCRIPTION_RULES, STEP_RESPONSE_RULES, WEB_CHAT_RULES,
     WEB_CHAT_CODE_RULES, REPAIR_RULES, CAPABILITY_CORRECTION,
 )
-from taskweave.application.ai_requests import ensure_limit, utf8_size
+from taskweave.application.ai_requests import web_chat_export, ensure_limit, utf8_size
+from taskweave.core.repositories import EnvironmentRepository, ResultRepository, RunRepository, StepRepository, TaskRepository
 
 def last_dialogue_rounds(history, count=2):
     if count == 0:
@@ -72,14 +73,35 @@ def _input_dependencies(bindings):
 
 def _context_payload(contexts):
     """Keep both context body and user-authored metadata intact."""
+    if isinstance(contexts, dict) and isinstance(contexts.get("items"), list):
+        contexts = contexts["items"]
     return [json.loads(json.dumps(item)) for item in (contexts or [])]
 
 
+def _context_items(contexts):
+    """Return plugin items from either legacy flat evidence or grouped captures."""
+    result=[]
+    for value in contexts:
+        if isinstance(value,dict) and isinstance(value.get('captures'),list):
+            for capture in value['captures']:
+                result.extend(capture.get('items',[]))
+                result.extend(capture.get("preview_items", []))
+        else:
+            result.append(value)
+    return result
+
+
 class Authoring:
-    def __init__(self, repo, registry, model=None, request_limit=None):
-        self.repo, self.registry, self.model = repo, registry, model
-        self.request_limit = request_limit or (lambda: 512 * 1024)
+    def __init__(self, tasks: TaskRepository, steps: StepRepository, environments: EnvironmentRepository, runs: RunRepository, results: ResultRepository, home, registry, model=None, request_limit=None, redact_for_ai=None):
+        self.tasks, self.steps, self.environments = tasks, steps, environments
+        self.runs, self.results, self.home = runs, results, home
+        self.registry, self.model = registry, model
+        self.request_limit = request_limit or (lambda: 2048 * 1024)
+        self.redact_for_ai = redact_for_ai or (lambda: True)
         self.conversations = {}
+
+    def _outbound(self, value):
+        return redact_ai_payload(value) if self.redact_for_ai() else value
 
     def reset_conversation(self, step_id):
         self.conversations.pop(step_id, None)
@@ -94,11 +116,11 @@ class Authoring:
         return diagnostics
 
     def _variable_catalog(self, step, environment_id):
-        task_schema = json.loads(self.repo.task(step['task_id'])['input_schema_json'])
-        public, secrets = self.repo.environment(environment_id)
+        task_schema = json.loads(self.tasks.task(step['task_id'])['input_schema_json'])
+        public, secrets = self.environments.environment(environment_id)
         descriptions = {}
         if environment_id:
-            row = next((item for item in self.repo.list_environments() if item['environment_id'] == environment_id), None)
+            row = next((item for item in self.environments.list_environments() if item['environment_id'] == environment_id), None)
             descriptions = json.loads(row.get('descriptions_json') or '{}') if row else {}
         environment_variables = {
             name: {'schema': {'type': type(value).__name__, 'description': descriptions.get(name, '')}, 'required': False}
@@ -151,7 +173,7 @@ class Authoring:
 
     async def generate_goal(self, step_id, expected_hash, supplement="", contexts=None, environment_id=None, export_only=False):
         """Generate the description and its durable authoring notes; never code."""
-        step = self.repo.step(step_id)
+        step = self.steps.step(step_id)
         if step["content_hash"] != expected_hash:
             raise TaskError("EDIT_CONFLICT")
         contributions = [
@@ -175,10 +197,11 @@ class Authoring:
         system = DOMAIN_RULES + "\n" + STEP_DESCRIPTION_RULES
         if export_only:
             system += "\n" + WEB_CHAT_RULES
-        messages = [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(redact(request), ensure_ascii=False)}]
+        messages = [{"role": "system", "content": system}, {"role": "user", "content": json.dumps(self._outbound(request), ensure_ascii=False)}]
         if export_only:
-            prompt = "\n\n".join(item["role"] + ":\n" + item["content"] for item in messages)
-            return {"prompt": prompt, "expected_hash": expected_hash}
+            prompt, attachments = web_chat_export(messages)
+            ensure_limit(utf8_size(messages), self.request_limit())
+            return {"prompt": prompt, "attachments": attachments, "expected_hash": expected_hash}
         if self.model is None:
             raise TaskError("MODEL_NOT_CONFIGURED")
         contract = {'type':'object','properties':{'step_description':{'type':'string'},'step_notes':{'type':'string'}},'required':['step_description','step_notes'],'additionalProperties':False}
@@ -218,7 +241,7 @@ class Authoring:
                 "MODEL_NOT_CONFIGURED",
                 "Manual authoring and execution remain available",
             )
-        step = self.repo.step(step_id)
+        step = self.steps.step(step_id)
         if expected_hash != step["content_hash"]:
             raise TaskError("EDIT_CONFLICT")
         self.registry.check(step)
@@ -246,9 +269,7 @@ class Authoring:
                 if tid in selected and tid in self.registry.tools:
                     tools[tid] = self.registry.tools[tid]
         contexts = _context_payload(contexts)
-        if any(
-            c.get("kind") == "image" for c in contexts
-        ) and not export_only and not self.model.capabilities().get("images", False):
+        if any(c.get("kind") == "image" for c in _context_items(contexts)) and not export_only and not self.model.capabilities().get("images", False):
             raise TaskError("MODEL_IMAGE_UNSUPPORTED")
         available_variables = self._variable_catalog(step, environment_id)
         system = DOMAIN_RULES + "\n" + EXECUTABLE_STEP_RULES + "\n" + (REPAIR_RULES if purpose == "repair" else STEP_CONTENT_RULES) + "\n" + STEP_RESPONSE_RULES
@@ -269,7 +290,7 @@ class Authoring:
             {
                 "role": "user",
                 "content": json.dumps(
-                    redact(
+                    self._outbound(
                         {
                             "step_description": step_description or step["step_description"],
                             "step_notes": step.get("step_notes", ""),
@@ -289,7 +310,7 @@ class Authoring:
         if purpose == "repair":
             payload['feedback'] = feedback or {}
             payload['repair_notes'] = repair_notes or ""
-        messages[-1]['content'] = json.dumps(payload, ensure_ascii=False)
+        messages[-1]['content'] = json.dumps(self._outbound(payload), ensure_ascii=False)
         if history_rounds is None:
             history_rounds = -1 if use_history else 0
         if not isinstance(history_rounds, int) or history_rounds < -1 or history_rounds > 10:
@@ -298,28 +319,31 @@ class Authoring:
         stored_history = json.loads(json.dumps(self.conversations.get(step_id, []))) if use_history else []
         history = stored_history if history_rounds == -1 else last_dialogue_rounds(stored_history, history_rounds)
         if use_history:
-            messages[2:2] = dialogue_history(history) if deduplicate_history else history
+            history = dialogue_history(history) if deduplicate_history else history
+            if self.redact_for_ai():
+                history = [{**message, 'content': redact_ai_payload(message.get('content', ''))} for message in history]
+            messages[2:2] = history
         history_trimmed = len(history) < len(stored_history)
         if export_only:
-            text = "\n\n".join(message['role'] + ":\n" + message.get('content', '') for message in messages)
-            ensure_limit(utf8_size(text), self.request_limit())
+            text, attachments = web_chat_export(messages)
+            ensure_limit(utf8_size(messages), self.request_limit())
             logging.getLogger(__name__).info("网页 AI 对话内容：%s", redact(text))
-            return {"prompt": text, "messages": messages, "expected_hash": expected_hash, "history_trimmed": history_trimmed}
+            return {"prompt": text, "attachments": attachments, "messages": messages, "expected_hash": expected_hash, "history_trimmed": history_trimmed}
         import threading
 
         scope = Scope(step["task_id"], uid(), step_id, uid())
         resources = Resources(self.registry)
-        environment, secret_refs = self.repo.environment(environment_id)
+        environment, secret_refs = self.environments.environment(environment_id)
         pc = PluginContext(
             scope,
-            Results(self.repo.home, scope, self.registry),
+            Results(self.home, scope, self.registry),
             resources,
             environment,
             secret_refs,
             threading.Event(),
             lambda *args: None,
         )
-        pc.task_parameters = {key: spec["default"] for key, spec in json.loads(self.repo.task(step["task_id"])["input_schema_json"]).get("properties", {}).items() if "default" in spec}
+        pc.task_parameters = {key: spec["default"] for key, spec in json.loads(self.tasks.task(step["task_id"])["input_schema_json"]).get("properties", {}).items() if "default" in spec}
         resources.context = pc
         contract = {
             "type": "object",
@@ -384,7 +408,7 @@ class Authoring:
                             {
                                 "role": "tool",
                                 "tool_call_id": call.call_id,
-                                "content": json.dumps(redact(value)),
+                                "content": json.dumps(self._outbound(value)),
                             }
                         )
                     continue
@@ -410,7 +434,7 @@ class Authoring:
                     "explanation": redact(reply.explanation),
                     "diagnostics": diagnostics,
                     "expected_hash": expected_hash,
-                    "stale": self.repo.step(step_id)["content_hash"] != expected_hash,
+                    "stale": self.steps.step(step_id)["content_hash"] != expected_hash,
                     "history_trimmed": history_trimmed,
                     "authoring_session_id": uid(),
                 }
@@ -423,10 +447,8 @@ class Authoring:
                 self.conversations[step_id] = stored_history + [message for message in messages[2+len(history):] if message['role'] != 'system']
             await resources.release_all()
 
-    async def collect_context(
-        self, step_id, provider_id, request=None, environment_id=None
-    ):
-        step = self.repo.step(step_id)
+    def _context_plugin(self, step_id, provider_id):
+        step = self.steps.step(step_id)
         selected = self.registry.selected_plugins(step["capabilities"])
         plugin = next(
             (
@@ -438,36 +460,51 @@ class Authoring:
         )
         if plugin is None:
             raise TaskError("CONTEXT_PROVIDER_UNAVAILABLE")
+        return step, plugin
+
+    async def context_targets(self, step_id, provider_id, request=None):
+        # Independent authoring observations own no retained resources.
+        self._context_plugin(step_id, provider_id)
+        return {"session_id": None, "targets": []}
+
+    async def collect_context(
+        self, step_id, provider_id, request=None, environment_id=None, expected_session_id=None,
+        include_view=True,
+    ):
+        if expected_session_id:
+            raise TaskError("CONTEXT_SESSION_CHANGED", "采集实例已结束或变化，请刷新后重新选择")
+        step, plugin = self._context_plugin(step_id, provider_id)
         import threading
 
         scope = Scope(step["task_id"], uid(), step_id, uid())
         resources = Resources(self.registry)
-        environment, secret_refs = self.repo.environment(environment_id)
+        environment, secret_refs = self.environments.environment(environment_id)
         pc = PluginContext(
             scope,
-            Results(self.repo.home, scope, self.registry),
+            Results(self.home, scope, self.registry),
             resources,
             environment,
             secret_refs,
             threading.Event(),
             lambda *args: None,
         )
-        pc.task_parameters = {key: spec["default"] for key, spec in json.loads(self.repo.task(step["task_id"])["input_schema_json"]).get("properties", {}).items() if "default" in spec}
+        pc.task_parameters = {key: spec["default"] for key, spec in json.loads(self.tasks.task(step["task_id"])["input_schema_json"]).get("properties", {}).items() if "default" in spec}
         resources.context = pc
         try:
             context = await asyncio.wait_for(
-                plugin.collect_context(provider_id, pc, request or {}), 30
+                plugin.collect_context(provider_id, pc, request or {}, include_view=include_view), 60
             )
             # Return for user inspection; generation is a separate explicit operation.
-            return redact([asdict(c) for c in context])
+            from taskweave.core.context_collection import serialize_context_collection
+            return serialize_context_collection(context, self.registry.views)
         finally:
             await resources.release_all()
 
     async def diagnose(self, attempt_id):
         from taskweave.core.ports import ErrorInfo
 
-        evidence = self.repo.feedback(attempt_id)
-        step = self.repo.step(evidence["step_id"])
+        evidence = self.runs.feedback(attempt_id)
+        step = self.steps.step(evidence["step_id"])
         error = evidence["error"]
         info = ErrorInfo(
             error["error_code"] or "",
@@ -477,9 +514,7 @@ class Authoring:
         )
         from taskweave.core.ports import ResultRef
 
-        rows = self.repo.query(
-            "SELECT * FROM result_refs WHERE attempt_id=?", (attempt_id,)
-        )
+        rows = self.results.refs_for_attempt(attempt_id)
         refs = [
             ResultRef(
                 **{

@@ -174,9 +174,16 @@ class RuntimeInputs(unittest.TestCase):
             bench.task_id=task
             bench.controller=DesktopController(app)
             bench.button=MagicMock()
+            from taskweave.desktop.components.run_inputs import RunInputDialog
+            from taskweave.desktop.state import RunInputState
+            bench.run_input_dialog=RunInputDialog(
+                bench.controller, RunInputState(), bench.button, bench.trial_variables, lambda:None,
+                identity=lambda run_id: ("run", run_id), apply_inputs=lambda *_: None,
+                invalidate_signatures=lambda *_: None,
+            )
             fake=MagicMock()
             fake.dialog.return_value.is_deleted=False
-            with patch('taskweave.desktop.workbench.ui',fake),patch('taskweave.desktop.forms.ui',fake):
+            with patch('taskweave.desktop.components.run_inputs.ui',fake),patch('taskweave.desktop.components.trial_inputs.ui',fake),patch('taskweave.desktop.forms.ui',fake):
                 asyncio.run(bench.pending_inputs(paused))
                 asyncio.run(bench.pending_inputs(paused))
                 self.assertEqual(fake.dialog.call_count,1)

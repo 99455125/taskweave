@@ -130,8 +130,22 @@ def launch(home=None, port=None, browser=False):
         render_logs(logs, holder["controller"].open_path)
 
     @ui.page("/")
-    async def index():
-        workbench = Workbench(holder["controller"])
+    async def index(view: str = "home", task_id: str | None = None, step_id: str | None = None, debug: bool = False):
+        def write_route(payload):
+            import json
+            ui.run_javascript("""
+                const url = new URL(window.location.href);
+                for (const [key, value] of Object.entries(PAYLOAD)) {
+                    if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
+                }
+                window.history.replaceState(null, '', url);
+            """.replace("PAYLOAD", json.dumps(payload)))
+        workbench = Workbench(holder["controller"], route_writer=write_route)
+        try:
+            await workbench.restore_route(view, task_id, step_id, debug)
+        except Exception:
+            logging.getLogger(__name__).exception("无法恢复上次页面")
+            ui.notify("上次页面已不可用，已返回工作台。", type="warning")
         await workbench.paint()
         if not browser:
 

@@ -31,3 +31,7 @@ legacy/smart_excel/migrations/
 
 # Local historical data, excluded from the public repository
 legacy/smart_excel/test_file/
+
+/output/
+
+/.playwright-cli/

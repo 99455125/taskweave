@@ -20,6 +20,10 @@ PluginContext 只暴露 scope、环境非秘密配置、本地 secret resolver�
 
 `authoring(selected_ids)` 返回 instructions、examples、context_provider_ids、tool_ids；`collect_context` 返回类型为 text/image 的 ContextItem（mime、脱敏内容或受控引用、来源、截断标记）；`lint` 返回 Diagnostic（code/message/path/severity）；`diagnose` 将本次运行 ErrorInfo 和产物转换为可供用户选择反馈的诊断。
 
+可选 `list_context_targets(provider_id, ctx, request)` 返回 `ContextTarget[]`，每项为 `{target_id, label, request}`：插件提供实例内稳定的不透明标识、显示名称和精确采集参数。列表只观察已存在的资源，不创建、导航或重建资源；目标失效不能静默回退。未实现此钩子的插件返回空目标列表，原 `collect_context` 调用保持兼容。公开类型为 SDK 的 `ContextTarget`、`ContextTargetProvider`；插件 API v1 与数据库格式保持不变。
+
+需要目标选择界面的上下文提供器在自己的 `context_requests` JSON Schema 中声明 `x-taskweave-context-targets`，可提供 `selector_label`、`parameter_mode_label`、`auto_select_single` 和 `hide_parameters_when_selected`。宿主只按声明渲染：单目标可自动选中，选中目标时可隐藏参数表单；没有该扩展的 TiDB 等无会话提供器只显示原 schema 表单。核心不判断插件 ID、资源类型或字段语义。
+
 插件规则不得改变项目内容格式和能力 allowlist。总上下文默认 64 KiB 文本，超限保留来源并标记截断；图像经适配器能力检测与用户选择。资源 provider 负责 open/close，Playwright 以运行/角色键复用，不跨 worker 传实例。
 
 ## 4. 结果处理与统一存储
