@@ -1,0 +1,709 @@
+{
+  "version": 1,
+  "modules": {
+    "domain.tasks": {
+      "source_globs": [
+        "src/taskweave/core/task_package.py",
+        "src/taskweave/core/validation.py"
+      ],
+      "targets": [
+        "tests.test_task_transfer",
+        "tests.test_task_copy_lifecycle"
+      ],
+      "depends_on": [],
+      "browser_targets": []
+    },
+    "domain.steps": {
+      "source_globs": [
+        "src/taskweave/core/validation.py"
+      ],
+      "targets": [
+        "tests.test_step_authoring",
+        "tests.test_step_outputs",
+        "tests.test_trial_variable_groups",
+        "tests.test_variables"
+      ],
+      "depends_on": [
+        "domain.tasks"
+      ],
+      "browser_targets": []
+    },
+    "domain.contexts": {
+      "source_globs": [
+        "src/taskweave/core/context_collection.py"
+      ],
+      "targets": [
+        "tests.test_context_collection",
+        "tests.test_context_captures",
+        "tests.test_context_metadata"
+      ],
+      "depends_on": [],
+      "browser_targets": []
+    },
+    "repository.tasks": {
+      "source_globs": [
+        "src/taskweave/infrastructure/repositories/tasks.py",
+        "src/taskweave/infrastructure/repository.py"
+      ],
+      "targets": [
+        "tests.repositories.test_task_repository",
+        "tests.repositories.test_storage_compatibility",
+        "tests.test_task_copy_lifecycle"
+      ],
+      "depends_on": [
+        "domain.tasks",
+        "repository.steps",
+        "repository.contexts",
+        "shared.storage",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "repository.steps": {
+      "source_globs": [
+        "src/taskweave/infrastructure/repositories/steps.py",
+        "src/taskweave/infrastructure/repository.py"
+      ],
+      "targets": [
+        "tests.repositories.test_repository_contracts",
+        "tests.repositories.test_task_repository",
+        "tests.test_step_authoring"
+      ],
+      "depends_on": [
+        "domain.steps",
+        "repository.environments",
+        "shared.storage",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "repository.planning": {
+      "source_globs": [
+        "src/taskweave/infrastructure/repositories/plans.py",
+        "src/taskweave/infrastructure/repositories/plan_generations.py",
+        "src/taskweave/infrastructure/repositories/plan_helpers.py",
+        "src/taskweave/infrastructure/plan_repository.py"
+      ],
+      "targets": [
+        "tests.repositories.test_plan_repository",
+        "tests.repositories.test_plan_metadata_repository",
+        "tests.repositories.test_plan_generation_repository",
+        "tests.test_planning"
+      ],
+      "depends_on": [
+        "repository.contexts",
+        "shared.storage",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "repository.organization": {
+      "source_globs": ["src/taskweave/infrastructure/repositories/organization.py"],
+      "targets": ["tests.test_organization"],
+      "depends_on": ["shared.storage"],
+      "browser_targets": []
+    },
+    "repository.contexts": {
+      "source_globs": [
+        "src/taskweave/infrastructure/repositories/step_contexts.py",
+        "src/taskweave/infrastructure/repositories/plan_contexts.py",
+        "src/taskweave/infrastructure/repository.py",
+        "src/taskweave/infrastructure/plan_repository.py"
+      ],
+      "targets": [
+        "tests.repositories.test_context_return_contracts",
+        "tests.repositories.test_plan_context_repository",
+        "tests.test_context_collection",
+        "tests.test_context_captures"
+      ],
+      "depends_on": [
+        "domain.contexts",
+        "repository.steps",
+        "shared.storage",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "repository.environments": {
+      "source_globs": [
+        "src/taskweave/infrastructure/repositories/environments.py"
+      ],
+      "targets": [
+        "tests.test_task_transfer",
+        "tests.test_task_config_refresh",
+        "tests.repositories.test_repository_wiring"
+      ],
+      "depends_on": [
+        "shared.storage",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "repository.runs": {
+      "source_globs": [
+        "src/taskweave/infrastructure/repositories/runs.py"
+      ],
+      "targets": [
+        "tests.repositories.test_run_repository",
+        "tests.test_execution_control",
+        "tests.test_executor_recovery"
+      ],
+      "depends_on": [
+        "repository.tasks",
+        "repository.steps",
+        "repository.environments",
+        "repository.results",
+        "shared.storage",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "repository.results": {
+      "source_globs": [
+        "src/taskweave/infrastructure/repositories/results.py"
+      ],
+      "targets": [
+        "tests.repositories.test_collaboration_ports",
+        "tests.test_result_views",
+        "tests.test_step_outputs"
+      ],
+      "depends_on": [
+        "repository.tasks",
+        "shared.storage",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "application.tasks": {
+      "source_globs": [
+        "src/taskweave/__init__.py",
+        "src/taskweave/__main__.py",
+        "src/taskweave/application/tasks.py",
+        "src/taskweave/application/task_transfer.py",
+        "src/taskweave/application/operations.py",
+        "src/taskweave/application/service.py",
+        "src/taskweave/application/__init__.py",
+        "src/taskweave/application/demo.py",
+        "src/taskweave/infrastructure/http.py"
+      ],
+      "targets": [
+        "tests.application.test_application_composition",
+        "tests.application.test_dispatch_policy",
+        "tests.test_task_transfer",
+        "tests.test_task_cleanup",
+        "tests.test_http_task_api",
+        "tests.test_export_io"
+      ],
+      "depends_on": [
+        "repository.tasks",
+        "domain.tasks",
+        "repository.steps",
+        "repository.contexts",
+        "shared.storage",
+        "application.authoring",
+        "application.runs",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "application.steps": {
+      "source_globs": [
+        "src/taskweave/application/steps.py",
+        "src/taskweave/application/service.py",
+        "src/taskweave/application/operations.py"
+      ],
+      "targets": [
+        "tests.application.test_step_run_repository_port",
+        "tests.test_step_authoring",
+        "tests.test_step_outputs",
+        "tests.test_http_task_api"
+      ],
+      "depends_on": [
+        "repository.steps",
+        "repository.tasks",
+        "repository.runs",
+        "application.authoring",
+        "application.runs",
+        "domain.steps",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "application.planning": {
+      "source_globs": [
+        "src/taskweave/application/planning.py",
+        "src/taskweave/application/contexts.py",
+        "src/taskweave/application/service.py",
+        "src/taskweave/infrastructure/context_sessions.py",
+        "src/taskweave/application/operations.py"
+      ],
+      "targets": [
+        "tests.test_planning",
+        "tests.test_context_sessions",
+        "tests.ui.test_planning_page",
+        "tests.test_http_task_api",
+        "tests.test_workbench_changes.WorkbenchChanges.test_planning_actions_save_draft_before_dependent_workflow",
+        "tests.test_workbench_changes.WorkbenchChanges.test_recollection_advanced_json_keeps_only_non_form_parameters"
+      ],
+      "depends_on": [
+        "repository.planning",
+        "repository.contexts",
+        "repository.steps",
+        "application.tasks",
+        "application.authoring",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "application.authoring": {
+      "source_globs": [
+        "src/taskweave/application/authoring.py",
+        "src/taskweave/application/ai_requests.py",
+        "src/taskweave/application/prompts.py",
+        "src/taskweave/application/service.py",
+        "src/taskweave/infrastructure/model.py",
+        "src/taskweave/infrastructure/privacy.py",
+        "src/taskweave/application/operations.py"
+      ],
+      "targets": [
+        "tests.test_ai_authoring",
+        "tests.test_ai_request_limits",
+        "tests.test_privacy_settings",
+        "tests.test_http_task_api",
+        "tests.test_web_chat"
+      ],
+      "depends_on": [
+        "repository.tasks",
+        "repository.steps",
+        "repository.environments",
+        "repository.runs",
+        "repository.results",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "application.runs": {
+      "source_globs": [
+        "src/taskweave/application/runs.py",
+        "src/taskweave/application/service.py",
+        "src/taskweave/infrastructure/runtime.py",
+        "src/taskweave/infrastructure/worker.py",
+        "src/taskweave/infrastructure/locking.py",
+        "src/taskweave/infrastructure/context_sessions.py",
+        "src/taskweave/application/operations.py"
+      ],
+      "targets": [
+        "tests.application.test_step_run_repository_port",
+        "tests.test_execution_control",
+        "tests.test_executor_recovery",
+        "tests.test_interval_scheduler",
+        "tests.test_http_task_api",
+        "tests.test_context_targets_runtime"
+      ],
+      "depends_on": [
+        "repository.tasks",
+        "repository.steps",
+        "repository.runs",
+        "repository.environments",
+        "repository.results",
+        "application.authoring",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "ui.tasks": {
+      "source_globs": [
+        "src/taskweave/desktop/pages/tasks.py"
+      ],
+      "targets": [
+        "tests.ui.test_tasks_page",
+        "tests.ui.test_organization_filters",
+        "tests.test_task_config_refresh",
+        "tests.test_task_transfer",
+        "tests.test_workbench_changes.WorkbenchChanges.test_task_search_matches_name_and_description"
+      ],
+      "depends_on": [
+        "application.tasks",
+        "shared.ui"
+      ],
+      "browser_targets": [
+        "tests.test_workbench_browser.WorkbenchAcceptance.test_real_task_authoring_ai_trial_run_history_and_configuration"
+      ]
+    },
+    "ui.editor": {
+      "source_globs": [
+        "src/taskweave/desktop/components/step_editor.py",
+        "src/taskweave/desktop/components/step_list.py",
+        "src/taskweave/desktop/components/step_ai.py",
+        "src/taskweave/desktop/dependencies.py"
+      ],
+      "targets": [
+        "tests.ui.test_step_editor_state",
+        "tests.ui.test_step_list",
+        "tests.ui.test_step_ai_editor",
+        "tests.test_desktop_step_save",
+        "tests.test_confirmation_ui",
+        "tests.test_workbench_changes.WorkbenchChanges.test_reorder_helper_swaps_adjacent_items_and_rejects_boundaries",
+        "tests.test_workbench_changes.WorkbenchChanges.test_step_reorder_moves_existing_controls_and_updates_visible_positions"
+      ],
+      "depends_on": [
+        "application.steps",
+        "application.authoring",
+        "ui.contexts",
+        "shared.ui"
+      ],
+      "browser_targets": [
+        "tests.test_workbench_browser.WorkbenchAcceptance.test_real_task_authoring_ai_trial_run_history_and_configuration",
+        "tests.test_input_ui.InputUi.test_dependency_picker_and_task_then_step_input"
+      ]
+    },
+    "ui.debug": {
+      "source_globs": [
+        "src/taskweave/desktop/components/step_debug.py",
+        "src/taskweave/desktop/components/trial_inputs.py",
+        "src/taskweave/desktop/components/run_inputs.py"
+      ],
+      "targets": [
+        "tests.ui.test_step_debug_session",
+        "tests.ui.test_run_input_validation",
+        "tests.ui.test_trial_inputs",
+        "tests.test_runtime_inputs",
+        "tests.test_trial_variable_groups",
+        "tests.test_variables",
+        "tests.test_workbench_changes.WorkbenchChanges.test_manual_confirmation_execution_and_scoped_restart",
+        "tests.test_workbench_changes.WorkbenchChanges.test_manual_confirmation_rejects_invalid_action_and_edits_invalidate",
+        "tests.test_workbench_changes.WorkbenchChanges.test_flow_trial_drafts_and_persisted_dependencies",
+        "tests.test_workbench_changes.WorkbenchChanges.test_failed_trial_edit_and_retry_reuses_task_debug_instance",
+        "tests.test_workbench_changes.WorkbenchChanges.test_restart_clears_live_sessions_keeps_history",
+        "tests.test_workbench_changes.WorkbenchChanges.test_end_button_tracks_live_session_not_success_status"
+      ],
+      "depends_on": [
+        "application.runs",
+        "ui.editor",
+        "shared.ui"
+      ],
+      "browser_targets": [
+        "tests.test_workbench_browser.WorkbenchAcceptance.test_real_task_authoring_ai_trial_run_history_and_configuration",
+        "tests.test_input_ui.InputUi.test_dependency_picker_and_task_then_step_input"
+      ]
+    },
+    "ui.planning": {
+      "source_globs": [
+        "src/taskweave/desktop/planning.py"
+      ],
+      "targets": [
+        "tests.ui.test_planning_page",
+        "tests.ui.test_organization_filters",
+        "tests.test_planning",
+        "tests.test_workbench_changes.WorkbenchChanges.test_planning_actions_save_draft_before_dependent_workflow",
+        "tests.test_workbench_changes.WorkbenchChanges.test_recollection_advanced_json_keeps_only_non_form_parameters"
+      ],
+      "depends_on": [
+        "application.planning",
+        "ui.contexts",
+        "shared.ui"
+      ],
+      "browser_targets": []
+    },
+    "ui.contexts": {
+      "source_globs": [
+        "src/taskweave/desktop/components/step_contexts.py",
+        "src/taskweave/desktop/contexts.py"
+      ],
+      "targets": [
+        "tests.ui.test_step_context_panel",
+        "tests.test_context_cards",
+        "tests.test_context_collection",
+        "tests.test_context_sessions",
+        "tests.test_context_captures",
+        "tests.test_workbench_changes.WorkbenchChanges.test_context_request_merges_form_advanced_and_target_values_in_order",
+        "tests.test_workbench_changes.WorkbenchChanges.test_step_contexts_persist_and_can_be_renamed_or_deleted",
+        "tests.test_workbench_changes.WorkbenchChanges.test_recollection_advanced_json_keeps_only_non_form_parameters",
+        "tests.test_workbench_changes.WorkbenchChanges.test_context_draft_is_committed_once_as_a_batch"
+      ],
+      "depends_on": [
+        "application.planning",
+        "repository.contexts",
+        "domain.contexts",
+        "shared.ui"
+      ],
+      "browser_targets": [
+        "tests.test_workbench_browser.WorkbenchAcceptance.test_real_task_authoring_ai_trial_run_history_and_configuration"
+      ]
+    },
+    "ui.executions": {
+      "source_globs": [
+        "src/taskweave/desktop/pages/executions.py",
+        "src/taskweave/desktop/pages/history.py",
+        "src/taskweave/desktop/components/execution_details.py"
+      ],
+      "targets": [
+        "tests.ui.test_executions_page",
+        "tests.ui.test_execution_details",
+        "tests.ui.test_run_page",
+        "tests.test_execution_control",
+        "tests.test_runtime_inputs"
+      ],
+      "depends_on": [
+        "application.runs",
+        "ui.debug",
+        "shared.ui"
+      ],
+      "browser_targets": [
+        "tests.test_workbench_browser.WorkbenchAcceptance.test_real_task_authoring_ai_trial_run_history_and_configuration"
+      ]
+    },
+    "ui.results": {
+      "source_globs": [
+        "src/taskweave/desktop/components/result_viewer.py",
+        "src/taskweave/core/result_views.py"
+      ],
+      "targets": [
+        "tests.ui.test_result_viewer",
+        "tests.test_result_views",
+        "tests.test_display"
+      ],
+      "depends_on": [
+        "repository.results",
+        "shared.ui"
+      ],
+      "browser_targets": []
+    },
+    "ui.environments": {
+      "source_globs": [
+        "src/taskweave/desktop/pages/environments.py"
+      ],
+      "targets": [
+        "tests.ui.test_environment_page",
+        "tests.ui.test_environment_application_flow",
+        "tests.test_task_config_refresh",
+        "tests.test_task_transfer",
+        "tests.test_workbench_changes.WorkbenchChanges.test_environment_credentials_use_generic_variable_rows"
+      ],
+      "depends_on": [
+        "application.environments",
+        "shared.ui"
+      ],
+      "browser_targets": []
+    },
+    "ui.plugins": {
+      "source_globs": [
+        "src/taskweave/desktop/pages/plugins.py",
+        "src/taskweave/desktop/pages/marketplace.py"
+      ],
+      "targets": [
+        "tests.ui.test_plugins_page",
+        "tests.ui.test_marketplace_page",
+        "tests.test_plugin_contract",
+        "tests.test_utility",
+        "tests.test_workbench_changes.WorkbenchChanges.test_playwright_task_parameters_override_environment"
+      ],
+      "depends_on": [
+        "shared.contracts",
+        "shared.ui"
+      ],
+      "browser_targets": []
+    },
+    "ui.settings": {
+      "source_globs": [
+        "src/taskweave/desktop/pages/settings.py",
+        "src/taskweave/desktop/security.py",
+        "src/taskweave/desktop/server_logs.py"
+      ],
+      "targets": [
+        "tests.ui.test_settings_page",
+        "tests.test_model_secret_settings",
+        "tests.test_privacy_settings",
+        "tests.test_model_logs",
+        "tests.test_workbench_changes.WorkbenchChanges.test_executor_thread_setting_persists"
+      ],
+      "depends_on": [
+        "shared.storage",
+        "shared.ui"
+      ],
+      "browser_targets": []
+    },
+    "ui.history": {
+      "source_globs": [
+        "src/taskweave/desktop/pages/history.py",
+        "src/taskweave/desktop/components/execution_details.py"
+      ],
+      "targets": [
+        "tests.ui.test_history_page",
+        "tests.ui.test_execution_details",
+        "tests.test_runtime_inputs",
+        "tests.test_execution_control"
+      ],
+      "depends_on": [
+        "application.runs",
+        "ui.results",
+        "shared.ui"
+      ],
+      "browser_targets": [
+        "tests.test_workbench_browser.WorkbenchAcceptance.test_real_task_authoring_ai_trial_run_history_and_configuration"
+      ]
+    },
+    "shared.storage": {
+      "source_globs": [
+        "src/taskweave/infrastructure/__init__.py",
+        "src/taskweave/infrastructure/sql/*.sql",
+        "src/taskweave/infrastructure/storage.py",
+        "src/taskweave/infrastructure/unit_of_work.py",
+        "src/taskweave/infrastructure/repositories/__init__.py",
+        "src/taskweave/infrastructure/repository.py"
+      ],
+      "targets": [
+        "tests.repositories.test_unit_of_work",
+        "tests.repositories.test_storage_compatibility",
+        "tests.test_storage_integrity",
+        "tests.test_control_db_migration",
+        "tests.test_workbench_changes.WorkbenchChanges.test_workspace_migration_copies_then_removes_only_after_new_workspace_starts"
+      ],
+      "depends_on": [],
+      "browser_targets": []
+    },
+    "shared.contracts": {
+      "source_globs": [
+        "src/taskweave/core/__init__.py",
+        "src/taskweave/core/repositories.py",
+        "src/taskweave/core/ports.py",
+        "src/taskweave/plugins/__init__.py",
+        "src/taskweave/plugins/demo.py",
+        "src/taskweave/plugins/manager.py",
+        "src/taskweave/plugins/registry.py",
+        "src/taskweave/plugins/sdk.py",
+        "src/taskweave/infrastructure/repositories/collaboration.py"
+      ],
+      "targets": [
+        "tests.repositories.test_repository_contracts",
+        "tests.repositories.test_collaboration_ports",
+        "tests.application.test_dispatch_policy",
+        "tests.test_architecture_boundaries",
+        "tests.test_plugin_contract"
+      ],
+      "depends_on": [],
+      "browser_targets": []
+    },
+    "shared.ui": {
+      "source_globs": [
+        "src/taskweave/desktop/__init__.py",
+        "src/taskweave/desktop/components/__init__.py",
+        "src/taskweave/desktop/components/organization.py",
+        "src/taskweave/desktop/pages/__init__.py",
+        "src/taskweave/desktop/pages/base.py",
+        "src/taskweave/desktop/controller.py",
+        "src/taskweave/desktop/display.py",
+        "src/taskweave/desktop/forms.py",
+        "src/taskweave/desktop/workbench.py",
+        "src/taskweave/desktop/state.py",
+        "src/taskweave/desktop/launcher.py",
+        "src/taskweave/desktop/chat.py",
+        "src/taskweave/desktop/dependencies.py",
+        "src/taskweave/desktop/theme.py"
+      ],
+      "targets": [
+        "tests.ui.test_navigation",
+        "tests.ui.test_workbench_home",
+        "tests.ui.test_button_dispatch",
+        "tests.test_desktop_port",
+        "tests.test_architecture_boundaries",
+        "tests.test_display"
+      ],
+      "depends_on": [],
+      "browser_targets": []
+    },
+    "plugins.playwright": {
+      "source_globs": [
+        "plugins/playwright/src/taskweave_playwright/__init__.py"
+      ],
+      "targets": [
+        "tests.test_plugin_contract",
+        "tests.test_context_targets_playwright",
+        "tests.test_workbench_changes.WorkbenchChanges.test_playwright_task_parameters_override_environment"
+      ],
+      "depends_on": [
+        "shared.contracts"
+      ],
+      "browser_targets": [
+        "tests.test_playwright_choices.PlaywrightChoiceTests.test_snapshot_includes_native_and_custom_choices",
+        "tests.test_playwright_choices.PlaywrightChoiceTests.test_press_and_native_select_option",
+        "tests.test_image_locators.ImageLocators.test_unnamed_images_in_separate_parents_have_unique_capture_locators",
+        "tests.test_playwright_browser_integration.BrowserTests"
+      ]
+    },
+    "plugins.ocr": {
+      "source_globs": [
+        "plugins/ocr/src/taskweave_ocr/__init__.py"
+      ],
+      "targets": [
+        "tests.test_ocr",
+        "tests.test_plugin_contract"
+      ],
+      "depends_on": [
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "plugins.tidb": {
+      "source_globs": [
+        "plugins/tidb/src/taskweave_tidb/__init__.py"
+      ],
+      "targets": [
+        "tests.test_tidb",
+        "tests.test_tidb_execution",
+        "tests.test_plugin_contract"
+      ],
+      "depends_on": [
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "plugins.utility": {
+      "source_globs": [
+        "plugins/utility/src/taskweave_utility/__init__.py"
+      ],
+      "targets": [
+        "tests.test_utility",
+        "tests.test_plugin_contract"
+      ],
+      "depends_on": [
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "application.environments": {
+      "source_globs": [
+        "src/taskweave/application/environments.py",
+        "src/taskweave/application/operations.py",
+        "src/taskweave/application/service.py",
+        "src/taskweave/infrastructure/context_sessions.py"
+      ],
+      "targets": [
+        "tests.application.test_application_composition",
+        "tests.application.test_dispatch_policy",
+        "tests.test_task_transfer",
+        "tests.test_task_config_refresh",
+        "tests.test_http_task_api"
+      ],
+      "depends_on": [
+        "repository.environments",
+        "repository.runs",
+        "repository.planning",
+        "application.runs",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "shared.testing": {
+      "source_globs": [
+        "scripts/test_modules.py",
+        "tests/module-map.json"
+      ],
+      "targets": [
+        "tests.test_module_selection"
+      ],
+      "depends_on": [],
+      "browser_targets": []
+    }
+  }
+}

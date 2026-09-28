@@ -2,13 +2,21 @@
 
 独立 Python distribution：taskweave-playwright。SDK 依赖仅在这个插件包，核心默认不包含浏览器。
 
-[运行、动作、AI 扩展与开发指南](../../docs/requirements/REQ-004-plugin-contract/usage.md)。
+开发边界、SDK 与验证入口见 [插件模块](../../docs/modules/plugins.md)，启动方式见 [运行与交付](../../docs/deployment.md)。动作与参数以本插件能力声明和 schema 为准。
 
 开发机同步：`uv sync --extra browser`。下载匹配 Chromium 仅在开发/构建机进行；受限虚拟机运行随包浏览器。
 
 任务参数与环境变量支持 playwright_headless、playwright_timeout_ms、playwright_role、playwright_executable_path、playwright_locale。locale 默认 `zh-CN`，在创建 BrowserContext 时应用，不通过页面操作切换通用语言。任务参数优先；声明与说明在 manifest.config_variables 中，UI 统一展示。
 
 插件 manifest 可选 resource_descriptions 提供资源 ID 对应的人类可读说明，供结束执行确认框展示；缺省显示资源 ID，不改变关闭接口或 v1 契约。Playwright 声明浏览器、页面及浏览器上下文。
+
+上下文采集支持选择同一实例中所有角色的现存页面，包括新标签页和弹窗。插件提供会话内稳定的 `target_id`、角色/标题/脱敏地址标签，以及 `{role, target_id, url: ""}` 采集参数；列表不会启动浏览器。插件 schema 声明唯一页面自动选中、多个页面明确选择，以及参数模式“新建页面”。新建页面要求 URL，并创建页面而不导航已有页面。选择已有目标只观察该页，不导航，也不改变后续动作使用的角色默认页面。目标关闭后需刷新重新选择，不自动回退；直接 API 同时提供目标和非空 URL 会返回 `CONTEXT_TARGET_REQUEST_INVALID`。可选钩子兼容插件 API v1，无数据库变更。
+
+采集范围可选当前视口或完整页面。任务步骤页默认完整页面，规划页默认当前视口，由插件的 `x-taskweave-context-surface-defaults` 声明；直接调用采集接口且未传 `scope` 时默认完整页面。需要预览时同时保存当前页面 PNG，并以 `playwright.screenshot` 交给宿主渲染；截图不混入发送给 AI 的结构证据。关闭预览只跳过截图，不改变页面结构采集。
+
+选择已有页面后仍可在采集弹窗修改 `scope`；URL 和角色仅在“新建页面”模式中录入。该可见性由插件 schema 的 `keep_parameters_when_selected` 声明。
+
+下拉和日期控件应先展开，再采集对应页面状态。采集器会记录当前可见的自定义选项、日期网格项，以及原生 `<select>` 的选项标签和值；当前视口最多记录 300 个元素。步骤可用 `page_press` 在唯一控件上按 Enter 等键，或用 `page_select_option` 按已观察到的标签/值选择原生下拉项；自定义选项使用采集到的唯一定位器点击。选择后仍需读取或断言实际结果。
 
 ## 0.2.0 页面观察、验证与 AI 修复
 

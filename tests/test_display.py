@@ -1,4 +1,5 @@
 import json
+import base64
 import unittest
 from taskweave.desktop.display import step_names, readable_metadata, execution_title, image_reference
 
@@ -22,6 +23,13 @@ class DisplayTests(unittest.TestCase):
 
 
 class ImageReferenceTests(unittest.TestCase):
+    def test_truncated_png_is_rejected_before_preview(self):
+        from taskweave.desktop.display import decode_inline_image
+
+        encoded = base64.b64encode(b'\x89PNG\r\n\x1a\n' + b'partial').decode()
+        with self.assertRaisesRegex(ValueError, '重新采集'):
+            decode_inline_image(encoded, 'image/png')
+
     def test_named_id_and_legacy_capture(self):
         stored = {'capture': {'path': '/authorized/image', 'media_type': 'image/png', 'result_id': 'saved-id'}}
         for payload in [{'output': 'capture'}, 'saved-id', {'capture': 'a1abfe9d-75db-4f90-832d-e2439a1f18a9'}, 'a1abfe9d-75db-4f90-832d-e2439a1f18a9']:

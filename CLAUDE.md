@@ -1,5 +1,3 @@
 # Claude 项目入口
 
-本项目的统一指令源是 [AGENTS.md](AGENTS.md)，请按其中的阅读顺序和工程边界工作。
-
-协作流程见 `docs/ai-operating-model.md`，当前状态见 `docs/progress.md`，具体需求见 `docs/requirements/`。此文件不维护另一套规则。
+统一规则见 [AGENTS.md](AGENTS.md)。从 [维护索引](docs/maintenance.md) 选择本次受影响模块，续接工作按需读取 [当前状态](docs/status.md)。不维护第二套指令，不默认读取历史需求。

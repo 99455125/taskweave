@@ -3,7 +3,7 @@ import asyncio
 import base64
 from concurrent.futures import ThreadPoolExecutor
 from io import BytesIO
-from taskweave.plugins.sdk import AuthoringContribution, CapabilitySpec, PluginError
+from taskweave.plugins.sdk import AuthoringContribution, CapabilitySpec, ContextCollection, PluginError
 
 
 def image_bytes(encoded):
@@ -89,7 +89,7 @@ class OcrPlugin:
         return AuthoringContribution(common, channel_overrides={'web_chat':{'instructions':'本渠道不能调用本地 OCR。生成 ocr.recognize 调用代码，不把你对图片的猜测写成固定识别结果。'}}, constraints={'content_format':'python-async-v1'})
     async def lint(self, step_document):
         return []
-    async def collect_context(self, provider_id, ctx, request):
-        return []
+    async def collect_context(self, provider_id, ctx, request, *, include_view=True):
+        return ContextCollection(())
     async def diagnose(self, error, refs):
         return []

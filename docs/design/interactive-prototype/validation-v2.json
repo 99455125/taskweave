@@ -1,0 +1,403 @@
+{
+  "date": "2026-09-26",
+  "scope": "Isolated NiceGUI UI prototype only; no product regression or real business service calls",
+  "checks": {
+    "responsive": {
+      "results": [
+        {
+          "view": "home",
+          "viewport": 1440,
+          "document": 1440,
+          "pass": true
+        },
+        {
+          "view": "home",
+          "viewport": 1280,
+          "document": 1280,
+          "pass": true
+        },
+        {
+          "view": "home",
+          "viewport": 1024,
+          "document": 1024,
+          "pass": true
+        },
+        {
+          "view": "home",
+          "viewport": 768,
+          "document": 768,
+          "pass": true
+        },
+        {
+          "view": "tasks",
+          "viewport": 1440,
+          "document": 1440,
+          "pass": true
+        },
+        {
+          "view": "tasks",
+          "viewport": 1280,
+          "document": 1280,
+          "pass": true
+        },
+        {
+          "view": "tasks",
+          "viewport": 1024,
+          "document": 1024,
+          "pass": true
+        },
+        {
+          "view": "tasks",
+          "viewport": 768,
+          "document": 768,
+          "pass": true
+        },
+        {
+          "view": "editor",
+          "viewport": 1440,
+          "document": 1440,
+          "pass": true
+        },
+        {
+          "view": "editor",
+          "viewport": 1280,
+          "document": 1280,
+          "pass": true
+        },
+        {
+          "view": "editor",
+          "viewport": 1024,
+          "document": 1024,
+          "pass": true
+        },
+        {
+          "view": "editor",
+          "viewport": 768,
+          "document": 768,
+          "pass": true
+        },
+        {
+          "view": "runs",
+          "viewport": 1440,
+          "document": 1440,
+          "pass": true
+        },
+        {
+          "view": "runs",
+          "viewport": 1280,
+          "document": 1280,
+          "pass": true
+        },
+        {
+          "view": "runs",
+          "viewport": 1024,
+          "document": 1024,
+          "pass": true
+        },
+        {
+          "view": "runs",
+          "viewport": 768,
+          "document": 768,
+          "pass": true
+        },
+        {
+          "view": "planning",
+          "viewport": 1440,
+          "document": 1440,
+          "pass": true
+        },
+        {
+          "view": "planning",
+          "viewport": 1280,
+          "document": 1280,
+          "pass": true
+        },
+        {
+          "view": "planning",
+          "viewport": 1024,
+          "document": 1024,
+          "pass": true
+        },
+        {
+          "view": "planning",
+          "viewport": 768,
+          "document": 768,
+          "pass": true
+        },
+        {
+          "view": "plugins",
+          "viewport": 1440,
+          "document": 1440,
+          "pass": true
+        },
+        {
+          "view": "plugins",
+          "viewport": 1280,
+          "document": 1280,
+          "pass": true
+        },
+        {
+          "view": "plugins",
+          "viewport": 1024,
+          "document": 1024,
+          "pass": true
+        },
+        {
+          "view": "plugins",
+          "viewport": 768,
+          "document": 768,
+          "pass": true
+        },
+        {
+          "view": "env",
+          "viewport": 1440,
+          "document": 1440,
+          "pass": true
+        },
+        {
+          "view": "env",
+          "viewport": 1280,
+          "document": 1280,
+          "pass": true
+        },
+        {
+          "view": "env",
+          "viewport": 1024,
+          "document": 1024,
+          "pass": true
+        },
+        {
+          "view": "env",
+          "viewport": 768,
+          "document": 768,
+          "pass": true
+        },
+        {
+          "view": "settings",
+          "viewport": 1440,
+          "document": 1440,
+          "pass": true
+        },
+        {
+          "view": "settings",
+          "viewport": 1280,
+          "document": 1280,
+          "pass": true
+        },
+        {
+          "view": "settings",
+          "viewport": 1024,
+          "document": 1024,
+          "pass": true
+        },
+        {
+          "view": "settings",
+          "viewport": 768,
+          "document": 768,
+          "pass": true
+        },
+        {
+          "view": "market",
+          "viewport": 1440,
+          "document": 1440,
+          "pass": true
+        },
+        {
+          "view": "market",
+          "viewport": 1280,
+          "document": 1280,
+          "pass": true
+        },
+        {
+          "view": "market",
+          "viewport": 1024,
+          "document": 1024,
+          "pass": true
+        },
+        {
+          "view": "market",
+          "viewport": 768,
+          "document": 768,
+          "pass": true
+        }
+      ],
+      "errors": []
+    },
+    "entries": {
+      "checks": [
+        {
+          "label": "调试当前步骤",
+          "pass": true
+        },
+        {
+          "label": "从选定步骤调试",
+          "pass": true
+        },
+        {
+          "label": "结束调试",
+          "pass": true
+        },
+        {
+          "label": "AI 修复",
+          "pass": true
+        },
+        {
+          "label": "清空 AI 修复上下文",
+          "pass": true
+        },
+        {
+          "label": "补充必录参数",
+          "pass": true
+        },
+        {
+          "label": "插入动作",
+          "pass": true
+        },
+        {
+          "label": "AI 编写",
+          "pass": true
+        },
+        {
+          "label": "AI 生成步骤描述",
+          "pass": true
+        },
+        {
+          "label": "时间设置",
+          "pass": true
+        },
+        {
+          "label": "步骤排序与确认",
+          "pass": true
+        },
+        {
+          "label": "校验内容",
+          "pass": true
+        },
+        {
+          "label": "确认验证并保存",
+          "pass": true
+        },
+        {
+          "label": "采集上下文",
+          "pass": true
+        },
+        {
+          "label": "编辑 / 继续采集",
+          "pass": true
+        },
+        {
+          "label": "内容 / 预览",
+          "pass": true
+        },
+        {
+          "label": "执行实例",
+          "pass": true
+        },
+        {
+          "label": "服务日志",
+          "pass": true
+        },
+        {
+          "label": "新建任务",
+          "pass": true
+        },
+        {
+          "label": "导入任务",
+          "pass": true
+        },
+        {
+          "label": "新建执行",
+          "pass": true
+        },
+        {
+          "label": "管理分类",
+          "pass": true
+        },
+        {
+          "label": "API 生成任务",
+          "pass": true
+        },
+        {
+          "label": "网页 Chat",
+          "pass": true
+        },
+        {
+          "label": "结束采集实例",
+          "pass": true
+        },
+        {
+          "label": "执行至此 / 重跑",
+          "pass": true
+        },
+        {
+          "label": "查看结果",
+          "pass": true
+        },
+        {
+          "label": "删除执行",
+          "pass": true
+        },
+        {
+          "label": "停用",
+          "pass": true
+        },
+        {
+          "label": "删除环境",
+          "pass": true
+        },
+        {
+          "label": "测试连接",
+          "pass": true
+        }
+      ],
+      "errors": []
+    },
+    "workflows": {
+      "checks": [
+        {
+          "label": "连续采集追加到草稿",
+          "pass": true
+        },
+        {
+          "label": "删除后可撤销",
+          "pass": true
+        },
+        {
+          "label": "取消不覆盖已保存组",
+          "pass": true
+        },
+        {
+          "label": "确认后整组显示更新",
+          "pass": true
+        },
+        {
+          "label": "切换步骤不串用上下文组",
+          "pass": true
+        },
+        {
+          "label": "返回原步骤保留该步骤的示例上下文",
+          "pass": true
+        },
+        {
+          "label": "AI修复保留历史范围、去重及双渠道",
+          "pass": true
+        },
+        {
+          "label": "任务调试历史独立可达",
+          "pass": true
+        },
+        {
+          "label": "工作空间迁移确认说明完整",
+          "pass": true
+        }
+      ],
+      "errors": []
+    }
+  },
+  "structural_checks": {
+    "prototype_python_syntax": "passed",
+    "check_project": "passed: layout, source syntax, dependency boundaries, 153 Markdown files, CLI version",
+    "git_diff_check": "passed",
+    "product_regression": "not run; design-only scope"
+  }
+}

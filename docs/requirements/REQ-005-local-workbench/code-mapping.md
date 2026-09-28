@@ -1,5 +1,11 @@
 # REQ-005 代码映射
 
+- `src/taskweave/desktop/contexts.py`：规划/步骤共享的上下文卡片、注释自动保存，以及插件 schema 驱动的通用目标选择；`planning.py`、`workbench.py` 连接对应服务。
+- `src/taskweave/infrastructure/storage.py`：控制库 v14 事务迁移，旧组各生成一个采集项并从父表移除单次采集载荷；`repository.py`、`plan_repository.py` 保存组摘要与采集项内容。
+- `context.capture.*` 与 `plan.context.capture.*`：按项追加、替换、删除、排序、改标题及按需读取；列表仅返回组和项摘要。
+- `src/taskweave/application/planning.py`、`task_transfer.py`：规划 AI 冻结快照、导入任务以及任务包/任务副本对组和项的复制。
+- `tests/test_context_cards.py`：编辑后操作前保存、失败重试、保存期间继续输入、乱序目标刷新、唯一目标自动选择和无目标扩展插件。
+
 | 文件 | 职责 |
 |---|---|
 | src/taskweave/desktop/launcher.py | 回环服务、原生窗口、启动/退出、延迟构建 Application |
@@ -11,8 +17,8 @@
 | src/taskweave/infrastructure/storage.py | 总库 v3 自动备份迁移 |
 | src/taskweave/infrastructure/repository.py | 任务复制/排序、环境列表、执行定义快照 |
 | src/taskweave/core/validation.py | 步骤间隔字段与整数范围校验 |
-| tests/test_req005.py | 真实 worker、DB 与恢复检查 |
-| tests/test_req005_ui.py | 实际界面全流程与本机模型 fixture |
+| tests/test_interval_scheduler.py、tests/test_task_copy_lifecycle.py、tests/test_desktop_step_save.py、tests/test_control_db_migration.py、tests/test_model_secret_settings.py、tests/test_executor_recovery.py、tests/test_desktop_port.py | 按功能拆分的调度、保存、恢复与桌面端口检查 |
+| tests/test_workbench_browser.py | 实际界面全流程与本机模型 fixture |
 
 入口：taskweave workbench；运行见 [指南](usage.md)。Windows/macOS 各架构原生窗口与冻结包验收分开记录。
 
@@ -28,7 +34,10 @@
 
 - 结果展示声明：`src/taskweave/core/result_views.py`、`StepResult.views`、任务 DB 内部 `__views` 元数据；插件注册 result_views，desktop 统一渲染。
 - TiDB：`plugins/tidb`；查询与变量配置/上下文/AI/展示独立于核心。
+- 上下文采集契约与预览校验：`src/taskweave/core/context_collection.py`；共享排序、重采集及预览卡片：`src/taskweave/desktop/contexts.py`；规划持久化与采集会话：`src/taskweave/infrastructure/plan_repository.py`、`context_sessions.py`。
 - 任务分享：`src/taskweave/application/task_transfer.py`、task.export/task.import；environment.delete 保留历史记录。
 
 
 任务运行清理：`task.clear_runs` → Application.clear_task_runs → Coordinator.clear_task_runs；任务列表确认入口 Workbench.clear_task_runs。验证：tests/test_task_cleanup.py。
+
+工作台 pages/components 与共享桌面适配层的快速 targets、反向依赖及可选本机浏览器流程维护在 `tests/module-map.json`；页面模块可通过 `uv run python scripts/test_modules.py --module ui.tasks` 精确运行。

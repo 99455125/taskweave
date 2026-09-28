@@ -1,0 +1,41 @@
+{
+  "checks": [
+    {
+      "name": "配置页无重复素材",
+      "pass": true
+    },
+    {
+      "name": "第二页签统一素材",
+      "pass": true
+    },
+    {
+      "name": "大模型api调用",
+      "pass": true
+    },
+    {
+      "name": "大模型网页chat调用",
+      "pass": true
+    },
+    {
+      "name": "重复进入导入保留预览",
+      "pass": true
+    },
+    {
+      "name": "动作说明和完整契约",
+      "pass": true
+    },
+    {
+      "name": "ocr能力渲染",
+      "pass": true
+    },
+    {
+      "name": "tidb能力渲染",
+      "pass": true
+    },
+    {
+      "name": "utility能力渲染",
+      "pass": true
+    }
+  ],
+  "errors": []
+}

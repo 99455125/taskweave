@@ -13,7 +13,7 @@ from taskweave.core.ports import ModelReply, ToolCall
 from taskweave.core.validation import TaskError, validate
 from taskweave.infrastructure.privacy import redact
 from taskweave.application.prompts import FORMAT_CORRECTION
-from taskweave.application.ai_requests import ensure_limit
+from taskweave.application.ai_requests import ensure_limit, preview_messages
 
 logger = logging.getLogger(__name__)
 
@@ -44,10 +44,19 @@ class HttpModel:
         self.url, self.model, self.api_key = url, model, api_key
 
     def capabilities(self):
-        return {"tools": True, "images": False, "json_object": True, "json_schema": False}
+        return {"tools": True, "images": True, "json_object": True, "json_schema": False}
 
     async def complete(self, messages, tool_specs, response_contract, *, request_limit_bytes=None, _repair=False):
         original_messages = messages
+        messages, images = preview_messages(messages)
+        if images:
+            target = next(m for m in reversed(messages) if m["role"] == "user")
+            target["content"] = [{"type": "text", "text": target["content"]}] + [
+                part for image in images for part in (
+                    {"type": "text", "text": image["name"] + " · " + image["title"]},
+                    {"type": "image_url", "image_url": {"url": "data:" + image["mime_type"] + ";base64," + image["data"]}},
+                )
+            ]
         invalid_response = {"content": None}
         # Provider function names may disallow dots: map stable IDs to wire aliases.
         aliases = {f"tool_{i}": s.id for i, s in enumerate(tool_specs)}

@@ -14,6 +14,7 @@ from uuid import uuid4
 
 from taskweave.core.validation import TaskError, dumps, valid_id, fingerprint
 from taskweave.infrastructure.privacy import redact
+from taskweave.infrastructure.unit_of_work import SQLiteUnitOfWork
 
 
 def uid():
@@ -132,6 +133,124 @@ CREATE TABLE plan_generations (
 );
 CREATE INDEX plan_generations_plan_created ON plan_generations(plan_id,created_at);
 """
+CONTROL_V11 = "ALTER TABLE step_contexts ADD COLUMN context_notes TEXT NOT NULL DEFAULT '';"
+CONTROL_V12 = """
+ALTER TABLE plans ADD COLUMN plan_notes TEXT NOT NULL DEFAULT '';
+ALTER TABLE plan_contexts ADD COLUMN request_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE plan_contexts ADD COLUMN views_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE plan_contexts ADD COLUMN include_view INTEGER NOT NULL DEFAULT 1 CHECK(include_view IN (0,1));
+ALTER TABLE step_contexts ADD COLUMN order_index INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE step_contexts ADD COLUMN request_json TEXT NOT NULL DEFAULT '{}';
+ALTER TABLE step_contexts ADD COLUMN views_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE step_contexts ADD COLUMN include_view INTEGER NOT NULL DEFAULT 1 CHECK(include_view IN (0,1));
+ALTER TABLE step_contexts ADD COLUMN captured_at TEXT NOT NULL DEFAULT '';
+UPDATE step_contexts AS target SET order_index=(
+ SELECT COUNT(*)-1 FROM step_contexts AS prior
+ WHERE prior.step_id=target.step_id AND (
+  prior.created_at<target.created_at OR
+  (prior.created_at=target.created_at AND prior.context_id<=target.context_id)
+ )
+);
+UPDATE step_contexts SET captured_at=updated_at WHERE captured_at='';
+CREATE INDEX step_contexts_step_order ON step_contexts(step_id,order_index);
+"""
+CONTROL_V13 = """
+CREATE TABLE step_contexts_new (
+ context_id TEXT PRIMARY KEY,
+ step_id TEXT NOT NULL REFERENCES steps(step_id) ON DELETE CASCADE,
+ provider_id TEXT NOT NULL, name TEXT NOT NULL,
+ source_page TEXT NOT NULL CHECK(source_page IN ('draft','trial_feedback','planning_import')),
+ item_json TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ context_notes TEXT NOT NULL DEFAULT '', order_index INTEGER NOT NULL DEFAULT 0,
+ request_json TEXT NOT NULL DEFAULT '{}', views_json TEXT NOT NULL DEFAULT '[]',
+ include_view INTEGER NOT NULL DEFAULT 1 CHECK(include_view IN (0,1)),
+ captured_at TEXT NOT NULL DEFAULT ''
+);
+INSERT INTO step_contexts_new SELECT context_id,step_id,provider_id,name,source_page,item_json,
+ created_at,updated_at,context_notes,order_index,request_json,views_json,include_view,captured_at
+ FROM step_contexts;
+DROP TABLE step_contexts;
+ALTER TABLE step_contexts_new RENAME TO step_contexts;
+CREATE INDEX step_contexts_step_created ON step_contexts(step_id,created_at);
+CREATE INDEX step_contexts_step_order ON step_contexts(step_id,order_index);
+"""
+
+# Capture payloads live in child rows so summary reads never load previews.
+CONTROL_V14 = """
+CREATE TABLE _step_context_capture_migration AS
+ SELECT context_id || ':capture:1' AS capture_id,context_id,0 AS order_index,'' AS label,request_json,item_json AS items_json,views_json,include_view,captured_at,NULL AS source_session_id,source_page,created_at,updated_at FROM step_contexts;
+CREATE TABLE _plan_context_capture_migration AS
+ SELECT context_id || ':capture:1' AS capture_id,context_id,0 AS order_index,'' AS label,request_json,item_json AS items_json,views_json,include_view,captured_at,source_session_id,NULL AS source_page,created_at,updated_at FROM plan_contexts;
+CREATE TABLE step_contexts_new (
+ context_id TEXT PRIMARY KEY, step_id TEXT NOT NULL REFERENCES steps(step_id) ON DELETE CASCADE,
+ provider_id TEXT NOT NULL, name TEXT NOT NULL, context_notes TEXT NOT NULL DEFAULT '',
+ order_index INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ revision INTEGER NOT NULL DEFAULT 1
+);
+INSERT INTO step_contexts_new(context_id,step_id,provider_id,name,context_notes,order_index,created_at,updated_at)
+ SELECT context_id,step_id,provider_id,name,context_notes,order_index,created_at,updated_at FROM step_contexts;
+CREATE TABLE plan_contexts_new (
+ context_id TEXT PRIMARY KEY, plan_id TEXT NOT NULL REFERENCES plans(plan_id) ON DELETE CASCADE,
+ provider_id TEXT NOT NULL, name TEXT NOT NULL, context_notes TEXT NOT NULL DEFAULT '',
+ order_index INTEGER NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+INSERT INTO plan_contexts_new(context_id,plan_id,provider_id,name,context_notes,order_index,created_at,updated_at)
+ SELECT context_id,plan_id,provider_id,name,context_notes,order_index,created_at,updated_at FROM plan_contexts;
+DROP TABLE step_contexts;
+ALTER TABLE step_contexts_new RENAME TO step_contexts;
+DROP TABLE plan_contexts;
+ALTER TABLE plan_contexts_new RENAME TO plan_contexts;
+CREATE INDEX step_contexts_step_created ON step_contexts(step_id,created_at);
+CREATE INDEX step_contexts_step_order ON step_contexts(step_id,order_index);
+CREATE INDEX plan_contexts_plan_order ON plan_contexts(plan_id,order_index);
+CREATE TABLE step_context_captures (
+ capture_id TEXT PRIMARY KEY, context_id TEXT NOT NULL REFERENCES step_contexts(context_id) ON DELETE CASCADE,
+ order_index INTEGER NOT NULL, label TEXT NOT NULL DEFAULT '', request_json TEXT NOT NULL DEFAULT '{}',
+ items_json TEXT NOT NULL, views_json TEXT NOT NULL DEFAULT '[]', include_view INTEGER NOT NULL DEFAULT 1 CHECK(include_view IN (0,1)),
+ captured_at TEXT NOT NULL, source_session_id TEXT, source_page TEXT NOT NULL,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX step_context_captures_group_order ON step_context_captures(context_id,order_index);
+CREATE TABLE plan_context_captures (
+ capture_id TEXT PRIMARY KEY, context_id TEXT NOT NULL REFERENCES plan_contexts(context_id) ON DELETE CASCADE,
+ order_index INTEGER NOT NULL, label TEXT NOT NULL DEFAULT '', request_json TEXT NOT NULL DEFAULT '{}',
+ items_json TEXT NOT NULL, views_json TEXT NOT NULL DEFAULT '[]', include_view INTEGER NOT NULL DEFAULT 1 CHECK(include_view IN (0,1)),
+ captured_at TEXT NOT NULL, source_session_id TEXT, source_page TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE INDEX plan_context_captures_group_order ON plan_context_captures(context_id,order_index);
+INSERT INTO step_context_captures SELECT * FROM _step_context_capture_migration;
+INSERT INTO plan_context_captures SELECT * FROM _plan_context_capture_migration;
+DROP TABLE _step_context_capture_migration;
+DROP TABLE _plan_context_capture_migration;
+"""
+
+# Keep task_id as historical text so deleting a task does not erase its import receipt.
+CONTROL_V15 = """
+CREATE TABLE plan_generation_imports (
+ import_id TEXT PRIMARY KEY,
+ generation_id TEXT NOT NULL REFERENCES plan_generations(generation_id) ON DELETE CASCADE,
+ task_id TEXT NOT NULL,
+ imported_at TEXT NOT NULL,
+ UNIQUE(generation_id, task_id)
+);
+CREATE INDEX plan_generation_imports_generation ON plan_generation_imports(generation_id, imported_at, import_id);
+INSERT OR IGNORE INTO plan_generation_imports(import_id,generation_id,task_id,imported_at)
+ SELECT 'legacy:' || generation_id,generation_id,imported_task_id,updated_at
+ FROM plan_generations WHERE imported_task_id IS NOT NULL;
+"""
+CONTROL_V16 = """
+CREATE TABLE organization_categories (
+ category_id TEXT PRIMARY KEY,
+ name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+ created_at TEXT NOT NULL,
+ updated_at TEXT NOT NULL
+);
+ALTER TABLE tasks ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0 CHECK(is_favorite IN (0,1));
+ALTER TABLE tasks ADD COLUMN category_id TEXT REFERENCES organization_categories(category_id) ON DELETE SET NULL;
+ALTER TABLE plans ADD COLUMN is_favorite INTEGER NOT NULL DEFAULT 0 CHECK(is_favorite IN (0,1));
+ALTER TABLE plans ADD COLUMN category_id TEXT REFERENCES organization_categories(category_id) ON DELETE SET NULL;
+"""
 
 
 @contextmanager
@@ -145,6 +264,14 @@ def connect(path):
             yield db
     finally:
         db.close()
+
+
+CONTROL_V17 = """
+ALTER TABLE step_context_captures ADD COLUMN operation_notes TEXT NOT NULL DEFAULT '';
+ALTER TABLE step_context_captures ADD COLUMN send_preview INTEGER NOT NULL DEFAULT 0 CHECK(send_preview IN (0,1));
+ALTER TABLE plan_context_captures ADD COLUMN operation_notes TEXT NOT NULL DEFAULT '';
+ALTER TABLE plan_context_captures ADD COLUMN send_preview INTEGER NOT NULL DEFAULT 0 CHECK(send_preview IN (0,1));
+"""
 
 
 def migrate(db, path, target, migrations):
@@ -185,8 +312,8 @@ def initialize(path, name):
         migrate(
             db,
             path,
-            10 if name == "control" else 2,
-            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8, 9: CONTROL_V9, 10: CONTROL_V10},
+            17 if name == "control" else 2,
+            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8, 9: CONTROL_V9, 10: CONTROL_V10, 11: CONTROL_V11, 12: CONTROL_V12, 13: CONTROL_V13, 14: CONTROL_V14, 15: CONTROL_V15, 16: CONTROL_V16, 17: CONTROL_V17},
         )
 
 
@@ -196,16 +323,20 @@ class Store:
         self.home.mkdir(parents=True, exist_ok=True)
         self.path = self.home / "taskweave.db"
         initialize(self.path, "control")
+        self.unit_of_work = SQLiteUnitOfWork(self.path)
 
     @contextmanager
     def transaction(self):
-        with connect(self.path) as db:
-            db.execute("BEGIN IMMEDIATE")
+        with self.unit_of_work.transaction() as db:
             yield db
 
     def query(self, sql, args=(), one=False):
-        with connect(self.path) as db:
-            rows = [dict(x) for x in db.execute(sql, args)]
+        active = self.unit_of_work.current_connection()
+        if active is not None:
+            rows = [dict(x) for x in active.execute(sql, args)]
+        else:
+            with connect(self.path) as db:
+                rows = [dict(x) for x in db.execute(sql, args)]
         if one:
             if not rows:
                 raise TaskError("NOT_FOUND")
@@ -216,200 +347,85 @@ class Store:
         with self.transaction() as db:
             return db.execute(sql, args).rowcount
 
+    def _repository_adapter(self, name):
+        attributes = {
+            "tasks": "tasks",
+            "steps": "step_repository",
+            "environments": "environment_repository",
+            "runs": "run_repository",
+            "results": "result_repository",
+            "step_contexts": "context_repository",
+        }
+        attribute = attributes[name]
+        existing = getattr(self, attribute, None)
+        if existing is not None:
+            return existing
+        adapters = getattr(self, "_storage_adapters", None)
+        if adapters is None:
+            from taskweave.infrastructure.repositories import build_sqlite_repositories
+
+            repositories = build_sqlite_repositories(self)
+            adapters = {
+                "tasks": repositories.tasks,
+                "steps": repositories.steps,
+                "environments": repositories.environments,
+                "runs": repositories.runs,
+                "results": repositories.results,
+                "step_contexts": repositories.step_contexts,
+            }
+            self._storage_adapters = adapters
+        return adapters[name]
+
     def task(self, task_id):
-        return self.query("SELECT * FROM tasks WHERE task_id=?", (task_id,), True)
+        return self._repository_adapter("tasks").task(task_id)
 
     def steps(self, task_id):
-        return [
-            self.decode_step(s)
-            for s in self.query(
-                "SELECT * FROM steps WHERE task_id=? ORDER BY position", (task_id,)
-            )
-        ]
+        return self._repository_adapter("steps").steps(task_id)
 
     def step(self, step_id):
-        return self.decode_step(
-            self.query("SELECT * FROM steps WHERE step_id=?", (step_id,), True)
-        )
+        return self._repository_adapter("steps").step(step_id)
 
     @staticmethod
     def decode_step(row):
-        for key in (
-            "input_schema",
-            "output_schema",
-            "bindings",
-            "capabilities",
-            "plugin_requirements",
-        ):
-            row[key] = json.loads(row.pop(key + "_json"))
-        return row
+        from taskweave.infrastructure.repositories.steps import StepRepository
+
+        return StepRepository.decode_step(row)
 
     def run(self, run_id):
-        return self.query("SELECT * FROM task_runs WHERE run_id=?", (run_id,), True)
+        return self._repository_adapter("runs").run(run_id)
 
     def definition_hash(self, task_id):
-        task = self.task(task_id)
-        return fingerprint(
-            {
-                "input_schema": task["input_schema_json"],
-                "graph": task["graph_json"],
-                "steps": [
-                    (s["step_id"], s["content_hash"]) for s in self.steps(task_id)
-                ],
-            }
-        )
+        return self._repository_adapter("tasks").definition_hash(task_id)
 
     @staticmethod
     def assert_unlocked(db, task_id, allow_idle_trial=False):
-        if db.execute(
-            "SELECT 1 FROM runtime_lease l JOIN task_runs r USING(run_id) WHERE r.task_id=? AND (?=0 OR r.mode<>'TRIAL' OR r.status NOT IN ('FAILED','SUCCEEDED'))",
-            (task_id, int(allow_idle_trial)),
-        ).fetchone():
-            raise TaskError("TASK_LOCKED", "End the active run before editing")
+        from taskweave.infrastructure.repositories.tasks import TaskRepository
+
+        return TaskRepository.assert_unlocked(db, task_id, allow_idle_trial)
 
     def event(self, run_id, kind, payload, attempt_id=None, event_id=None):
-        self.execute(
-            "INSERT OR IGNORE INTO run_events VALUES(?,?,?,?,?,?)",
-            (
-                event_id or uid(),
-                run_id,
-                attempt_id,
-                kind,
-                dumps(redact(payload)),
-                now(),
-            ),
-        )
+        return self._repository_adapter("runs").event(run_id, kind, payload, attempt_id, event_id)
 
     def environment(self, environment_id):
-        if environment_id is None:
-            return {}, {}
-        row = self.query(
-            "SELECT * FROM environments WHERE environment_id=?", (environment_id,), True
-        )
-        return json.loads(row["public_config_json"]), json.loads(
-            row["secret_refs_json"]
-        )
+        return self._repository_adapter("environments").environment(environment_id)
 
     def task_path(self, task_id):
         return self.home / "tasks" / valid_id(task_id) / "data.db"
 
     def read_output(self, run_id, step_id, output="data", registry=None):
-        run = self.run(run_id)
-        attempts = self.query(
-            "SELECT * FROM step_attempts WHERE run_id=? AND step_id=? AND valid=1 ORDER BY attempt_no DESC LIMIT 1",
-            (run_id, step_id),
-        )
-        if not attempts or attempts[0]["status"] != "SUCCEEDED":
-            raise TaskError("OUTPUT_NOT_AVAILABLE")
-        if output != "data":
-            refs = self.receipt(attempts[0]) or []
-            ref = next((r for r in refs if r.get("name") == output), None)
-            if ref is None:
-                raise TaskError("OUTPUT_NOT_AVAILABLE")
-            if registry is None:
-                raise TaskError("HANDLER_UNAVAILABLE")
-            if (
-                ref["handler_id"] != "core.json"
-                and ref["handler_id"] not in registry.handlers
-            ):
-                raise TaskError("HANDLER_UNAVAILABLE")
-            return self.read_result(ref["result_id"], registry)["data"]
-        path = self.task_path(run["task_id"])
-        if not path.exists():
-            raise TaskError("OUTPUT_NOT_AVAILABLE")
-        with connect(path) as db:
-            row = db.execute(
-                "SELECT payload_json FROM step_outputs WHERE run_id=? AND step_id=? AND attempt_id=? AND name='data'",
-                (run_id, step_id, attempts[0]["attempt_id"]),
-            ).fetchone()
-        if row is None:
-            raise TaskError("OUTPUT_NOT_AVAILABLE")
-        return json.loads(row[0])
+        return self._repository_adapter("results").read_output(run_id, step_id, output, registry)
 
     def receipt(self, attempt):
-        path = self.task_path(attempt["task_id"])
-        if not path.exists():
-            return None
-        with connect(path) as db:
-            row = db.execute(
-                "SELECT refs_json FROM result_receipts WHERE attempt_id=? AND run_id=? AND step_id=? AND state='COMMITTED'",
-                (attempt["attempt_id"], attempt["run_id"], attempt["step_id"]),
-            ).fetchone()
-        return json.loads(row[0]) if row else None
+        return self._repository_adapter("results").receipt(attempt)
 
     def register_refs(self, attempt_id, refs):
-        with self.transaction() as db:
-            a = dict(
-                db.execute(
-                    "SELECT * FROM step_attempts WHERE attempt_id=?", (attempt_id,)
-                ).fetchone()
-            )
-            for ref in refs:
-                db.execute(
-                    "INSERT OR IGNORE INTO result_refs(result_id,task_id,run_id,step_id,attempt_id,handler_id,kind,locator,media_type,checksum,size_bytes) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                    (
-                        ref["result_id"],
-                        a["task_id"],
-                        a["run_id"],
-                        a["step_id"],
-                        attempt_id,
-                        ref["handler_id"],
-                        ref["kind"],
-                        ref["locator"],
-                        ref["media_type"],
-                        ref.get("checksum"),
-                        ref.get("size_bytes"),
-                    ),
-                )
+        return self._repository_adapter("runs").register_refs(attempt_id, refs)
 
     def finish_attempt(self, attempt_id, refs):
-        with self.transaction() as db:
-            a = dict(
-                db.execute(
-                    "SELECT * FROM step_attempts WHERE attempt_id=?", (attempt_id,)
-                ).fetchone()
-            )
-            for ref in refs:
-                db.execute(
-                    "INSERT OR IGNORE INTO result_refs(result_id,task_id,run_id,step_id,attempt_id,handler_id,kind,locator,media_type,checksum,size_bytes) VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-                    (
-                        ref["result_id"],
-                        a["task_id"],
-                        a["run_id"],
-                        a["step_id"],
-                        attempt_id,
-                        ref["handler_id"],
-                        ref["kind"],
-                        ref["locator"],
-                        ref["media_type"],
-                        ref.get("checksum"),
-                        ref.get("size_bytes"),
-                    ),
-                )
-            db.execute(
-                "UPDATE step_attempts SET status='SUCCEEDED',effect_state='SUCCEEDED',error_code=NULL,error_phase=NULL,error_summary=NULL,finished_at=? WHERE attempt_id=?",
-                (now(), attempt_id),
-            )
+        return self._repository_adapter("runs").finish_attempt(attempt_id, refs)
 
     def recover(self):
-        # Called only after acquiring the OS coordinator lock and stopping stale workers.
-        for a in self.query("SELECT * FROM step_attempts WHERE status='RUNNING'"):
-            refs = self.receipt(a)
-            if refs is not None:
-                self.finish_attempt(a["attempt_id"], refs)
-            else:
-                self.execute(
-                    "UPDATE step_attempts SET status='UNKNOWN',effect_state='UNKNOWN',error_code='WORKER_LOST',error_phase='execute',finished_at=? WHERE attempt_id=?",
-                    (now(), a["attempt_id"]),
-                )
-        self.execute("UPDATE task_runs SET status='INTERRUPTED' WHERE status='RUNNING'")
-        # The OS coordinator lock is held: no previous process owns these leases.
-        # Keep attempts (including UNKNOWN effects) for explicit reconciliation.
-        self.execute("DELETE FROM runtime_lease")
-        self.execute(
-            "UPDATE command_receipts SET state='FAILED',response_json=? WHERE state='ACCEPTED'",
-            (dumps({"code": "COORDINATOR_RESTARTED"}),),
-        )
+        return self._repository_adapter("runs").recover()
 
 
 class Results:

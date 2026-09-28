@@ -11,6 +11,19 @@ from taskweave.core.validation import TaskError
 
 
 class ExportIOTests(unittest.IsolatedAsyncioTestCase):
+    async def test_plan_prompt_download_saves_utf8_text_and_opens_exports(self):
+        with tempfile.TemporaryDirectory() as home:
+            controller = DesktopController(SimpleNamespace(home=Path(home)))
+            controller.open_path = AsyncMock()
+            prompt = 'system:\n请生成步骤\n    保持缩进'
+            first = await controller.save_plan_prompt(prompt)
+            second = await controller.save_plan_prompt(prompt)
+            self.assertNotEqual(first, second)
+            self.assertEqual(first.suffix, '.txt')
+            self.assertEqual(first.read_text(encoding='utf-8'), prompt)
+            self.assertEqual(second.read_text(encoding='utf-8'), prompt)
+            controller.open_path.assert_awaited_with(Path(home) / 'exports')
+
     async def test_export_saves_unique_json_and_opens_directory(self):
         with tempfile.TemporaryDirectory() as home:
             controller = DesktopController(SimpleNamespace(home=Path(home)))

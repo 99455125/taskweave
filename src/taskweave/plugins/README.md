@@ -1,5 +1,5 @@
-# plugins
+# 插件 SDK 与注册
 
-职责：公开 SDK、标准入口发现、启停配置、兼容性检查、插件注册和编写能力贡献。
+sdk.py 定义贡献与能力契约，registry.py 注册/校验能力，manager.py 管理发现与配置。具体插件实现位于仓库根 plugins/。
 
-遵循 [项目架构](../../../docs/architecture.md)。运行方法见 [REQ-004 指南](../../../docs/requirements/REQ-004-plugin-contract/usage.md)。
+开发边界与测试见 [插件模块](../../../docs/modules/plugins.md)，不要求先读历史 REQ 契约快照。

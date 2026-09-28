@@ -1,5 +1,5 @@
 # infrastructure
 
-职责：SQLite 存储、worker 执行、资源管理、运行协调、模型适配与本地 HTTP 接口。
+SQLite 仓储与 UoW、存储迁移、运行协调/worker、模型与 HTTP 适配。runtime 通过语义仓储接口持久化。
 
-遵循 [项目架构](../../../docs/architecture.md)。运行方法见 [REQ-004 指南](../../../docs/requirements/REQ-004-plugin-contract/usage.md)。
+按改动读取 [存储与环境](../../../docs/modules/storage.md)、[执行与结果](../../../docs/modules/execution.md)或[AI 编写](../../../docs/modules/authoring.md)，无需通读所有模块或历史需求。
