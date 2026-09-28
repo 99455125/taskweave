@@ -1,10 +1,12 @@
 """Browser plugin: resources, actions, authoring tools and result interpretation."""
 
 import ast
+import base64
 import json
 import asyncio
 import re
 from datetime import datetime, timezone
+from uuid import uuid4
 from playwright.async_api import expect
 from urllib.parse import urlparse
 from playwright.async_api import async_playwright, Error, TimeoutError
@@ -12,6 +14,8 @@ from taskweave.plugins.sdk import (
     CapabilitySpec,
     AuthoringContribution,
     ContextItem,
+    ContextCollection,
+    ContextView,
     Diagnostic,
     PreparedResult,
     PluginError,
@@ -66,13 +70,16 @@ async def target_state(page, selector):
     return state
 
 
-async def snapshot(page):
+async def snapshot(page, scope='runtime'):
     frames = []
-    remaining = 80
+    full_page = scope == 'full_page'
+    all_elements = scope != 'viewport'
+    remaining = 2000 if full_page else (300 if scope == 'viewport' else 80)
     truncated = len(page.frames) > 8
     for frame in page.frames[:8]:
-        elements = await frame.locator('input,textarea,select,button,a,img,canvas,[role="button"],[role="textbox"]').evaluate_all(r"""els => {
+        elements = await frame.locator('input,textarea,select,button,a,img,canvas,[role="button"],[role="textbox"],[role="option"],[role="radio"],[role="menuitem"],[role="gridcell"],[role="listbox"] li').evaluate_all(r"""(els, options) => {
           const visible = e => {const s=getComputedStyle(e); return s.visibility!=='hidden' && s.display!=='none' && Array.from(e.getClientRects()).some(r=>r.width>0 && r.height>0)};
+          const inViewport = e => Array.from(e.getClientRects()).some(r=>r.bottom>=0 && r.right>=0 && r.top<=innerHeight && r.left<=innerWidth);
           const domPath = e => {
             const parts=[];
             for(let node=e;node&&node.nodeType===1;node=node.parentElement){
@@ -83,17 +90,18 @@ async def snapshot(page):
             }
             return parts.join(' > ');
           };
-          return els.filter(e=>visible(e)).sort((a,b)=>(a.tagName==='A')-(b.tagName==='A')).slice(0,80).map(e=>{
-            const tag=e.tagName.toLowerCase(); const role=e.getAttribute('role')||({button:'button',textarea:'textbox',select:'combobox',a:'link',img:'img'}[tag])||(e.type==='submit'?'button':e.type==='text'||e.type==='search'?'textbox':'');
+          return els.filter(e=>visible(e) && (options.allElements || inViewport(e))).sort((a,b)=>a.getBoundingClientRect().top-b.getBoundingClientRect().top || a.getBoundingClientRect().left-b.getBoundingClientRect().left).slice(0,options.limit).map(e=>{
+            const tag=e.tagName.toLowerCase(); const role=e.getAttribute('role')||({button:'button',textarea:'textbox',select:'combobox',a:'link',img:'img'}[tag])||(e.type==='radio'?'radio':e.type==='submit'?'button':e.type==='text'||e.type==='search'?'textbox':'');
             const label=Array.from(e.labels||[]).map(l=>l.innerText).join(' ').trim();
             const name=(e.getAttribute('aria-label')||(e.getAttribute('aria-labelledby')||'').split(/\s+/).map(id=>e.ownerDocument.getElementById(id)?.innerText||'').join(' ').trim()||label||e.getAttribute('alt')||(role==='button' && tag==='input'?e.value:e.innerText)||'').replace(/\s+/g,' ').trim().slice(0,120);
             const placeholder=e.getAttribute('placeholder')||'';
-            const css=e.id?'#'+CSS.escape(e.id):(tag==='img'||tag==='canvas'?domPath(e):null);
+            const css=e.id?'#'+CSS.escape(e.id):(tag==='img'||tag==='canvas'||role==='option'||role==='gridcell'||tag==='li'?domPath(e):null);
             const selector=css?{kind:'css',value:css}:placeholder?{kind:'placeholder',value:placeholder,exact:true}:label?{kind:'label',value:label,exact:true}:role&&name?{kind:'role',value:role,name:name,exact:true}:null;
-            return {tag,width:Math.round(e.getBoundingClientRect().width),height:Math.round(e.getBoundingClientRect().height),id:e.id,type:e.type||'',role,name,label,placeholder,visible:true,enabled:!e.matches(':disabled') && e.getAttribute('aria-disabled')!=='true',editable:(tag==='textarea'||tag==='input'||e.isContentEditable)&&!e.readOnly&&!e.disabled,selector};
+            const choices=tag==='select'?Array.from(e.options).slice(0,80).map(o=>({label:o.label,value:o.value,disabled:o.disabled})):undefined;
+            return {tag,width:Math.round(e.getBoundingClientRect().width),height:Math.round(e.getBoundingClientRect().height),id:e.id,type:e.type||'',role,name,label,placeholder,visible:true,enabled:!e.matches(':disabled') && e.getAttribute('aria-disabled')!=='true',editable:(tag==='textarea'||tag==='input'||e.isContentEditable)&&!e.readOnly&&!e.disabled,selector,...(choices?{options:choices,options_truncated:e.options.length>choices.length}:{})};
           });
-        }""")
-        selected = elements[:min(remaining, 40)]
+        }""", {"allElements": all_elements, "limit": remaining + 1})
+        selected = elements[:remaining]
         truncated = truncated or len(selected) < len(elements)
         for item in selected:
             if item['selector']:
@@ -176,6 +184,24 @@ async def page_for(ctx, role):
     return resource["page"]
 
 
+def _live_context_targets(resource):
+    """Keep opaque page identities inside the owning, live resource only."""
+    pages = resource["context"].pages
+    pages = [page for page in pages if not page.is_closed()]
+    known = resource.setdefault("context_target_pages", {})
+    for target_id, page in list(known.items()):
+        if not any(page is current for current in pages):
+            del known[target_id]
+    targets = []
+    for page in pages:
+        target_id = next((key for key, value in known.items() if value is page), None)
+        if target_id is None:
+            target_id = uuid4().hex
+            known[target_id] = page
+        targets.append((target_id, page))
+    return targets
+
+
 class BrowserAction:
     def __init__(self, name, description, inputs, output, effect="READ"):
         self.name = name
@@ -202,7 +228,7 @@ class BrowserAction:
             if inputs.get('selector') is not None:
                 state = await asyncio.wait_for(target_state(page, inputs['selector']), 2)
                 ctx.emit('BrowserTargetObserved', state)
-                if self.name in {'page_fill', 'page_click', 'page_input_value', 'page_element_image'}:
+                if self.name in {'page_fill', 'page_click', 'page_press', 'page_select_option', 'page_input_value', 'page_element_image'}:
                     if state['match_count'] == 0:
                         raise PluginError('LOCATOR_NOT_FOUND', 'No control matches the requested locator')
                     if state['match_count'] > 1:
@@ -245,6 +271,12 @@ class BrowserAction:
             return None
         if op == "page_click":
             await locate(page, inputs["selector"]).click()
+            return None
+        if op == "page_press":
+            await locate(page, inputs["selector"]).press(inputs["key"])
+            return None
+        if op == "page_select_option":
+            await locate(page, inputs["selector"]).select_option(**inputs["option"])
             return None
         if op == "page_wait":
             await locate(page, inputs["selector"]).wait_for(
@@ -361,11 +393,22 @@ class PlaywrightPlugin:
             "context_requests": {
                 "playwright.page": {
                     "type": "object",
+                    "x-taskweave-context-targets": {
+                        "selector_label": "上下文实例 / 页面",
+                        "parameter_mode_label": "新建页面",
+                        "auto_select_single": True,
+                        "hide_parameters_when_selected": True,
+                        "keep_parameters_when_selected": ["scope"],
+                    },
                     "properties": {
                         "url": {"type": "string", "description": "可选；首次采集时打开的 HTTP/HTTPS 地址，后续留空以采集当前页面"},
                         "role": {"type": "string", "default": "operator", "description": "需要持续复用的浏览器角色"},
+                        "scope": {"type": "string", "enum": ["viewport", "full_page"], "default": "full_page", "description": "采集当前可见区域或整个页面"},
                     },
+                    "required": ["url"],
                     "additionalProperties": False,
+                    "x-taskweave-context-surface-defaults": {"planning": {"scope": "viewport"}},
+                    "x-taskweave-context-view": {"default": True},
                 }
             },
             "config_variables": [
@@ -419,6 +462,23 @@ class PlaywrightPlugin:
                 "page_click",
                 "Click an element; may submit business",
                 schema({"selector": LOCATOR}, ["selector"]),
+                NULL,
+                "WRITE",
+            ),
+            (
+                "page_press",
+                "Press a key on a uniquely located control; for example Enter after filling a search box",
+                schema({"selector": LOCATOR, "key": {"enum": ["Enter", "Tab", "Escape", "ArrowDown", "ArrowUp", "Space"]}}, ["selector", "key"]),
+                NULL,
+                "WRITE",
+            ),
+            (
+                "page_select_option",
+                "Select one native HTML select option by observed value or label",
+                schema({"selector": LOCATOR, "option": {"oneOf": [
+                    {"type": "object", "properties": {"value": STRING}, "required": ["value"], "additionalProperties": False},
+                    {"type": "object", "properties": {"label": STRING}, "required": ["label"], "additionalProperties": False},
+                ]}}, ["selector", "option"]),
                 NULL,
                 "WRITE",
             ),
@@ -526,6 +586,7 @@ class PlaywrightPlugin:
 未命名图片或 canvas 可以带有观测到的 DOM-path selector；page_element_image 使用该 selector，不从列表序号推断父类名、src 或全局 nth-of-type。定位失效时需要新证据，不能无依据重复失败定位。
 page_wait 支持 attached、detached、visible、hidden；不传不存在的等待状态，不使用 sleep。按操作需要等待控件或目标状态，不能用固定延时掩盖定位错误。
 page_text/page_assert_text 面向可见文本；输入框、textarea、select 的实际值使用 page_input_value/page_assert_value。返回对象按动作 schema 读取。
+原生 select 用 page_select_option 按采集到的 value 或 label 选择；自定义下拉先展开，再采集可见 option 或列表项并点击。需要键盘确认时可对唯一输入框调用 page_press Enter。填入、按键或点击候选后仍需验证实际选中结果，不把输入文本等同于已选中。
 page_assert_url 使用 URL glob；路径匹配需要完整URL或明确的 glob，例如 **/TreatyManagement/Treaty/add。page_assert_title 使用标题包含匹配。
 成功检查只针对本步骤：填写检查填写值，导航检查目标页面，提交检查真实业务状态。点击成功或非空页面快照不能代替这些检查；不要额外执行下一步业务。
 Playwright 只负责采集图像和页面操作，不识别验证码。采图、OCR、填写、登录步骤按用户划分分别实现；只有当前步骤明确包含完整登录且能力齐备时才组合。
@@ -575,31 +636,99 @@ page_handoff 只把页面交给用户，步骤代码没有 ctx.pause；恢复后
                     )
         return diagnostics
 
-    async def collect_context(self, provider_id, ctx, request):
+    async def list_context_targets(self, provider_id, ctx, request):
+        if provider_id != "playwright.page":
+            raise PluginError("CONTEXT_PROVIDER_UNAVAILABLE")
+        targets = []
+        for role, resource in ctx.resources.active("playwright.session"):
+            for target_id, page in _live_context_targets(resource):
+                try:
+                    title = await page.title()
+                except Error:
+                    if page.is_closed():
+                        continue
+                    title = ""
+                if page.is_closed():
+                    continue
+                parsed = urlparse(page.url)
+                url = parsed._replace(netloc=parsed.netloc.rsplit("@", 1)[-1], query="", fragment="").geturl()
+                targets.append({
+                    "target_id": target_id,
+                    "label": f"{role} · {title or '(无标题)'} · {url} · {target_id[:8]}",
+                    "request": {"role": role, "target_id": target_id, "url": ""},
+                })
+        return targets
+
+    async def collect_context(self, provider_id, ctx, request, *, include_view=True):
         if provider_id != "playwright.page":
             raise PluginError("CONTEXT_PROVIDER_UNAVAILABLE")
         url = request.get("url")
-        if url and urlparse(url).scheme not in {"http", "https"}:
-            raise PluginError("URL_INVALID")
-        role = request.get("role", "operator")
-        if not url and not any(
-            r == role for r, _ in ctx.resources.active("playwright.session")
-        ):
-            raise PluginError("SESSION_NOT_AVAILABLE")
-        page = await page_for(ctx, role)
-        if url:
-            await page.goto(url, wait_until="domcontentloaded")
-        action = self.actions()["playwright.page_inspect"]
-        data = await action.perform(ctx, page, {})
-        return [
+        if "target_id" in request:
+            if url:
+                raise PluginError("CONTEXT_TARGET_REQUEST_INVALID", "An existing page target cannot be combined with a URL")
+            selected = None
+            for active_role, resource in ctx.resources.active("playwright.session"):
+                if "role" in request and request["role"] != active_role:
+                    continue
+                for target_id, candidate in _live_context_targets(resource):
+                    if target_id == request["target_id"]:
+                        selected = (active_role, candidate)
+                        break
+                if selected is not None:
+                    break
+            if selected is None:
+                raise PluginError("CONTEXT_TARGET_UNAVAILABLE", "The selected page is no longer available; refresh the target list")
+            role, page = selected
+        else:
+            if url and urlparse(url).scheme not in {"http", "https"}:
+                raise PluginError("URL_INVALID")
+            role = request.get("role", "operator")
+            if not url and not any(
+                r == role for r, _ in ctx.resources.active("playwright.session")
+            ):
+                raise PluginError("SESSION_NOT_AVAILABLE")
+            if url:
+                active = next(
+                    (resource for active_role, resource in ctx.resources.active("playwright.session") if active_role == role),
+                    None,
+                )
+                page = (
+                    await active["context"].new_page()
+                    if active is not None
+                    else await page_for(ctx, role)
+                )
+                await page.goto(url, wait_until="domcontentloaded")
+            else:
+                page = await page_for(ctx, role)
+        scope = request.get('scope', 'full_page')
+        if scope not in {'viewport', 'full_page'}:
+            raise PluginError('FORM_INVALID', 'scope must be viewport or full_page')
+        try:
+            data = await snapshot(page, scope=scope)
+            data['role'] = role
+            data['task_id'] = ctx.scope.task_id
+            data['run_id'] = ctx.scope.run_id
+        except Error as exc:
+            if "target_id" in request and page.is_closed():
+                raise PluginError("CONTEXT_TARGET_UNAVAILABLE", "The selected page closed during collection; refresh the target list") from exc
+            raise
+        views = ()
+        if include_view:
+            image = await page.screenshot(type='png', full_page=scope == 'full_page')
+            views = (ContextView(
+                '完整页面截图' if scope == 'full_page' else '当前页面截图',
+                'playwright.screenshot',
+                {'image_base64': base64.b64encode(image).decode('ascii'), 'mime_type': 'image/png'},
+            ),)
+        return ContextCollection((
             ContextItem(
                 "text",
                 "application/json",
                 json.dumps(data, ensure_ascii=False),
                 "playwright.page",
                 truncated=data.get('truncated', False),
-            )
-        ]
+            ),
+        ), views)
 
     async def diagnose(self, error, refs):
         if error.code.startswith(("BROWSER", "LOCATOR")) or error.code in {

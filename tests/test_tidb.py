@@ -53,7 +53,8 @@ class TiDBTests(unittest.TestCase):
         connection = MagicMock();connection.cursor.return_value.__enter__.return_value = cursor
         with patch('pymysql.connect', return_value=connection) as connect:
             result = asyncio.run(TiDBPlugin().collect_context('tidb.schema', self.context(tidb_tls=True), {'table': 'orders'}))
-        self.assertIn('order_no', result[0].content)
+        self.assertIn('order_no', result.items[0].content)
+        self.assertEqual(result.views[0].renderer, 'tidb.table')
         self.assertEqual(cursor.execute.call_args.args[1], ['uat', 'orders'])
         self.assertTrue(connect.call_args.kwargs['ssl_verify_identity']);self.assertTrue(connect.call_args.kwargs['ssl_verify_cert'])
         registry = Registry([TiDBPlugin()])

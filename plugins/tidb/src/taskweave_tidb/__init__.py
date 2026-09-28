@@ -7,7 +7,7 @@ import json
 import re
 import time as clock
 from urllib.parse import urlsplit, unquote, parse_qs
-from taskweave.plugins.sdk import AuthoringContribution, CapabilitySpec, ContextItem, PluginError
+from taskweave.plugins.sdk import AuthoringContribution, CapabilitySpec, ContextCollection, ContextItem, ContextView, PluginError
 
 
 def configuration(ctx):
@@ -146,7 +146,7 @@ class DatabaseAction:
 class TiDBPlugin:
     def manifest(self):
         variables = [('connection_url', 'string', False, '可选 mysql://账号:密码@主机:4000/数据库；也可分项配置'), ('host', 'string', False, '数据库主机；不用连接串时必填'), ('port', 'integer', False, '端口，默认 4000'), ('database', 'string', False, '数据库名称；不用连接串时必填'), ('username', 'string', False, '数据库账号；不用连接串时必填'), ('password', 'string', False, '数据库密码，本地变量配置'), ('tls', 'boolean', False, 'TLS，默认 true；本地未启用 TLS 的数据库可设置 false'), ('ssl_ca', 'string', False, '可选 CA 证书路径'), ('timeout_seconds', 'integer', False, '连接及读写超时，默认 15 秒，最大 60'), ('max_rows', 'integer', False, '最多保存行数，默认 1000，最大 10000')]
-        return {'id': 'tidb', 'api_version': 1, 'package_version': '0.1.0', 'core_requires': '>=0.1,<1', 'context_requests': {'tidb.schema': {'type': 'object', 'properties': {'table': {'type': 'string'}, 'database': {'type': 'string'}}, 'required': ['table']}}, 'config_variables': [{'key': 'tidb_' + key, 'type': kind, 'required': required, 'description': description} for key, kind, required, description in variables]}
+        return {'id': 'tidb', 'api_version': 1, 'package_version': '0.1.0', 'core_requires': '>=0.1,<1', 'context_requests': {'tidb.schema': {'type': 'object', 'properties': {'table': {'type': 'string'}, 'database': {'type': 'string'}}, 'required': ['table'], 'x-taskweave-context-view': {'default': True}}}, 'config_variables': [{'key': 'tidb_' + key, 'type': kind, 'required': required, 'description': description} for key, kind, required, description in variables]}
     def actions(self): return {'tidb.' + op: DatabaseAction(op) for op in ('query', 'describe_table', 'test_connection')}
     def tools(self): return {'tidb.describe_table': DatabaseAction('describe_table')}
     def result_handlers(self): return {}
@@ -161,10 +161,11 @@ class TiDBPlugin:
         instructions = 'TiDB 连接由运行时提供，不把账号、密码、连接串放入参数、源码、返回或报告。tidb.query 使用 sql、params 及可选 title/max_rows；业务值用 %s 和 params 绑定，禁止字符串拼接。只允许单条只读 SELECT。表和字段必须来自结构上下文或结构工具。结果含 title、columns、rows、row_count、truncated、query_info；Decimal 为字符串、日期为 ISO 字符串。核对遵循步骤规格，区分零行、多行和 truncated。后续数据放 data；用户需要查看时用 tidb.table 或 tidb.verification 并提供明确标题。是否将不匹配视为失败由步骤规格决定；连接或查询异常不能伪装为核对成功。'
         return AuthoringContribution(instructions, (example,), tool_ids=('tidb.describe_table',), context_provider_ids=('tidb.schema',), channel_overrides={'web_chat': {'instructions': '本渠道不能访问本地数据库。只使用已提供的表结构和业务要求生成代码；缺少必要结构时指出具体缺项，不声称已经查询。'}})
     async def lint(self, document): return []
-    async def collect_context(self, provider_id, ctx, request):
+    async def collect_context(self, provider_id, ctx, request, *, include_view=True):
         if provider_id != 'tidb.schema': raise PluginError('CONTEXT_PROVIDER_UNAVAILABLE')
         if not isinstance(request.get('table'), str) or not request['table']:
             raise PluginError('TIDB_CONFIG_INVALID', '采集表结构需要填写 table')
         result = await DatabaseAction('describe_table').execute(ctx, request)
-        return [ContextItem('text', 'application/json', json.dumps(result, ensure_ascii=False), 'tidb.schema')]
+        views = (ContextView(result['title'], 'tidb.table', result),) if include_view else ()
+        return ContextCollection((ContextItem('text', 'application/json', json.dumps(result, ensure_ascii=False), 'tidb.schema'),), views)
     async def diagnose(self, error, refs): return []

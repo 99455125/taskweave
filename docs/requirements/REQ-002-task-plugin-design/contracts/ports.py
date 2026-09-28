@@ -1,7 +1,7 @@
 """REQ-002 contracts synchronized with REQ-004 implementation."""
 
 from dataclasses import dataclass, field
-from typing import Any, AsyncContextManager, Mapping, Protocol, Sequence
+from typing import Any, AsyncContextManager, Mapping, Protocol, Sequence, TypedDict
 
 JSON = Any  # Wire values must be null/bool/number/string/list/string-keyed dict.
 
@@ -171,6 +171,20 @@ class ResultHandler(Protocol):
 class ResourceProvider(Protocol):
     async def open(self, ctx: PluginContext, role: str) -> Any: ...
     async def close(self, resource: Any) -> None: ...
+
+
+class ContextTarget(TypedDict):
+    target_id: str
+    label: str
+    request: Mapping[str, JSON]
+
+
+class ContextTargetProvider(Protocol):
+    """Optional plugin extension; enumerate retained resources without opening any."""
+
+    async def list_context_targets(
+        self, provider_id: str, ctx: PluginContext, request: JSON
+    ) -> Sequence[ContextTarget]: ...
 
 
 class Plugin(Protocol):

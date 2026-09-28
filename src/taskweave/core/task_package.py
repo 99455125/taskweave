@@ -37,6 +37,7 @@ TASK_PACKAGE_SCHEMA = {
                 "document": STEP_DOCUMENT_SCHEMA,
             }, "required": ["key", "validation_state", "document"], "additionalProperties": False,
         }},
+        "contexts": {"type": "array", "items": {"type": "object"}},
     },
     "required": ["format", "origin", "task", "steps"],
     "additionalProperties": False,

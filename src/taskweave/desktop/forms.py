@@ -7,43 +7,54 @@ from taskweave.core.validation import TaskError
 
 class ValueForm:
     def __init__(self, schema, values=None):
-        self.schema, self.controls = schema, {}
+        self.schema, self.controls, self.fields = schema, {}, {}
         self.defaults = {}
         values = values or {}
         properties = schema.get("properties", {})
         if not properties:
             ui.label("无需输入参数").classes("text-gray-500")
         for name, spec in properties.items():
-            label = name + (" · 必录" if name in schema.get("required", []) else "")
-            value = values.get(name, spec.get("default"))
-            kind = spec.get("type", "string")
-            description = spec.get("description", "").strip()
-            if description:
-                ui.label(description).classes("text-xs text-gray-500 mb-0")
-            if "enum" in spec:
-                control = ui.select(spec["enum"], label=label, value=value)
-            elif kind == "boolean":
-                control = ui.checkbox(label, value=bool(value))
-            elif kind in {"integer", "number"}:
-                control = ui.number(
-                    label,
-                    value=value,
-                    min=spec.get("minimum"),
-                    max=spec.get("maximum"),
-                    step=1 if kind == "integer" else None,
-                )
-            elif kind in {"object", "array"}:
-                control = ui.textarea(
-                    label,
-                    value="" if value is None else json.dumps(value, ensure_ascii=False),
-                )
-            else:
-                control = ui.input(label, value="" if value is None else str(value))
-            if kind != "boolean":
-                control.props('placeholder="未配置默认值，请录入"')
-            control.classes("w-full")
-            self.controls[name] = (kind, control)
-            self.defaults[name] = control.value
+            field = ui.column().classes("w-full gap-0")
+            self.fields[name] = field
+            with field:
+                self._add_control(name, spec, values)
+
+    def _add_control(self, name, spec, values):
+        label = name + (" · 必录" if name in self.schema.get("required", []) else "")
+        value = values.get(name, spec.get("default"))
+        kind = spec.get("type", "string")
+        description = spec.get("description", "").strip()
+        if description:
+            ui.label(description).classes("text-xs text-gray-500 mb-0")
+        if "enum" in spec:
+            control = ui.select(spec["enum"], label=label, value=value)
+        elif kind == "boolean":
+            control = ui.checkbox(label, value=bool(value))
+        elif kind in {"integer", "number"}:
+            control = ui.number(
+                label,
+                value=value,
+                min=spec.get("minimum"),
+                max=spec.get("maximum"),
+                step=1 if kind == "integer" else None,
+            )
+        elif kind in {"object", "array"}:
+            control = ui.textarea(
+                label,
+                value="" if value is None else json.dumps(value, ensure_ascii=False),
+            )
+        else:
+            control = ui.input(label, value="" if value is None else str(value))
+        if kind != "boolean":
+            control.props('placeholder="未配置默认值，请录入"')
+        control.classes("w-full")
+        self.controls[name] = (kind, control)
+        self.defaults[name] = control.value
+
+    def hide_fields(self, names):
+        hidden = set(names)
+        for name, field in self.fields.items():
+            field.set_visibility(name not in hidden)
 
     def apply_defaults(self, values):
         for name, (kind, control) in self.controls.items():
@@ -58,10 +69,17 @@ class ValueForm:
                 control.value = value
             self.defaults[name] = value
 
-    def values(self):
+    def values(self, exclude=()):
         result = {}
+        excluded = set(exclude)
         for name, (kind, control) in self.controls.items():
+            if name in excluded:
+                continue
             value = control.value
+            if name in self.schema.get("required", []) and (
+                value is None or value == ""
+            ):
+                raise TaskError("FORM_INVALID", f"{name} 为必录项")
             if kind in {"object", "array"}:
                 if value is None or value == "":
                     continue

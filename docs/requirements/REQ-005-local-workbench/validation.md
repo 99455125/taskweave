@@ -1,5 +1,15 @@
 # REQ-005 验证记录
 
+## 2026-09-23 上下文编辑与实例定位
+
+- 插件 schema 驱动目标界面后，通用上下文/规划/工作台/变量表单 39 项、目标与会话 16 项、TiDB 5 项，共 60 项定向检查通过；工程检查与 `git diff --check` 通过。未运行全量测试。
+- 覆盖唯一目标自动选择、多目标不自动选择、插件自定义选择器与参数模式文案、选中目标隐藏参数表单，以及 TiDB 无目标扩展时继续使用原采集表单。
+
+- `tests.test_context_cards`、`tests.test_context_metadata`、`tests.test_context_sessions`、`tests.test_context_targets_runtime`、`tests.test_context_targets_playwright`，加工作台上下文累积和 REQ-005 数据库迁移两个指定用例：共 25 项通过。
+- 覆盖名称/说明合并保存、保存中继续编辑、失败重试、乱序刷新、重启持久化、v10/v2 到 v11 迁移、实例隔离、关闭页面拒绝、空草稿的真实 worker 采集和实例变更检查。
+- 临时工作空间中真实 NiceGUI/Chromium 操作验证：规划和步骤修改名称/说明后入库，分屏垃圾桶保持标题右侧，删除确认/取消正常，两角色窗口出现在规划下拉列表，选择第二个窗口时即使表单仍填第一个窗口的 URL/角色，也只采集所选窗口。结束后释放测试浏览器。
+- 页面控制台无错误/警告；截图保存在本地 `.runtime/context-ui-evidence/`。工程检查及 `git diff --check` 通过。未运行全量测试、未访问用户业务站点。
+
 环境：macOS x64、uv Python 3.13、NiceGUI 3.17.0、pywebview 6.2.1、Playwright 1.58.0 与匹配的完整 Chromium。
 
 ## 实际验证
@@ -101,6 +111,10 @@ Windows 10 x64、Apple Silicon、真实外部模型账号和真实内网未提�
 
 2026-09-20：网页 Chat 解析、预览、差异和采纳流程通过真实 NiceGUI/Chromium 全流程，116.050 秒；Web Chat、模型日志和工作台回归 25 项通过（11.462 秒）。工程检查和 diff 检查通过。
 
+2026-09-23：上下文采集定向回归 69 项通过（59.808 秒），覆盖插件返回契约、规划/步骤上下文排序、原位重新采集、元数据与高级参数保留、Playwright 当前视口/完整页面和截图预览、TiDB 表格预览、规划材料顺序及 UI 卡片。既有核心/Playwright 集成 4 项通过（57.177 秒），覆盖生成链路只传 evidence、现存页面观察和第三方插件无需修改核心。用户工作空间数据库仅复制到临时目录验证 v12 迁移，未改动原库；按约定未运行全量测试。
+
+2026-09-24：定位预览黑块为 `redact()` 把 `image_base64` 截到 65,536 字符，用户库中的一张 PNG 实际仅剩 49,152 字节且无 PNG 结束块。采集路径改为仅脱敏文本并保留完整图片数据；新增完整性校验，旧损坏图提示重新采集。新增大图经规划会话和数据库保存的回归，相关 11 项定向测试通过；未修改用户原库，未运行全量测试。
+
 ### 任务配置刷新回归验证（2026-09-18）
 
 `tests/test_task_config_refresh.py`：连续打开、修改保存、用原页面的旧任务引用再次打开，验证名称、说明与参数结构均显示最新值，并保留步骤编辑对象、不重绘页面。1 项通过；工程结构检查与 `git diff --check` 通过。
@@ -177,3 +191,33 @@ Windows 10 x64、Apple Silicon、真实外部模型账号和真实内网未提�
 - 步骤工具栏等宽、编辑卡片内折叠调试分栏、上下文采集前命名及环境/任务/步骤变量说明已纳入定向检查。
 - 环境说明保存在控制库 `environments.descriptions_json`；任务和步骤说明保存在参数 JSON Schema 的 `description`，运行录入直接展示。
 - 仅运行受影响的变量、工作台、运行输入、配置刷新、迁移和真实输入界面检查；按约定不运行全量测试。
+
+### 2026-09-24 插件上下文脱敏设置
+
+- 规划、上下文卡片、工作台相关 44 项模块检查通过；REQ-003 编写与运行相关 27 项通过。
+- 补齐序列化 JSON 正文脱敏后，脱敏设置与上下文相关 19 项检查通过。
+- `scripts/check_project.py` 和 `git diff --check` 通过。未运行全量测试；未连接真实外部模型验证。
+
+### 2026-09-24 上下文多次采集
+
+- 定向运行 `test_context_captures`、`test_context_sessions`、`test_control_db_migration`、`test_planning`、`test_context_cards`、`test_context_metadata`、`test_task_transfer`、`test_task_copy_lifecycle`、`test_workbench_changes`、`test_ai_authoring`、`test_ai_request_limits`：77 项通过，2 个子测例通过。
+- 覆盖 v13→v14 迁移、父表不再存储采集载荷、组修订冲突、采集项顺序/删除、规划多项冻结与导入、规划复制、任务包导入和任务复制，以及共用卡片与 AI 调用。
+- `python scripts/check_project.py` 与 `git diff --check` 通过。未运行全量测试；未进行真实模型或 Windows 实机验收。
+
+### 2026-09-24 连续采集弹窗
+
+- 定向运行 `test_context_captures`、`test_context_sessions`、`test_context_cards`、`test_context_metadata`、`test_planning`、`test_context_targets_runtime`、`test_context_targets_playwright`、`test_workbench_changes`、`test_ai_authoring`：84 项通过，6 个子测例通过（17.72 秒）。
+- 覆盖规划采集只返回结果且不落库、暂存状态与删除撤销、规划/步骤原子批量提交、修订号一次递增、非法项回滚、空规划组保留、项目卡片组级视图更新和 AI 现有链路。
+- `python scripts/check_project.py` 通过（109 个 Markdown 文档）；`git diff --check` 通过。未运行全量测试；未进行真实模型或 Windows 实机验收。
+
+### 2026-09-25 多次采集复核
+
+- 修正 `test_context_sessions` 中两个 `PlanningService` 测试夹具，使其按当前显式依赖构造服务；不改生产接口。
+- 定向运行上下文采集/会话/迁移、规划、卡片与元数据、任务导入/复制、工作台、AI 编写/请求限制及运行时/Playwright 目标测试：95 项通过（19.286 秒）。
+- `uv run python scripts/check_project.py` 与 `git diff --check` 通过。未运行全量测试；未进行真实模型或 Windows 实机验收。
+
+### 2026-09-24 按页面区分采集范围及 AI 请求默认值
+
+- Playwright 插件默认采集完整页面，规划页通过插件声明覆盖为当前视口；旧上下文重新采集沿用原范围。
+- AI 请求上限未配置时默认为 2048 KiB，已保存的值保持原样。
+- 相关 30 项模块测试、项目结构检查和 `git diff --check` 通过；未运行全量测试。

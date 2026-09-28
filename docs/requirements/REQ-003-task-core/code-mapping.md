@@ -14,7 +14,9 @@
 | src/taskweave/infrastructure/http.py | 本地 HTTP API |
 | src/taskweave/plugins/registry.py、demo.py | 显式注册与最小测试插件 |
 | src/taskweave/__main__.py | CLI |
-| tests/test_req003.py | 实际 worker、SQLite、HTTP 集成测试 |
+| tests/test_step_outputs.py、tests/test_execution_control.py、tests/test_step_authoring.py、tests/test_storage_integrity.py、tests/test_ai_authoring.py、tests/test_http_task_api.py | 按功能拆分的 worker、SQLite、AI 与 HTTP 集成测试 |
 | examples/req003/api_walkthrough.py | HTTP 全流程示例 |
 
 [操作说明](usage.md)。
+
+定向模块选择与 step/共享契约依赖映射维护在 `tests/module-map.json`；使用 `uv run python scripts/test_modules.py --changed <源码路径> --dry-run` 查看受影响目标。

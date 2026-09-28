@@ -11,10 +11,14 @@
 | src/taskweave/infrastructure/runtime.py | 暂停 worker 观察及诊断结果登记 |
 | src/taskweave/infrastructure/storage.py | 自定义表迁移、备份、统一保存与结果引用 |
 | plugins/playwright/src/taskweave_playwright/__init__.py | 浏览器动作、角色、观察工具、lint、诊断和文件处理器 |
+| plugins/utility/src/taskweave_utility/__init__.py | 时间、UUID 和十进制计算的独立动作及 AI 能力说明 |
 | plugins/custom/src/taskweave_sample/__init__.py | 独立最小插件、AI 贡献、自定义表及解析 |
 | examples/req004/browser_demo.py、mock_site.py | 本机业务网页与实际应用流程 |
-| tests/test_req004.py | 插件契约、迁移、真实 Chromium 验证 |
+| tests/test_plugin_contract.py、tests/test_playwright_browser_integration.py | 插件契约、迁移、真实 Chromium 验证 |
+| tests/test_utility.py | 工具插件发现、输入校验、精度与实际步骤调用 |
 
 [运行及开发说明](usage.md)。
 
 `plugins/ocr/`：独立本地文字识别插件（无浏览器依赖）；Playwright `page_element_image`：通用元素 PNG Base64 采集，用于跨插件图像传递。`tests/test_ocr.py`：非法输入、无网络本地推理、实际浏览器采集→识别→填写→登录状态断言。
+
+Playwright、OCR、TiDB 与 utility 的快速测试入口及浏览器 opt-in targets 维护在 `tests/module-map.json`。默认模块命令不启动真实浏览器；浏览器验收需显式使用 `--include-browser`。

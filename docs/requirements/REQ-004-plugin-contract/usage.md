@@ -54,6 +54,8 @@ plugin.list 查看已安装入口，capabilities 查看实际能力及 load_erro
 | playwright.page_text | selector（默认 body） | text |
 | playwright.page_fill | selector、value | null |
 | playwright.page_click | selector | null |
+| playwright.page_press | selector、key（Enter/Tab/Escape/方向键/Space） | null |
+| playwright.page_select_option | selector、option（原生 select 的 value 或 label） | null |
 | playwright.page_wait | selector、state（默认 visible） | null |
 | playwright.page_assert_text | selector、text | matched |
 | playwright.page_screenshot | role | staged_file |
@@ -136,3 +138,7 @@ ResultHandler 提供 schema、prepare、parse、preview，不拿数据库连接�
 ## 本地验证码 OCR
 
 [验证码插件指南](../../../plugins/ocr/README.md) 提供无 API Key 的本地识别与跨插件步骤示例。启动增加 `--extra ocr`，插件管理启用 ocr，步骤同时选 playwright 和 ocr。普通文字图片适用；真实业务页面先采集上下文，再由 AI 按当前定位器生成完整步骤。
+
+## 基础数据工具
+
+[基础数据工具指南](../../../plugins/utility/README.md) 提供 `utility.now`、`utility.uuid`、`utility.decimal`。源码环境增加 `--extra utility`，插件管理启用 utility；Windows 构建脚本和打包清单包含该插件及 Windows 时区数据。工具插件只返回数据，步骤将实际使用的时间、编号或金额写入 `ctx.result(data=...)`。不开放任意 Python 导入或执行。
