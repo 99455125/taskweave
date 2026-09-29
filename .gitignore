@@ -35,3 +35,6 @@ legacy/smart_excel/test_file/
 /output/
 
 /.playwright-cli/
+
+# Local AI agent workspace, not project content
+/.workbuddy-ai/
