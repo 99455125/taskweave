@@ -9,6 +9,7 @@ from taskweave.infrastructure.context_sessions import ContextSessions
 from scripts.check_project import (
     application_boundary_violations,
     controller_boundary_violations,
+    dialog_prop_violations,
     runtime_boundary_violations,
 )
 
@@ -54,6 +55,38 @@ class ArchitectureBoundaryTests(unittest.TestCase):
         )
         self.assertEqual(controller_boundary_violations(controller), [])
         self.assertEqual(application_boundary_violations(application), [])
+
+    def test_dialog_policy_rejects_esc_blocking_props(self):
+        source = (
+            "dialog.props('persistent')\n"
+            "other.props('no-backdrop-dismiss')\n"
+            'dialog.props("persistent")\n'
+            "third.props('no-esc-dismiss')\n"
+            "fourth.props('no-backdrop-dismiss no-esc-dismiss')\n"
+        )
+        self.assertEqual(len(dialog_prop_violations(source)), 4)
+
+    def test_desktop_dialogs_keep_esc_dismissal(self):
+        offenders = []
+        for path in (ROOT / "src/taskweave/desktop").rglob("*.py"):
+            offenders.extend(
+                f"{path.relative_to(ROOT)}:{item}"
+                for item in dialog_prop_violations(path.read_text(encoding="utf-8"))
+            )
+        self.assertEqual(offenders, [])
+
+    def test_outside_click_guard_is_timer_free_and_wired_into_the_launcher(self):
+        from taskweave.desktop import dialogs
+
+        guard = dialogs.OUTSIDE_CLICK_GUARD
+        self.assertIn("__twDialogGuardInstalled", guard)
+        # Floating layers must stay exempt, or ui.select inside a dialog breaks.
+        self.assertIn(".q-menu", guard)
+        self.assertIn(".q-dialog__backdrop", guard)
+        self.assertNotIn("setTimeout", guard)
+        self.assertNotIn("setInterval", guard)
+        launcher = (ROOT / "src/taskweave/desktop/launcher.py").read_text(encoding="utf-8")
+        self.assertIn("install_outside_click_guard()", launcher)
 
     def test_core_does_not_import_infrastructure_or_desktop(self):
         offenders = []

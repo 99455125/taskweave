@@ -11,6 +11,7 @@ NiceGUI/pywebview 展示层；通过 DesktopController 调用 Application 操作
 - 页面/组件实现 dispose，释放自己拥有的 timer、绑定及 view handles；异步回调核对 task、step、run 和页面代次，防止迟到响应污染新目标。
 - 调试抽屉 UI 控件与业务 StepDebugPanel 是不同对象；AI/debug 共用 trials 对象，空字典不能被悄悄替换。
 - 同步回调不能盲目 await。真实确认入口忙碌时只提交一次；旧弹窗离页后不能向新步骤写入。
+- 弹窗统一策略：点外可关、ESC 可关、点外那一次点击不穿透到下层页面；调用点直接用 `ui.dialog()`。禁止 Quasar 的 `persistent` 与 `no-esc-dismiss`（两者都会关掉 ESC，只有 `no-backdrop-dismiss` 保留 ESC），由 `scripts/check_project.py` 拦截。穿透守卫装在共享 head 的捕获阶段（[dialogs.py](../../src/taskweave/desktop/dialogs.py)），不依赖计时器，并放行 `.q-menu`/`.q-tooltip`/`.q-notification` 等浮层，避免误伤弹窗内的 `ui.select` 下拉。不要给弹窗加 `dialogs.dialog()` 之类的包装工厂：那会让 `patch(...step_ai.ui...)` 一类既有测试替身失效。实测单次点击本来也不会穿透（Chrome 在按下目标断开后取消该 click），守卫是把"弹窗打开时点击不得落到页面内容上"变成结构上不可能，不是某条已知路径的修复。
 - RunInputDialog 负责补录校验与原运行续启；页面已变时只阻止旧 UI 更新，不能取消已提交的业务动作。
 - 工作台首页以任务、执行和步骤用例数据展示摘要、最近更新任务、活跃执行、待核对结果和最近结果；运行操作按核心状态提供查看、继续、填写输入、核对与结束入口，并沿用原用例和结束确认。
 - 工作台首页 DOM 顺序与阅读顺序一致：上排为最近任务、最近执行结果，下排为快速开始、活跃执行；窄屏依照相同顺序堆叠。
@@ -33,7 +34,7 @@ NiceGUI/pywebview 展示层；通过 DesktopController 调用 Application 操作
 
 ## 代码入口
 
-[Workbench](../../src/taskweave/desktop/workbench.py)、[controller](../../src/taskweave/desktop/controller.py)、[页面](../../src/taskweave/desktop/pages)、[组件](../../src/taskweave/desktop/components)、[状态](../../src/taskweave/desktop/state.py)、[表单](../../src/taskweave/desktop/forms.py)。
+[Workbench](../../src/taskweave/desktop/workbench.py)、[controller](../../src/taskweave/desktop/controller.py)、[弹窗策略](../../src/taskweave/desktop/dialogs.py)、[页面](../../src/taskweave/desktop/pages)、[组件](../../src/taskweave/desktop/components)、[状态](../../src/taskweave/desktop/state.py)、[表单](../../src/taskweave/desktop/forms.py)。
 
 ## 验证入口
 

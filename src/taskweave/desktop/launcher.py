@@ -185,6 +185,9 @@ def launch(home=None, port=None, browser=False):
             if fixed:
                 os.environ["WEBVIEW2_RUNTIME_PATH"] = str(fixed)
                 webview.settings["WEBVIEW2_RUNTIME_PATH"] = str(fixed)
+    from taskweave.desktop.dialogs import install_outside_click_guard
+
+    install_outside_click_guard()
     print(
         json.dumps({"url": url, "home": str(home), "native": not browser}), flush=True
     )

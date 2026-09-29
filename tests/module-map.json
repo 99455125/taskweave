@@ -598,6 +598,7 @@
         "src/taskweave/desktop/state.py",
         "src/taskweave/desktop/launcher.py",
         "src/taskweave/desktop/chat.py",
+        "src/taskweave/desktop/dialogs.py",
         "src/taskweave/desktop/dependencies.py",
         "src/taskweave/desktop/theme.py"
       ],

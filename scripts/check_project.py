@@ -73,6 +73,25 @@ def controller_boundary_violations(tree):
     return violations
 
 
+DIALOG_ESC_BLOCKING_PROP = re.compile(
+    r"props\(\s*['\"][^'\"]*\b(?:persistent|no-esc-dismiss)\b"
+)
+
+
+def dialog_prop_violations(source):
+    """Reject the two Quasar props that switch off ESC dismissal.
+
+    `persistent` turns off ESC *and* outside-click; `no-esc-dismiss` turns off ESC
+    only. ESC must stay available on every dialog, so neither belongs in this
+    codebase. Use `no-backdrop-dismiss` when outside-click must not close.
+    """
+    return [
+        f"line {number}: {line.strip()}"
+        for number, line in enumerate(source.splitlines(), 1)
+        if DIALOG_ESC_BLOCKING_PROP.search(line)
+    ]
+
+
 def main():
     errors = []
     required = (
@@ -121,6 +140,14 @@ def main():
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for violation in controller_boundary_violations(tree):
                 errors.append(f"DesktopController must use application queries: {path}:{violation}")
+    desktop_root = ROOT / "src" / "taskweave" / "desktop"
+    for path in sorted(desktop_root.rglob("*.py")):
+        for violation in dialog_prop_violations(path.read_text(encoding="utf-8")):
+            errors.append(
+                "Dialog must keep ESC dismissal: drop persistent/no-esc-dismiss and use "
+                "no-backdrop-dismiss instead when outside-click must not close: "
+                f"{path.relative_to(ROOT)}:{violation}"
+            )
     docs = list(ROOT.glob("*.md"))
     for folder in ("docs", "src", "plugins", "apps", "config", "examples", "scripts", "tests"):
         docs.extend((ROOT / folder).rglob("*.md"))
@@ -139,7 +166,7 @@ def main():
     if errors:
         print("\n".join(errors), file=sys.stderr)
         return 1
-    print(f"PASS: layout, source syntax, application/runtime/desktop dependency boundaries, {len(docs)} Markdown files, CLI version")
+    print(f"PASS: layout, source syntax, application/runtime/desktop dependency boundaries, dialog ESC dismissal policy, {len(docs)} Markdown files, CLI version")
     return 0
 
 

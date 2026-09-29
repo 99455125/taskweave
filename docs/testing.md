@@ -15,6 +15,18 @@ uv run python -m unittest tests.test_utility -v
 
 第二条只是示例，应替换成当前改动涉及的模块。涉及多个模块时，在同一命令中列出模块名即可。先用 `rg --files tests` 查找现有测试；新增测试也以功能命名。
 
+## 环境提示：agent 沙箱的 PYTHONPATH
+
+在 WorkBuddy agent 的 shell 中 `PYTHONPATH` 被注入为应用自带的沙箱 shim 目录；该目录下的 `native/`、`brokered-bin/`、`safe-bin/` 等路径 stat 走沙箱 IPC，使**每个 Python 进程启动多花 2–3 秒**。本项目每个 run 都要 spawn 多次 worker，于是 `tests.test_runtime_inputs` 会从约 9 秒膨胀到约 150 秒，并可能越过 `infrastructure/runtime.py` 的 10 秒心跳看门狗，把 run 判成 `CANCELLED` / `WORKER_TIMEOUT`，看起来像"改动导致失败"。
+
+在本环境跑测试时去掉该变量（用户自己的终端通常没有它，命令是空操作）：
+
+```bash
+env -u PYTHONPATH uv run python -m unittest tests.test_<功能>
+```
+
+判据：若同一份代码用 `PYTHONPATH=src` 跑很快、不加就慢十倍，是 shim 而非代码问题。
+
 ## 模块选择器
 
 `tests/module-map.json` 将产品源码映射到明确的快速 unittest targets、反向依赖和可选浏览器 targets。列出模块并运行单个模块：
