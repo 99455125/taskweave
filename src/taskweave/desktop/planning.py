@@ -856,7 +856,6 @@ class PlanningPage(Page):
             with ui.row().classes('tw-context-dialog-actions w-full justify-end gap-2'):
                 ui.button('取消', on_click=cancel).props('outline')
                 ui.button('确认保存', on_click=save_batch).props('unelevated color=primary')
-        dialog.props('persistent')
         dialog.open()
 
     async def show_context_preview(self, title, capture):

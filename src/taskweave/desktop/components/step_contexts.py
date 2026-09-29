@@ -367,4 +367,4 @@ class StepContextPanel:
             with ui.row().classes('w-full justify-end gap-2'):
                 ui.button('取消',on_click=cancel).props('outline')
                 ui.button('确认保存',on_click=save_batch).props('unelevated color=primary')
-        dialog.props('persistent'); dialog.open()
+        dialog.open()
