@@ -10,7 +10,233 @@ from taskweave.desktop.workbench import Workbench
 
 
 class StepEditorStateTests(unittest.TestCase):
-    def test_step_editor_autosave_persists_dirty_document(self):
+    def test_reload_keeps_failed_debug_run_and_raw_inputs_without_starting_again(self):
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        from taskweave.core.validation import TaskError
+
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('debug reload')
+            step = app.repo.save_step(task['task_id'], {
+                'name': 'failed debug',
+                'input_schema': {'type': 'object', 'properties': {'details': {'type': 'object'}}},
+                'step_content': 'async def run(ctx, inputs):\n    raise RuntimeError("temporary failure")\n',
+            })
+            # Seed two frozen run records: no worker is needed to verify that
+            # rebuilding this tab must retain its explicitly selected record.
+            trial = app.repo.create_run(task['task_id'], {}, app.registry.versions,
+                                        trial_step_id=step['step_id'])
+            later = app.repo.create_run(task['task_id'], {}, app.registry.versions,
+                                        trial_step_id=step['step_id'])
+            for row, timestamp in ((trial, '2026-09-30T00:00:00'), (later, '2026-09-30T00:00:01')):
+                app.repo.execute('UPDATE task_runs SET status=?, started_at=? WHERE run_id=?',
+                                 ('FAILED', timestamp, row['run_id']))
+            controller, recovery = DesktopController(app), {}
+            first, second = Client(page('/debug-reload-first')), Client(page('/debug-reload-second'))
+            async def scenario():
+                with first:
+                    wb = Workbench(controller, reload_state=recovery)
+                    wb.trials[step['step_id']] = trial['run_id']
+                    await wb.restore_route('editor', task['task_id'], step['step_id'], True)
+                    await wb.paint()
+                    wb.step_editor.view['trial_form'].step_form.controls['details'][1].value = '{未完成'
+                    wb.step_editor.view['trial_ai_supplement'].value = '保留中文修复说明，不能重复执行'
+                    wb.debug_state.removed_feedback.add('trial_logs')
+                    wb.capture_reload_state()
+                first.delete()
+                with second:
+                    restored = Workbench(controller, reload_state=recovery)
+                    await restored.restore_route('editor', task['task_id'], step['step_id'], True)
+                    await restored.paint()
+                    self.assertEqual(restored.trials.get(step['step_id']), trial['run_id'])
+                    self.assertIn('trial_logs', restored.debug_state.removed_feedback)
+                    self.assertEqual(restored.step_editor.view['trial_ai_supplement'].value,
+                                     '保留中文修复说明，不能重复执行')
+                    form = restored.step_editor.view['trial_form']
+                    self.assertEqual(form.step_form.controls['details'][1].value, '{未完成')
+                    with self.assertRaises(TaskError):
+                        form.step_values()
+                    # The run and its original attempt are unchanged by restore.
+                    actual = await controller.call('run.get', run_id=trial['run_id'])
+                    self.assertEqual(actual['status'], 'FAILED')
+                    self.assertEqual(len(actual['attempts']), 0)
+            try:
+                asyncio.run(scenario())
+            finally:
+                for client in (first, second):
+                    if client.id in Client.instances:
+                        client.delete()
+
+    def test_new_tab_recovery_uses_the_stored_mapping_and_detaches_a_copied_tab(self):
+        from nicegui.observables import ObservableDict
+        from taskweave.desktop.launcher import tab_reload_state
+        original = ObservableDict()
+        first = tab_reload_state(original)
+        first['step'] = {'fields': {'name': 'first draft'}}
+        self.assertEqual(original['workbench_reload']['step']['fields']['name'], 'first draft')
+        # NiceGUI copies tab storage values when a document gets a new tab ID.
+        copied = ObservableDict(original)
+        second = tab_reload_state(copied)
+        second['step']['fields']['name'] = 'second draft'
+        self.assertEqual(original['workbench_reload']['step']['fields']['name'], 'first draft')
+        self.assertEqual(copied['workbench_reload']['step']['fields']['name'], 'second draft')
+
+    def test_reload_retains_incomplete_bindings_and_input_drafts_in_its_own_tab(self):
+        from unittest.mock import patch
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        original_button = ui.button
+        def tracked_button(*args, **kwargs):
+            button = original_button(*args, **kwargs)
+            button.test_click = kwargs.get('on_click')
+            return button
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('incomplete reload')
+            step = app.repo.save_step(task['task_id'], {'name': 'original',
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n'})
+            controller, recovery = DesktopController(app), {}
+            first = Client(page('/incomplete-first'))
+            reloaded = Client(page('/incomplete-reloaded'))
+            other = Client(page('/separate-tab'))
+            async def scenario():
+                with first, patch('nicegui.ui.button', side_effect=tracked_button):
+                    wb = Workbench(controller, reload_state=recovery)
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    add = next(e for e in first.elements.values() if getattr(e, 'text', None) == '添加绑定')
+                    await add.test_click()
+                    wb.edit_controls['name'].value = 'draft in this tab'
+                    row = wb.edit_controls['bindings'][0]
+                    row[2].value = '{unfinished 中文'
+                    wb.run_input_dialog.state.drafts[('run', 'request')] = {'step': {'json': '{unfinished'}}
+                    wb.capture_reload_state()
+                    first.delete()
+                with reloaded:
+                    wb = Workbench(controller, reload_state=recovery)
+                    await wb.restore_route('editor', task['task_id'], step['step_id'])
+                    await wb.paint()
+                    row = wb.edit_controls['bindings'][0]
+                    self.assertEqual(row[0].value, '')
+                    self.assertEqual(row[2].value, '{unfinished 中文')
+                    self.assertEqual(wb.run_input_dialog.state.drafts[('run', 'request')]['step']['json'], '{unfinished')
+                with other:
+                    wb = Workbench(controller, reload_state={})
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    self.assertEqual(wb.edit_controls['name'].value, 'original')
+                    self.assertEqual(wb.edit_controls['bindings'], [])
+                    self.assertEqual(wb.run_input_dialog.state.drafts, {})
+                    self.assertEqual(app.repo.step(step['step_id'])['name'], 'original')
+            try:
+                asyncio.run(scenario())
+            finally:
+                if not first.is_deleted:
+                    first.delete()
+                reloaded.delete()
+                other.delete()
+
+    def test_disconnect_does_not_cache_clean_saved_or_discarded_steps(self):
+        from unittest.mock import patch
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+
+        class DiscardDialog:
+            def __enter__(self): return self
+            def __exit__(self, *_): pass
+            def __await__(self):
+                async def choice(): return 'discard'
+                return choice().__await__()
+
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('clean reload')
+            step = app.repo.save_step(task['task_id'], {'name': 'original',
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n'})
+            client, recovery = Client(page('/clean-step-reload')), {}
+            async def scenario():
+                with client:
+                    wb = Workbench(DesktopController(app), reload_state=recovery)
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    wb.capture_reload_state()
+                    self.assertNotIn('step', recovery)
+                    wb.edit_controls['name'].value = 'explicitly saved'
+                    await wb.save_editor()
+                    wb.capture_reload_state()
+                    self.assertNotIn('step', recovery)
+                    wb.edit_controls['name'].value = 'discarded'
+                    wb.capture_reload_state()
+                    self.assertIn('step', recovery)
+                    with patch('taskweave.desktop.workbench.ui.dialog', return_value=DiscardDialog()):
+                        await wb.navigate('home')
+                    wb.capture_reload_state()
+                    self.assertNotIn('step', recovery)
+                    self.assertEqual(app.repo.step(step['step_id'])['name'], 'explicitly saved')
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_reload_restores_raw_step_draft_without_saving_or_relaxing_conflicts(self):
+        from unittest.mock import patch
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        from taskweave.core.validation import TaskError
+
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('reload drafts')
+            step = app.repo.save_step(task['task_id'], {'name': 'persisted',
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n'})
+            controller, recovery = DesktopController(app), {}
+            first = Client(page('/raw-draft-first'))
+            second = Client(page('/raw-draft-reload'))
+            async def scenario():
+                with first:
+                    wb = Workbench(controller, reload_state=recovery)
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    wb.edit_controls['name'].value = '未保存中文标题'
+                    wb.edit_controls['step_notes'].value = '长说明保留\n' * 20
+                    schema = wb.edit_controls['schema']
+                    schema.add('金额', {'type': 'number'})
+                    schema.rows[0][2].value = '{invalid-json'
+                    wb.capture_reload_state()
+                    self.assertEqual(app.repo.step(step['step_id'])['name'], 'persisted')
+                first.delete()
+                # A concurrent saved version must not become the recovered
+                # draft's new optimistic-lock baseline.
+                app.repo.save_step(task['task_id'], {**step, 'name': 'other saved version'},
+                                   step_id=step['step_id'], expected_hash=step['content_hash'])
+                with second:
+                    wb = Workbench(controller, reload_state=recovery)
+                    await wb.restore_route('editor', task['task_id'], step['step_id'])
+                    await wb.paint()
+                    self.assertEqual(wb.edit_controls['name'].value, '未保存中文标题')
+                    self.assertEqual(wb.edit_controls['step_notes'].value, '长说明保留\n' * 20)
+                    self.assertEqual(wb.edit_controls['schema'].rows[0][2].value, '{invalid-json')
+                    self.assertTrue(wb._step_editor_is_dirty())
+                    self.assertEqual(wb.old_step['content_hash'], step['content_hash'])
+                    with self.assertRaises(TaskError):
+                        wb.document()
+                    wb.edit_controls['schema'].rows[0][2].value = '12'
+                    with self.assertRaises(TaskError) as conflict:
+                        await wb.save_editor()
+                    self.assertEqual(conflict.exception.code, 'EDIT_CONFLICT')
+                    self.assertEqual(wb.edit_controls['name'].value, '未保存中文标题')
+                    self.assertEqual(app.repo.step(step['step_id'])['name'], 'other saved version')
+            try:
+                asyncio.run(scenario())
+            finally:
+                if not first.is_deleted:
+                    first.delete()
+                second.delete()
+
+    def test_step_editor_is_manual_and_builds_debug_only_on_open(self):
         from nicegui.client import Client
         from nicegui.page import page
         from taskweave.application.service import Application
@@ -28,11 +254,13 @@ class StepEditorStateTests(unittest.TestCase):
                     workbench = Workbench(DesktopController(app))
                     self.assertTrue(await workbench.navigate('editor', task_id=task['task_id'], step_id=step['step_id']))
                     workbench.edit_controls['name'].value = 'edited-name'
-                    timer = workbench._step_editor().timers[-1]
-                    result = timer.callback()
-                    if asyncio.iscoroutine(result):
-                        await result
-                    self.assertEqual(timer.interval, 1.0)
+                    self.assertEqual(workbench._step_editor().timers, [])
+                    self.assertIsNone(workbench._editor_view('trial_form'))
+                    self.assertEqual(app.repo.step(step['step_id'])['name'], 'original')
+                    elements = list(client.elements.values())
+                    self.assertNotIn('确认验证并保存', [getattr(e, 'text', None) for e in elements])
+                    self.assertIn('确认验证', [getattr(e, 'text', None) for e in elements])
+                    await workbench.save_editor()
                     self.assertEqual(app.repo.step(step['step_id'])['name'], 'edited-name')
                     self.assertEqual(workbench._editor_view('save_state').text, '已保存')
             try:
@@ -40,7 +268,53 @@ class StepEditorStateTests(unittest.TestCase):
             finally:
                 client.delete()
 
-    def test_step_editor_autosave_failure_keeps_dirty_draft(self):
+    def test_debug_is_sibling_and_reopens_without_rebuilding_inputs_or_writing_draft(self):
+        from unittest.mock import patch
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        original_button = ui.button
+        def tracked_button(*args, **kwargs):
+            button = original_button(*args, **kwargs)
+            button.test_click = kwargs.get('on_click')
+            return button
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('debug lazy')
+            step = app.repo.save_step(task['task_id'], {'name': 'original',
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n'})
+            client = Client(page('/debug-lazy-sibling'))
+            async def scenario():
+                with client, patch('nicegui.ui.button', side_effect=tracked_button):
+                    wb = Workbench(DesktopController(app))
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    debug = next(e for e in client.elements.values() if 'tw-debug-column' in e.classes)
+                    config = next(e for e in client.elements.values() if 'tw-editor-panel' in e.classes)
+                    self.assertIs(debug.parent_slot.parent, config.parent_slot.parent)
+                    self.assertFalse(debug.visible)
+                    toggle = next(e for e in client.elements.values() if getattr(e, 'text', None) == '调试')
+                    wb.edit_controls['name'].value = 'unsaved draft'
+                    await toggle.test_click()
+                    form = wb._editor_view('trial_form')
+                    self.assertIsNotNone(form)
+                    self.assertTrue(debug.visible)
+                    self.assertEqual(app.repo.step(step['step_id'])['name'], 'original')
+                    await toggle.test_click()
+                    self.assertFalse(debug.visible)
+                    await toggle.test_click()
+                    self.assertIs(wb._editor_view('trial_form'), form)
+                    self.assertEqual(wb.edit_controls['name'].value, 'unsaved draft')
+                    with self.assertRaisesRegex(Exception, '先保存步骤'):
+                        await wb.step_for_confirmation()
+                    await wb.save_editor()
+                    self.assertEqual((await wb.step_for_confirmation())['name'], 'unsaved draft')
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_step_editor_manual_save_failure_keeps_dirty_draft(self):
         from nicegui.client import Client
         from nicegui.page import page
         from taskweave.application.service import Application
@@ -60,9 +334,8 @@ class StepEditorStateTests(unittest.TestCase):
                     await workbench.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
                     workbench.edit_controls['name'].value = 'draft-after-failure'
                     workbench.controller.save_draft = AsyncMock(side_effect=TaskError('EDIT_CONFLICT'))
-                    result = workbench._step_editor().timers[-1].callback()
-                    if asyncio.iscoroutine(result):
-                        await result
+                    with self.assertRaises(TaskError):
+                        await workbench.save_editor()
                     self.assertEqual(app.repo.step(step['step_id'])['name'], 'original')
                     self.assertEqual(workbench._editor_view('save_state').text, '保存失败，点击重试')
                     self.assertTrue(workbench._step_editor_is_dirty())
@@ -71,7 +344,7 @@ class StepEditorStateTests(unittest.TestCase):
             finally:
                 client.delete()
 
-    def test_late_autosave_response_cannot_mutate_next_editor(self):
+    def test_late_manual_save_response_cannot_mutate_next_editor(self):
         from types import SimpleNamespace
         from nicegui.client import Client
         from nicegui.page import page
@@ -99,8 +372,7 @@ class StepEditorStateTests(unittest.TestCase):
                         return await original_save(*args)
                     workbench.controller.save_draft = delayed_save
                     workbench.edit_controls['name'].value = 'first autosaved'
-                    timer = workbench._step_editor().timers[-1]
-                    pending = asyncio.create_task(timer.callback())
+                    pending = asyncio.create_task(workbench.save_editor())
                     await entered.wait()
                     new_state_control = SimpleNamespace(text='second saved', is_deleted=False)
                     workbench.step_state.step_id = second['step_id']

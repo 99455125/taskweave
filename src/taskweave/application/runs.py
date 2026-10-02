@@ -19,8 +19,9 @@ class RunUseCases:
 
     def start(self, run_id, command_id, mode="ALL", target_step_id=None, retry_step_id=None, start_step_id=None):
         return self.coordinator.start(run_id, command_id, mode, target_step_id, retry_step_id, start_step_id)
-    def provide_inputs(self, run_id, command_id, inputs, step_inputs=None):
-        return self.coordinator.provide_inputs(run_id, command_id, inputs, step_inputs)
+    def provide_inputs(self, run_id, command_id, inputs, step_inputs=None, expected_input_id=None):
+        return self.coordinator.provide_inputs(run_id, command_id, inputs, step_inputs,
+                                              expected_input_id=expected_input_id)
     def restart(self, run_id, command_id, target_step_id, start_step_id=None):
         return self.coordinator.restart(run_id, command_id, target_step_id, start_step_id)
     def delete(self, run_id): return self.coordinator.delete_run(run_id)
@@ -34,11 +35,14 @@ class RunUseCases:
     def end_instance(self, instance_type, owner_id):
         if instance_type == "plan":
             return self.context_sessions.end(owner_id)
+        if instance_type == 'step':
+            return self.context_sessions.end('step:'+owner_id)
         return self.coordinator.control(owner_id, "END")
     def context_sessions_for_task(self, task_id): return self.coordinator.context_sessions(task_id)
     def list(self, task_id=None): return self.runs.list_runs(task_id)
     def output(self, run_id, step_id, output="data"): return self.results.read_output(run_id, step_id, output, self.registry)
     def events(self, run_id): return self.runs.events(run_id)
+    def event_page(self, run_id, after=0, limit=100): return self.runs.event_page(run_id, after, limit)
     def read_result(self, result_id): return self.results.read_result(result_id, self.registry)
     def delete_result(self, result_id): return self.results.delete_result(result_id)
     def stored(self, run_id): return self.runs.run(run_id)

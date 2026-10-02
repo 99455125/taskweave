@@ -1,10 +1,13 @@
 """Execution run list and detail refresh component."""
 
 from datetime import datetime, timezone
+import asyncio
 import json
+import time
 from nicegui import ui
 from taskweave.desktop.controller import command_id
 from taskweave.desktop.display import readable_metadata, step_names
+from taskweave.desktop.components.run_logs import LiveRunLogs, render_log_text
 
 STATUS = {"READY": "就绪", "RUNNING": "执行中", "PAUSED": "已暂停", "FAILED": "失败", "INTERRUPTED": "中断 / 待核对", "SUCCEEDED": "成功", "CANCELLED": "已结束", "UNKNOWN": "结果待核对"}
 
@@ -28,6 +31,31 @@ class ExecutionDetails:
         self.timers = []
         self.render_sequence = 0
         self.refresh_sequence = 0
+        self._detail_cache = {}
+        self._current_runs = {}
+        self._poll_lock = asyncio.Lock()
+        self._next_poll_at = 0
+        self.visible = True
+        self._logs_host = None
+        self._logs_key = None
+        self._live_logs = None
+        self._run_details_visible = True
+
+    def set_visible(self, visible):
+        self.visible = visible
+        if visible:
+            self._next_poll_at = 0
+
+    async def poll(self):
+        if (not self.visible or self.page() not in {'run', 'executions'}
+                or self._poll_lock.locked() or time.monotonic() < self._next_poll_at):
+            return
+        async with self._poll_lock:
+            await self.refresh(force=False)
+            running = any(run['status'] == 'RUNNING' for run in self._current_runs.values())
+            # The lightweight list still discovers runs started elsewhere. Idle
+            # execution pages need no per-second detail or log queries.
+            self._next_poll_at = time.monotonic() + (1 if running else 5)
 
     def invalidate_render(self):
         self.render_sequence += 1
@@ -43,6 +71,13 @@ class ExecutionDetails:
             if not getattr(timer, "is_deleted", True):
                 timer.delete()
         self.timers.clear()
+        if self._live_logs is not None:
+            self._live_logs.dispose()
+        if self._logs_host is not None and not self._logs_host.is_deleted:
+            self._logs_host.delete()
+        self._logs_host = self._logs_key = self._live_logs = None
+        self._detail_cache.clear()
+        self._current_runs.clear()
 
     @property
     def run_id(self): return self.state.run_id
@@ -110,7 +145,7 @@ class ExecutionDetails:
         self.run_signature = self.execution_signature = None
         await self.refresh()
 
-    async def render_rows(self):
+    async def render_rows(self, *, force=True):
         self.invalidate_render()
         request_sequence = self.render_sequence
         identity = [
@@ -134,9 +169,23 @@ class ExecutionDetails:
             runs = [run for run in runs if run["status"] in set(self.execution_statuses)]
         details = []
         for row in reversed(runs):
-            details.append(await self.controller.call("run.get", run_id=row["run_id"]))
+            run_id = row['run_id']
+            summary = document_text(row)
+            cached = self._detail_cache.get(run_id)
+            if (cached and cached[0] == summary and not force
+                    and ('event_revision' in row or row['status'] != 'RUNNING')):
+                detail = cached[1]
+            else:
+                detail = await self.controller.call('run.get', run_id=run_id)
+                if not current():
+                    return
+                self._detail_cache[run_id] = (summary, detail)
+            details.append(detail)
             if not current():
                 return
+        retained = {run['run_id'] for run in runs}
+        self._detail_cache = {key: value for key, value in self._detail_cache.items() if key in retained}
+        self._current_runs = {run['run_id']: run for run in details}
         if self.run_id is None and self.execution_signature is None and details:
             self.run_id = details[0]["run_id"]
             identity[5] = self.run_id
@@ -271,6 +320,8 @@ class ExecutionDetails:
                 with ui.tabs().classes("tw-run-tabs") as run_tabs:
                     detail_tab = ui.tab("执行详情")
                     history_tab = ui.tab("历史记录")
+                self._run_details_visible = True
+                run_tabs.on_value_change(lambda event: setattr(self, "_run_details_visible", event.value in {detail_tab, detail_tab.props['name']}))
                 with ui.tab_panels(run_tabs, value=detail_tab).classes("tw-run-tab-panels w-full"):
                     with ui.tab_panel(detail_tab):
                         self.run_area = ui.column().classes("tw-run-step-detail tw-panel w-full gap-3")
@@ -316,10 +367,10 @@ class ExecutionDetails:
                                         selected_events = [event for event in events if event.get("attempt_id") == target["attempt_id"]]
                                         area.clear()
                                         with area:
-                                            ui.code(document_text(readable_metadata(selected_events, step_names(source_run, definition))), language="json").classes("w-full")
+                                            self.render_log_text(document_text(readable_metadata(selected_events, step_names(source_run, definition))))
                                     ui.button("加载尝试日志", on_click=load_attempt_logs).props("flat dense")
 
-    async def refresh(self):
+    async def refresh(self, *, force=True):
         if self.page() not in {"run", "executions"}:
             return
         self.refresh_sequence += 1
@@ -328,7 +379,7 @@ class ExecutionDetails:
         def current_page():
             return page_identity == (self.page_generation(), self.page()) and self.page() in {'run', 'executions'}
 
-        await self.render_rows()
+        await self.render_rows(force=force)
         if not current_page() or request_sequence != self.refresh_sequence:
             return
 
@@ -346,7 +397,7 @@ class ExecutionDetails:
         if self.run_area is None:
             self.run_signature = None
             return
-        run = (
+        run = (self._current_runs.get(self.run_id) if not force else None) or (
             await self.controller.call("run.get", run_id=self.run_id)
             if self.run_id
             else None
@@ -480,31 +531,61 @@ class ExecutionDetails:
                         with ui.expansion(f"历史尝试 · {len(attempts)}", icon="history"):
                             for attempt in reversed(attempts[:-1]):
                                 ui.label(f"尝试 {attempt['attempt_no']} · {STATUS[attempt['status']]}" + (" · 已失效" if not attempt["valid"] else " · 当前有效"))
-            events = await self.controller.call("run.events", run_id=run["run_id"])
-            if not current_run_page():
-                return
-            with ui.card().classes("tw-run-logs w-full mt-3"):
-                log_text = document_text(readable_metadata(events, step_names(run, definition["steps"])))
-                with ui.row().classes("w-full items-center justify-between gap-2 flex-wrap"):
-                    ui.label("运行日志").classes("font-semibold")
+        self.render_run_logs(run, definition)
 
-                    async def copy_full_logs():
-                        await self.controller.copy_text(log_text)
-                        ui.notify("完整运行日志已复制")
-
-                    async def show_full_logs():
-                        with ui.dialog() as dialog, ui.card().classes("w-full max-w-5xl"):
-                            ui.label("完整运行日志").classes("text-lg font-semibold")
-                            ui.textarea("运行日志", value=log_text).props("readonly rows=20").classes("w-full tw-run-log-fulltext")
-
-                            async def close_full_logs():
-                                dialog.close()
-
-                            with ui.row().classes("w-full justify-end gap-2"):
-                                self.button("复制完整日志", copy_full_logs)
-                                self.button("关闭", close_full_logs, flat=True)
+    def render_run_logs(self, run, definition):
+        key = (self.page_generation(), self.page(), run['run_id'])
+        if self._logs_host is None or self._logs_host.is_deleted:
+            # Sibling of periodically rebuilt details, so polling never clears
+            # a user's live log view or resets its incremental cursor.
+            with self.execution_rows.parent_slot.parent:
+                self._logs_host = ui.column().classes('tw-run-logs-host w-full')
+        if key == self._logs_key:
+            return
+        if self._live_logs is not None:
+            self._live_logs.dispose()
+        self._logs_key = key
+        self._logs_host.clear()
+        host = self._logs_host
+        def current():
+            return not host.is_deleted and key == (self.page_generation(), self.page(), self.run_id)
+        with host, ui.card().classes('tw-run-logs w-full mt-3') as logs_card:
+            ui.label('运行日志').classes('font-semibold')
+            names = step_names(run, definition['steps'])
+            self._live_logs = LiveRunLogs(self.controller, run['run_id'], current,
+                allowed=lambda: self.visible and self._run_details_visible,
+                names=names)
+            log_area = ui.column().classes('w-full')
+            loading = False
+            async def load_logs(*, full=False):
+                nonlocal loading
+                if loading or not current():
+                    return
+                loading = True
+                load_button.disable()
+                try:
+                    events = await self.controller.call('run.events', run_id=run['run_id'])
+                    text = await asyncio.to_thread(lambda: document_text(readable_metadata(events, names)))
+                    if not current() or logs_card.is_deleted:
+                        return
+                    if full:
+                        with ui.context.client.layout, ui.dialog() as dialog, ui.card().classes('w-full max-w-5xl'):
+                            ui.label('完整运行日志').classes('text-lg font-semibold')
+                            self.render_log_text(text)
+                            ui.button('关闭', on_click=dialog.close).props('outline')
                         dialog.open()
+                    else:
+                        log_area.clear()
+                        with log_area:
+                            self.render_log_text(text)
+                finally:
+                    loading = False
+                    if not load_button.is_deleted:
+                        load_button.enable()
+            self.load_run_logs = load_logs
+            with ui.row().classes('items-center gap-2 flex-wrap'):
+                load_button = ui.button('查看 / 刷新日志', on_click=load_logs).props('flat')
+                ui.button('查看完整日志', on_click=lambda: load_logs(full=True)).props('flat')
 
-                    self.button("查看完整日志", show_full_logs, flat=True)
-                    self.button("复制完整日志", copy_full_logs, flat=True)
-                ui.code(log_text, language="json").classes("w-full")
+    def render_log_text(self, text):
+        render_log_text(self.controller, self.button, text)

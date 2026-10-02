@@ -1,7 +1,5 @@
 """Context collection and persistence application use cases."""
 
-import asyncio
-
 from taskweave.core.validation import TaskError
 from taskweave.core.repositories import StepContextRepository, StepRepository
 
@@ -14,12 +12,18 @@ class ContextUseCases:
     def collect(self, step_id, provider_id, request=None, environment_id=None, run_id=None, expected_session_id=None, include_view=True):
         if run_id is not None:
             return self.coordinator.collect_context(run_id, step_id, provider_id, request, expected_session_id=expected_session_id, include_view=include_view)
-        return asyncio.run(self.authoring.collect_context(step_id, provider_id, request, environment_id, expected_session_id=expected_session_id, include_view=include_view))
+        return self.sessions.step_collect(step_id, provider_id, request, environment_id,
+            expected_session_id=expected_session_id, include_view=include_view)
+
+    def record(self, step_id, provider_id, operation, *, run_id=None, **options):
+        if run_id is None:
+            return self.sessions.step_record(step_id, provider_id, operation, **options)
+        return self.coordinator.record_context(run_id, step_id, provider_id, operation, **options)
 
     def targets(self, step_id, provider_id, run_id=None, request=None):
         if run_id is not None:
             return self.coordinator.context_targets(run_id, step_id, provider_id, request)
-        return asyncio.run(self.authoring.context_targets(step_id, provider_id, request))
+        return self.sessions.step_targets(step_id, provider_id, request)
 
     def save_batch(self, step_id, context_id, expected_revision, provider_id, name, context_notes, captures):
         step = self.steps.step(step_id)

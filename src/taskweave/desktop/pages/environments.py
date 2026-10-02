@@ -142,7 +142,7 @@ class EnvironmentPage(Page):
                                 ui.badge("默认" if item["environment_id"] == default_environment_id[0] else "可用").props("color=green" if item["environment_id"] == default_environment_id[0] else "color=grey")
 
                 form = {
-                    "name": None, "rows": [], "secret_rows": [], "baseline": None,
+                    "name": None, "rows": [], "secret_rows": [], "baseline": ("", ()),
                     "environment_id": selected["environment_id"] if selected else None,
                 }
 

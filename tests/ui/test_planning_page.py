@@ -11,6 +11,104 @@ from taskweave.desktop.planning import PlanningPage, _refresh_organization_contr
 
 
 class PlanningPageTests(unittest.TestCase):
+    def test_materials_and_history_load_only_on_first_open_and_keep_drafts(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            plan = app.dispatch('plan.create', {'name': 'lazy planning'})
+            client = Client(page('/planning-lazy'))
+            async def scenario():
+                with client:
+                    controller = DesktopController(app)
+                    controller.call = AsyncMock(wraps=controller.call)
+                    planning = PlanningPage(controller, PlanningPageState(plan_id=plan['plan_id']),
+                        lambda title, callback, **kw: ui.button(title, on_click=callback), AsyncMock(), AsyncMock(), AsyncMock())
+                    await planning.editor(plan)
+                    operations = [call.args[0] for call in controller.call.await_args_list]
+                    self.assertNotIn('environment.list', operations)
+                    self.assertNotIn('capabilities', operations)
+                    materials = next(e for e in client.elements.values() if 'tw-plan-materials' in e.classes)
+                    history = next(e for e in client.elements.values() if 'tw-plan-history' in e.classes)
+                    self.assertFalse(materials.visible)
+                    self.assertFalse(history.visible)
+                    self.assertFalse(materials.default_slot.children)
+                    self.assertFalse(history.default_slot.children)
+                    name = next(e for e in client.elements.values() if getattr(e, 'label', '') == '规划名称')
+                    name.value = '尚未保存的名称'
+                    await planning.state.save_callback()
+                    self.assertEqual(app.planning.get(plan['plan_id'])['name'], name.value)
+                    tabs = next(e for e in client.elements.values() if 'tw-task-tabs' in e.classes)
+                    select = tabs._change_handlers[-1]
+                    controller.call.reset_mock()
+                    await select(SimpleNamespace(value='能力与素材'))
+                    controls = list(materials.default_slot.children)
+                    self.assertTrue(controls)
+                    self.assertEqual(name.value, '尚未保存的名称')
+                    self.assertEqual([c.args[0] for c in controller.call.await_args_list].count('environment.list'), 1)
+                    await select(SimpleNamespace(value='基础配置'))
+                    await select(SimpleNamespace(value='能力与素材'))
+                    self.assertEqual(materials.default_slot.children, controls)
+                    self.assertEqual([c.args[0] for c in controller.call.await_args_list].count('environment.list'), 1)
+                    controller.call.reset_mock()
+                    await select(SimpleNamespace(value='生成记录'))
+                    await select(SimpleNamespace(value='基础配置'))
+                    await select(SimpleNamespace(value='生成记录'))
+                    self.assertEqual([c.args[0] for c in controller.call.await_args_list].count('plan.generation.list'), 1)
+                    await select(SimpleNamespace(value='基础配置'))
+                    controller.call.reset_mock()
+                    await planning._refresh_generation_history(planning._planning_identity())
+                    controller.call.assert_not_awaited()
+                    await select(SimpleNamespace(value='生成记录'))
+                    controller.call.assert_awaited_once_with('plan.generation.list', plan_id=plan['plan_id'])
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_late_materials_response_does_not_build_for_another_plan(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            plan = app.dispatch('plan.create', {'name': 'old plan'})
+            client = Client(page('/planning-late-materials'))
+            async def scenario():
+                with client:
+                    controller = DesktopController(app)
+                    original = controller.call
+                    entered, release = asyncio.Event(), asyncio.Event()
+                    async def call(operation, **params):
+                        if operation == 'environment.list':
+                            entered.set()
+                            await release.wait()
+                        return await original(operation, **params)
+                    controller.call = call
+                    state = PlanningPageState(plan_id=plan['plan_id'])
+                    planning = PlanningPage(controller, state,
+                        lambda title, callback, **kw: ui.button(title, on_click=callback), AsyncMock(), AsyncMock(), AsyncMock())
+                    await planning.editor(plan)
+                    tabs = next(e for e in client.elements.values() if 'tw-task-tabs' in e.classes)
+                    materials = next(e for e in client.elements.values() if 'tw-plan-materials' in e.classes)
+                    pending = asyncio.create_task(tabs._change_handlers[-1](SimpleNamespace(value='能力与素材')))
+                    await asyncio.wait_for(entered.wait(), 2)
+                    self.assertFalse(materials.default_slot.children)
+                    state.plan_id = 'another-plan'
+                    state.generation += 1
+                    release.set()
+                    await pending
+                    self.assertFalse(materials.default_slot.children)
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
     def test_capture_label_reorder_delete_refresh_only_group_and_preserve_all_form_drafts(self):
         async def scenario():
             plan = {"plan_id": "p1", "revision": 1, "name": "saved"}

@@ -16,8 +16,8 @@ class EnvironmentUseCases:
 
     def delete(self, environment_id):
         for instance in self.context_sessions.list():
-            if self.plans.get(instance["owner_id"]).get("environment_id") == environment_id:
-                raise TaskError("ENVIRONMENT_LOCKED", "该环境仍被计划采集实例使用，请先结束实例")
+            if instance.get('environment_id') == environment_id:
+                raise TaskError("ENVIRONMENT_LOCKED", "该环境仍被上下文采集实例使用，请先结束实例")
         for run in self.runs.runs_for_environment(environment_id):
             current = self.coordinator.describe_run(run["run_id"])
             if current["status"] in {"RUNNING", "PAUSED"} or current["can_end"]:

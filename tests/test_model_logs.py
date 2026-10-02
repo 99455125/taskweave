@@ -18,6 +18,49 @@ class ModelLogTests(unittest.TestCase):
         'required': ['step_content'],
     }
 
+    def test_service_log_window_stops_reading_when_hidden_or_paused(self):
+        from types import SimpleNamespace
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.desktop.server_logs import render_logs
+        client = Client(page('/service-log-visibility'))
+        events, timers = {}, []
+        original_timer = ui.timer
+        def create_timer(*args, **kwargs):
+            timer = original_timer(*args, **kwargs)
+            timers.append(timer)
+            return timer
+        with tempfile.TemporaryDirectory() as home:
+            logs = ServerLogs(home)
+            try:
+                with client, patch.object(ui, 'on', lambda name, handler: events.__setitem__(name, handler)), \
+                        patch.object(ui, 'timer', create_timer), patch.object(logs, 'after', wraps=logs.after) as read:
+                    render_logs(logs)
+                    self.assertEqual(read.call_count, 1)
+                    self.assertIn('tw_service_logs_visible', events)
+                    events['tw_service_logs_visible'](SimpleNamespace(args=False))
+                    self.assertFalse(timers[0].active)
+                    logs.emit(logging.LogRecord('fixture', logging.INFO, '', 0, '隐藏期间的日志', (), None))
+                    timers[0].callback()
+                    self.assertEqual(read.call_count, 1)
+                    events['tw_service_logs_visible'](SimpleNamespace(args=True))
+                    self.assertTrue(timers[0].active)
+                    self.assertEqual(read.call_count, 2)
+                    output = next(el for el in client.elements.values() if isinstance(el, ui.log))
+                    self.assertTrue(any('隐藏期间的日志' in getattr(el, 'text', '') for el in output.descendants()))
+                    paused = next(el for el in client.elements.values() if isinstance(el, ui.switch))
+                    paused.value = True
+                    self.assertFalse(timers[0].active)
+                    timers[0].callback()
+                    self.assertEqual(read.call_count, 2)
+                    paused.value = False
+                    self.assertTrue(timers[0].active)
+                    self.assertEqual(read.call_count, 3)
+            finally:
+                client.delete()
+                logs.close()
+
     def reply(self, message, finish='stop', contract=None):
         raw=json.dumps({'choices':[{'message':message,'finish_reason':finish}]}).encode()
         model=HttpModel('https://api.deepseek.com/chat/completions','deepseek-flash','test-secret')

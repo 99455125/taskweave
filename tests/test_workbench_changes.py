@@ -152,6 +152,9 @@ class WorkbenchChanges(unittest.TestCase):
         workbench.step_id = uid()
         workbench.contexts = []
         workbench.context_entries = []
+        from taskweave.desktop.components.step_contexts import StepContextPanel
+        workbench.step_context_panel = StepContextPanel(workbench.controller, workbench.context_state,
+            lambda:workbench.step_id, None, None, None, None)
         workbench.context_cards = SimpleNamespace(sync_group=lambda saved: None)
         draft = ContextCaptureDraft()
         draft.append({'items': [{'kind': 'text', 'source': 'fake.page', 'content': 'page'}], 'views': [{'title': '页面预览'}]}, {'scope': 'viewport'}, True, 'session', label='登录页')

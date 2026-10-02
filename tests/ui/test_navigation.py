@@ -43,7 +43,7 @@ class NavigationTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
-    def test_leave_waits_for_inflight_autosave_before_checking_dirty_state(self):
+    def test_leave_waits_for_inflight_manual_save_before_checking_dirty_state(self):
         from nicegui.client import Client
         from nicegui.page import page
         from taskweave.application.service import Application
@@ -68,8 +68,7 @@ class NavigationTests(unittest.TestCase):
                         return await original_save(*args)
                     workbench.controller.save_draft = delayed_save
                     workbench.edit_controls['name'].value = 'saved before leave'
-                    timer = workbench._step_editor().timers[-1]
-                    autosaving = asyncio.create_task(timer.callback())
+                    autosaving = asyncio.create_task(workbench.save_editor())
                     await entered.wait()
                     workbench.paint = AsyncMock()
                     with patch('taskweave.desktop.workbench.ui') as fake_ui:
@@ -88,7 +87,7 @@ class NavigationTests(unittest.TestCase):
             finally:
                 client.delete()
 
-    def test_discard_leaves_only_changes_not_already_autosaved(self):
+    def test_discard_leaves_only_changes_not_explicitly_saved(self):
         from nicegui.client import Client
         from nicegui.page import page
         from taskweave.application.service import Application
@@ -115,8 +114,7 @@ class NavigationTests(unittest.TestCase):
                     original_save = workbench.controller.save_draft
                     workbench.controller.save_draft = AsyncMock(wraps=original_save)
                     workbench.edit_controls['name'].value = 'autosaved-name'
-                    timer = workbench._step_editor().timers[-1]
-                    await timer.callback()
+                    await workbench.save_editor()
                     self.assertEqual(app.repo.step(step['step_id'])['name'], 'autosaved-name')
                     workbench.edit_controls['step_description'].value = 'unsaved description'
                     workbench.paint = AsyncMock()

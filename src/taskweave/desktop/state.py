@@ -1,6 +1,6 @@
 """Small, explicitly owned desktop session states."""
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 import asyncio
 
 
@@ -21,6 +21,8 @@ class StepEditorState:
     generation: int = 0
     save_lock: object | None = None
     autosave_paused: bool = False
+    reload_draft: dict | None = None
+    reload_debug: dict | None = None
 
     def __post_init__(self):
         if self.save_lock is None:
@@ -69,6 +71,7 @@ class ExecutionPageState:
 class RunInputState:
     dialog_token: tuple | None = None
     dialog: object | None = None
+    drafts: dict = field(default_factory=dict)
 
 
 @dataclass

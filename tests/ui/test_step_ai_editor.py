@@ -24,6 +24,159 @@ class _Dialog:
 
 
 class StepAIEditorTests(unittest.TestCase):
+    def test_goal_generation_after_reload_accepts_empty_default_environment(self):
+        import tempfile
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('default environment')
+            saved = app.repo.save_step(task['task_id'], {'name': 'goal',
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n'})
+            controller = DesktopController(app)
+            editor = StepAIEditor(controller, MagicMock(), AsyncMock(return_value=saved),
+                                  lambda: '', lambda: {}, lambda: ('task', saved['step_id'], 0, 0),
+                                  author_step=controller.author_step, authoring_request=controller.authoring_request)
+            editor._present_goal_result = AsyncMock()
+            async def scenario():
+                with patch('taskweave.desktop.components.step_ai.ui', MagicMock()) as fake_ui:
+                    fake_ui.dialog.return_value = _Dialog(('chat', '中文目标'))
+                    await editor.generate_goal_dialog()
+                editor._present_goal_result.assert_awaited_once()
+                request = controller.authoring_request(saved['step_id'])
+                self.assertIsNone(request['params']['environment_id'])
+                self.assertIn('中文目标', request['task'].result()['prompt'])
+            asyncio.run(scenario())
+
+    def test_recovered_candidate_rechecks_attempt_at_adoption(self):
+        async def scenario():
+            saved = {'step_id': 'step', 'content_hash': 'original', 'step_content': 'code'}
+            proposal = {'proposed_content': 'candidate', 'explanation': 'repair',
+                        'stale': False, 'diagnostics': []}
+            result = asyncio.create_task(asyncio.sleep(0, result=proposal))
+            await result
+            request = {'task': result, 'saved': saved, 'operation': 'step.generate',
+                       'params': {'feedback': {'run_id': 'run', 'attempt_id': 'old-attempt'}}}
+            attempts = [{'step_id': 'step', 'valid': True, 'status': 'FAILED', 'attempt_id': 'old-attempt'}]
+            async def call(operation, **params):
+                return saved if operation == 'step.get' else {'attempts': attempts}
+            callbacks = {}
+            def button(title, callback, **kwargs):
+                callbacks[title] = callback
+                return MagicMock()
+            code = SimpleNamespace(value='code')
+            editor = StepAIEditor(SimpleNamespace(call=AsyncMock(side_effect=call), diff=lambda *_: 'diff'),
+                                  button, AsyncMock(), lambda: None, lambda: {'code': code},
+                                  lambda: ('task', 'step', 0, 0), trials={'step': 'run'},
+                                  authoring_request=lambda _: request)
+            with patch('taskweave.desktop.components.step_ai.ui', MagicMock()):
+                await editor.present_content_candidate(saved, proposal, editor.identity(), AsyncMock())
+                attempts[0]['attempt_id'] = 'later-attempt'
+                with self.assertRaises(TaskError) as stale:
+                    await callbacks['采纳到编辑器']()
+                self.assertEqual(stale.exception.code, 'VALIDATION_EVIDENCE_INVALID')
+            self.assertEqual(code.value, 'code')
+            editor.save_editor.assert_not_awaited()
+        asyncio.run(scenario())
+
+    def test_recovery_uses_retained_result_and_rejects_changed_step_or_attempt(self):
+        async def scenario():
+            saved = {'step_id': 'step', 'content_hash': 'original', 'step_content': 'code'}
+            proposal = {'proposed_content': 'candidate'}
+            result = asyncio.create_task(asyncio.sleep(0, result=proposal))
+            request = {'task': result, 'saved': saved, 'operation': 'step.generate',
+                       'params': {'feedback': {'run_id': 'run', 'attempt_id': 'attempt'}}}
+            latest = dict(saved)
+            attempts = [{'step_id': 'step', 'valid': True, 'status': 'FAILED', 'attempt_id': 'attempt'}]
+            async def call(operation, **params):
+                if operation == 'step.get': return latest
+                if operation == 'run.get': return {'attempts': attempts}
+                raise AssertionError('Recovery must not generate: ' + operation)
+            controller = SimpleNamespace(call=AsyncMock(side_effect=call))
+            editor = StepAIEditor(controller, MagicMock(), AsyncMock(), lambda: None,
+                                  lambda: {'code': SimpleNamespace(value='code')},
+                                  lambda: ('task', 'step', 0, 0), trials={'step': 'run'},
+                                  authoring_request=lambda _: request)
+            editor._present_generation_result = AsyncMock()
+            with patch('taskweave.desktop.components.step_ai.ui', MagicMock()):
+                await editor.recover_generation(repaint=AsyncMock())
+                editor._present_generation_result.assert_awaited_once()
+                editor.save_editor.assert_not_awaited()
+                editor._present_generation_result.reset_mock()
+                latest['content_hash'] = 'other-version'
+                with self.assertRaises(TaskError) as conflict:
+                    await editor.recover_generation(repaint=AsyncMock())
+                self.assertEqual(conflict.exception.code, 'EDIT_CONFLICT')
+                latest['content_hash'] = 'original'
+                attempts[0]['attempt_id'] = 'new-attempt'
+                with self.assertRaises(TaskError) as changed:
+                    await editor.recover_generation(repaint=AsyncMock())
+                self.assertEqual(changed.exception.code, 'VALIDATION_EVIDENCE_INVALID')
+                editor._present_generation_result.assert_not_awaited()
+        asyncio.run(scenario())
+
+    def test_reloaded_editor_cannot_open_new_ai_flow_while_request_is_active(self):
+        async def scenario():
+            release = asyncio.Event()
+            pending = asyncio.create_task(release.wait())
+            editor = StepAIEditor(SimpleNamespace(), MagicMock(), AsyncMock(), lambda: None,
+                                  lambda: {}, lambda: ('task', 'step', 0, 0),
+                                  authoring_request=lambda _: {'task': pending})
+            with patch('taskweave.desktop.components.step_ai.ui', MagicMock()) as fake_ui:
+                await editor.choose_generation_mode(repaint=AsyncMock())
+                await editor.choose_repair_mode(repaint=AsyncMock())
+                await editor.generate_goal_dialog()
+                fake_ui.dialog.assert_not_called()
+                self.assertEqual(fake_ui.notify.call_count, 3)
+                editor.save_editor.assert_not_awaited()
+            release.set()
+            await pending
+        asyncio.run(scenario())
+
+    def test_controller_retains_inflight_ai_across_waiter_cancel_and_rejects_duplicate(self):
+        import tempfile
+        import threading
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        from taskweave.core.ports import ModelReply
+
+        entered, release = threading.Event(), threading.Event()
+        class SlowModel:
+            def __init__(self): self.requests = 0
+            def capabilities(self): return {'images': False}
+            async def complete(self, *args, **kwargs):
+                self.requests += 1
+                entered.set()
+                await asyncio.to_thread(release.wait)
+                return ModelReply('async def run(ctx, inputs):\n    return ctx.result(data={"new": True})\n', 'local delayed result')
+
+        model = SlowModel()
+        with tempfile.TemporaryDirectory() as home, Application(home, model) as app:
+            task = app.repo.create_task('retained AI')
+            step = app.repo.save_step(task['task_id'], {'name': 'original',
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n'})
+            controller = DesktopController(app)
+            async def scenario():
+                params = {'step_id': step['step_id'], 'expected_hash': step['content_hash']}
+                pending = asyncio.create_task(controller.author_step('step.generate', step, **params))
+                self.assertTrue(await asyncio.to_thread(entered.wait, 10), 'Model request did not start')
+                pending.cancel()
+                with self.assertRaises(asyncio.CancelledError): await pending
+                with self.assertRaises(TaskError) as raised:
+                    await controller.author_step('step.generate', step, **params)
+                self.assertEqual(raised.exception.code, 'AUTHORING_BUSY')
+                request = controller.authoring_request(step['step_id'])
+                self.assertFalse(request['task'].done())
+                release.set()
+                proposal = await asyncio.shield(request['task'])
+                self.assertIn('"new": True', proposal['proposed_content'])
+                self.assertEqual(model.requests, 1)
+                self.assertEqual(app.repo.step(step['step_id'])['step_content'], step['step_content'])
+                self.assertEqual(request['saved']['content_hash'], step['content_hash'])
+            try:
+                asyncio.run(scenario())
+            finally:
+                release.set()
+
     def test_late_content_generation_is_discarded_after_editor_switch(self):
         async def scenario():
             entered, release = asyncio.Event(), asyncio.Event()

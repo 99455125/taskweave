@@ -8,7 +8,8 @@ from taskweave.core.repositories import RunRepository, StepRepository, TaskRepos
 
 
 class StepUseCases:
-    def __init__(self, steps: StepRepository, tasks: TaskRepository, runs: RunRepository, registry, authoring, coordinator):
+    def __init__(self, steps: StepRepository, tasks: TaskRepository, runs: RunRepository, registry, authoring, coordinator, context_sessions=None):
+        self.context_sessions = context_sessions
         self.steps, self.tasks, self.runs = steps, tasks, runs
         self.registry, self.authoring, self.coordinator = registry, authoring, coordinator
 
@@ -17,7 +18,10 @@ class StepUseCases:
     def get(self, step_id): return self.steps.step(step_id)
     def list(self, task_id): return self.steps.steps(task_id)
     def reorder(self, task_id, step_ids): return self.steps.reorder(task_id, step_ids)
-    def delete(self, step_id): return self.steps.delete_step(step_id)
+    def delete(self, step_id):
+        if self.context_sessions:
+            return self.context_sessions.change_step_owner(step_id, lambda: self.steps.delete_step(step_id))
+        return self.steps.delete_step(step_id)
 
     def validate(self, step_id):
         step = self.steps.step(step_id)

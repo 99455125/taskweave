@@ -5,7 +5,8 @@ from taskweave.core.repositories import StepContextRepository, StepRepository, T
 
 
 class TaskUseCases:
-    def __init__(self, tasks: TaskRepository, steps: StepRepository, step_contexts: StepContextRepository, uow: UnitOfWork, registry, authoring, coordinator):
+    def __init__(self, tasks: TaskRepository, steps: StepRepository, step_contexts: StepContextRepository, uow: UnitOfWork, registry, authoring, coordinator, context_sessions=None):
+        self.context_sessions = context_sessions
         self.tasks = tasks
         self.steps = steps
         self.step_contexts = step_contexts
@@ -21,7 +22,10 @@ class TaskUseCases:
     def list(self): return self.tasks.list_tasks()
     def update(self, task_id, name, input_schema, description=""):
         return self.tasks.update_task(task_id, name, input_schema, description)
-    def delete(self, task_id): return self.tasks.delete_task(task_id)
+    def delete(self, task_id):
+        if self.context_sessions:
+            return self.context_sessions.change_task_owner(task_id, lambda: self.tasks.delete_task(task_id))
+        return self.tasks.delete_task(task_id)
     def copy(self, task_id, name=None): return self.tasks.copy_task(task_id, name)
 
     def export(self, task_id):

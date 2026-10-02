@@ -2664,6 +2664,9 @@ browser = [
 database = [
     { name = "taskweave-tidb" },
 ]
+files = [
+    { name = "taskweave-file" },
+]
 gui = [
     { name = "nicegui" },
     { name = "pywebview" },
@@ -2687,15 +2690,21 @@ requires-dist = [
     { name = "nicegui", marker = "extra == 'gui'", specifier = ">=3,<4" },
     { name = "packaging", specifier = ">=24,<27" },
     { name = "pywebview", marker = "extra == 'gui'", specifier = ">=6,<7" },
+    { name = "taskweave-file", marker = "extra == 'files'", editable = "plugins/file" },
     { name = "taskweave-ocr", marker = "extra == 'ocr'", editable = "plugins/ocr" },
     { name = "taskweave-playwright", marker = "extra == 'browser'", editable = "plugins/playwright" },
     { name = "taskweave-tidb", marker = "extra == 'database'", editable = "plugins/tidb" },
     { name = "taskweave-utility", marker = "extra == 'utility'", editable = "plugins/utility" },
 ]
-provides-extras = ["browser", "ocr", "database", "utility", "gui"]
+provides-extras = ["browser", "ocr", "database", "utility", "files", "gui"]
 
 [package.metadata.requires-dev]
 build = [{ name = "pyinstaller", specifier = ">=6.11,<7" }]
+
+[[package]]
+name = "taskweave-file"
+version = "0.1.0"
+source = { editable = "plugins/file" }
 
 [[package]]
 name = "taskweave-ocr"
@@ -2718,7 +2727,7 @@ requires-dist = [
 
 [[package]]
 name = "taskweave-playwright"
-version = "0.3.0"
+version = "0.4.0"
 source = { editable = "plugins/playwright" }
 dependencies = [
     { name = "playwright", version = "1.58.0", source = { registry = "https://pypi.org/simple" }, marker = "sys_platform == 'darwin'" },
@@ -2733,7 +2742,7 @@ requires-dist = [
 
 [[package]]
 name = "taskweave-tidb"
-version = "0.1.0"
+version = "0.2.0"
 source = { editable = "plugins/tidb" }
 dependencies = [
     { name = "certifi" },

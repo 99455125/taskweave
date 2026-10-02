@@ -9,6 +9,61 @@ from pathlib import Path
 import secrets
 import socket
 import sys
+from copy import deepcopy
+import time
+from uuid import UUID
+
+
+def install_client_trace(client, workbench, *, native, requested_view):
+    """Observe lifecycle events only; never log URLs, form values or exception bodies."""
+    logger = logging.getLogger(__name__)
+    views = {'home', 'planning', 'tasks', 'editor', 'executions', 'plugins',
+             'marketplace', 'environment', 'settings', 'run', 'history'}
+    disconnected_at = None
+    tab_id = None
+
+    def record(event, *, error=None):
+        nonlocal tab_id, disconnected_at
+        current_tab = getattr(client, 'tab_id', None)
+        if current_tab is not None:
+            try:
+                tab_id = str(UUID(current_tab))
+            except (ValueError, TypeError, AttributeError):
+                tab_id = None
+        payload = {
+            'event': event, 'client_id': client.id, 'tab_id': tab_id,
+            'native': bool(native), 'has_socket': client.has_socket_connection,
+            'view': workbench.page if workbench.page in views else 'unknown',
+            'requested_view': requested_view if requested_view in views else 'unknown',
+            'has_task': bool(workbench.task_id), 'has_step': bool(workbench.step_id),
+            'debug': bool(getattr(workbench, '_debug_visible', False)),
+        }
+        if event == 'socket_disconnected':
+            disconnected_at = time.monotonic()
+        elif event == 'connected' and disconnected_at is not None:
+            payload['since_disconnect_ms'] = round((time.monotonic() - disconnected_at) * 1000, 1)
+            disconnected_at = None
+        if error is not None:
+            payload['error_type'] = type(error).__name__
+            from taskweave.core.validation import TaskError
+            if isinstance(error, TaskError):
+                import re
+                if isinstance(error.code, str) and re.fullmatch(r'[A-Z][A-Z0-9_]{0,63}', error.code):
+                    payload['error_code'] = error.code
+        logger.log(logging.WARNING if error is not None else logging.INFO,
+                   'UI_LIFECYCLE %s', json.dumps(payload, ensure_ascii=False))
+
+    client.on_connect(lambda: record('connected'))
+    client.on_disconnect(lambda: record('socket_disconnected'))
+    client.on_delete(lambda: record('client_deleted'))
+    record('page_created')
+    return record
+
+
+def tab_reload_state(storage):
+    """Detach copied tab data and use the mapping actually held by storage."""
+    storage['workbench_reload'] = deepcopy(storage.get('workbench_reload', {}))
+    return storage['workbench_reload']
 
 
 def select_local_port():
@@ -141,12 +196,19 @@ def launch(home=None, port=None, browser=False):
                 window.history.replaceState(null, '', url);
             """.replace("PAYLOAD", json.dumps(payload)))
         workbench = Workbench(holder["controller"], route_writer=write_route)
+        trace = install_client_trace(ui.context.client, workbench, native=not browser, requested_view=view)
+        # Register shell connection handlers before the handshake, then bind
+        # this tab's volatile recovery data before building any editable form.
+        await ui.context.client.connected()
+        workbench.attach_reload_state(tab_reload_state(app.storage.tab))
         try:
             await workbench.restore_route(view, task_id, step_id, debug)
-        except Exception:
+        except Exception as exc:
+            trace('route_restore_failed', error=exc)
             logging.getLogger(__name__).exception("无法恢复上次页面")
             ui.notify("上次页面已不可用，已返回工作台。", type="warning")
         await workbench.paint()
+        trace('page_ready')
         if not browser:
 
             async def native_ready():
@@ -171,6 +233,8 @@ def launch(home=None, port=None, browser=False):
                     )
 
             ui.context.client.on_connect(native_ready)
+            if ui.context.client.has_socket_connection:
+                asyncio.create_task(native_ready())
 
     if not browser:
         app.native.window_args.update(url=url, min_size=(860, 600))

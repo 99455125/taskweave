@@ -30,12 +30,14 @@
     },
     "domain.contexts": {
       "source_globs": [
-        "src/taskweave/core/context_collection.py"
+        "src/taskweave/core/context_collection.py",
+        "src/taskweave/core/context_recording.py"
       ],
       "targets": [
         "tests.test_context_collection",
         "tests.test_context_captures",
-        "tests.test_context_metadata"
+        "tests.test_context_metadata",
+        "tests.test_context_recording"
       ],
       "depends_on": [],
       "browser_targets": []
@@ -98,9 +100,15 @@
       "browser_targets": []
     },
     "repository.organization": {
-      "source_globs": ["src/taskweave/infrastructure/repositories/organization.py"],
-      "targets": ["tests.test_organization"],
-      "depends_on": ["shared.storage"],
+      "source_globs": [
+        "src/taskweave/infrastructure/repositories/organization.py"
+      ],
+      "targets": [
+        "tests.test_organization"
+      ],
+      "depends_on": [
+        "shared.storage"
+      ],
       "browser_targets": []
     },
     "repository.contexts": {
@@ -241,9 +249,12 @@
         "tests.test_planning",
         "tests.test_context_sessions",
         "tests.ui.test_planning_page",
+        "tests.ui.test_planning_editor_late_candidate",
+        "tests.ui.test_planning_end_collection",
         "tests.test_http_task_api",
         "tests.test_workbench_changes.WorkbenchChanges.test_planning_actions_save_draft_before_dependent_workflow",
-        "tests.test_workbench_changes.WorkbenchChanges.test_recollection_advanced_json_keeps_only_non_form_parameters"
+        "tests.test_workbench_changes.WorkbenchChanges.test_recollection_advanced_json_keeps_only_non_form_parameters",
+        "tests.test_context_recording"
       ],
       "depends_on": [
         "repository.planning",
@@ -298,7 +309,8 @@
         "tests.test_executor_recovery",
         "tests.test_interval_scheduler",
         "tests.test_http_task_api",
-        "tests.test_context_targets_runtime"
+        "tests.test_context_targets_runtime",
+        "tests.test_context_recording_runtime"
       ],
       "depends_on": [
         "repository.tasks",
@@ -309,7 +321,9 @@
         "application.authoring",
         "shared.contracts"
       ],
-      "browser_targets": []
+      "browser_targets": [
+        "tests.test_playwright_recording_runtime"
+      ]
     },
     "ui.tasks": {
       "source_globs": [
@@ -361,7 +375,8 @@
       "source_globs": [
         "src/taskweave/desktop/components/step_debug.py",
         "src/taskweave/desktop/components/trial_inputs.py",
-        "src/taskweave/desktop/components/run_inputs.py"
+        "src/taskweave/desktop/components/run_inputs.py",
+        "src/taskweave/desktop/components/run_logs.py"
       ],
       "targets": [
         "tests.ui.test_step_debug_session",
@@ -375,7 +390,8 @@
         "tests.test_workbench_changes.WorkbenchChanges.test_flow_trial_drafts_and_persisted_dependencies",
         "tests.test_workbench_changes.WorkbenchChanges.test_failed_trial_edit_and_retry_reuses_task_debug_instance",
         "tests.test_workbench_changes.WorkbenchChanges.test_restart_clears_live_sessions_keeps_history",
-        "tests.test_workbench_changes.WorkbenchChanges.test_end_button_tracks_live_session_not_success_status"
+        "tests.test_workbench_changes.WorkbenchChanges.test_end_button_tracks_live_session_not_success_status",
+        "tests.ui.test_run_logs"
       ],
       "depends_on": [
         "application.runs",
@@ -408,7 +424,8 @@
     "ui.contexts": {
       "source_globs": [
         "src/taskweave/desktop/components/step_contexts.py",
-        "src/taskweave/desktop/contexts.py"
+        "src/taskweave/desktop/contexts.py",
+        "src/taskweave/desktop/context_recording.py"
       ],
       "targets": [
         "tests.ui.test_step_context_panel",
@@ -419,7 +436,8 @@
         "tests.test_workbench_changes.WorkbenchChanges.test_context_request_merges_form_advanced_and_target_values_in_order",
         "tests.test_workbench_changes.WorkbenchChanges.test_step_contexts_persist_and_can_be_renamed_or_deleted",
         "tests.test_workbench_changes.WorkbenchChanges.test_recollection_advanced_json_keeps_only_non_form_parameters",
-        "tests.test_workbench_changes.WorkbenchChanges.test_context_draft_is_committed_once_as_a_batch"
+        "tests.test_workbench_changes.WorkbenchChanges.test_context_draft_is_committed_once_as_a_batch",
+        "tests.ui.test_context_recording"
       ],
       "depends_on": [
         "application.planning",
@@ -515,7 +533,8 @@
         "tests.test_model_secret_settings",
         "tests.test_privacy_settings",
         "tests.test_model_logs",
-        "tests.test_workbench_changes.WorkbenchChanges.test_executor_thread_setting_persists"
+        "tests.test_workbench_changes.WorkbenchChanges.test_executor_thread_setting_persists",
+        "tests.test_desktop_security"
       ],
       "depends_on": [
         "shared.storage",
@@ -536,6 +555,7 @@
       ],
       "depends_on": [
         "application.runs",
+        "ui.debug",
         "ui.results",
         "shared.ui"
       ],
@@ -615,7 +635,7 @@
     },
     "plugins.playwright": {
       "source_globs": [
-        "plugins/playwright/src/taskweave_playwright/__init__.py"
+        "plugins/playwright/src/taskweave_playwright/*.py"
       ],
       "targets": [
         "tests.test_plugin_contract",
@@ -626,10 +646,15 @@
         "shared.contracts"
       ],
       "browser_targets": [
+        "tests.test_playwright_recording",
+        "tests.test_playwright_scope",
+        "tests.test_playwright_actions",
+        "tests.test_playwright_files_dialogs",
         "tests.test_playwright_choices.PlaywrightChoiceTests.test_snapshot_includes_native_and_custom_choices",
         "tests.test_playwright_choices.PlaywrightChoiceTests.test_press_and_native_select_option",
         "tests.test_image_locators.ImageLocators.test_unnamed_images_in_separate_parents_have_unique_capture_locators",
-        "tests.test_playwright_browser_integration.BrowserTests"
+        "tests.test_playwright_browser_integration.BrowserTests",
+        "tests.test_playwright_recording_runtime"
       ]
     },
     "plugins.ocr": {
@@ -647,12 +672,24 @@
     },
     "plugins.tidb": {
       "source_globs": [
-        "plugins/tidb/src/taskweave_tidb/__init__.py"
+        "plugins/tidb/src/taskweave_tidb/*.py"
       ],
       "targets": [
         "tests.test_tidb",
         "tests.test_tidb_execution",
         "tests.test_plugin_contract"
+      ],
+      "depends_on": [
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "plugins.file": {
+      "source_globs": [
+        "plugins/file/**"
+      ],
+      "targets": [
+        "tests.test_file_plugin"
       ],
       "depends_on": [
         "shared.contracts"

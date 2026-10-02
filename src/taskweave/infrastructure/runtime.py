@@ -1,5 +1,6 @@
 """Durable sequential coordinator; one spawn worker per active run."""
 
+from dataclasses import asdict
 from datetime import datetime, timezone, timedelta
 import json
 import multiprocessing
@@ -24,6 +25,9 @@ class Coordinator:
         self.process = self.pipe = self.thread = None
         self.session_key = self.session_run_id = None
         self.context_session_id = None
+        self.context_recordings = set()
+        self.context_recording_delivered = {}
+        self.context_recording_capabilities = {}
         self.pause_requested = threading.Event()
         self.cancel = multiprocessing.get_context("spawn").Event()
         self.closing = False
@@ -49,6 +53,9 @@ class Coordinator:
         child.close()
 
     def _stop_worker(self, force=False):
+        self.context_recordings.clear()
+        self.context_recording_delivered.clear()
+        self.context_recording_capabilities.clear()
         self.session_key = self.session_run_id = None
         self.context_session_id = None
         if self.process:
@@ -95,6 +102,8 @@ class Coordinator:
                 body['from'] = start_step_id
 
             def operation():
+                if self.context_recordings:
+                    raise TaskError('CONTEXT_RECORDING_PENDING', '请先保存确认或丢弃录制，再运行步骤')
                 run = self.runs.run(run_id)
                 if mode not in {"NEXT", "UNTIL", "ALL"}:
                     raise TaskError("MODE_INVALID")
@@ -161,6 +170,8 @@ class Coordinator:
             owned = []
 
             def apply():
+                if self.context_recordings and operation == 'abandon':
+                    raise TaskError('CONTEXT_RECORDING_PENDING', '请先保存确认或丢弃录制，再结束实例')
                 run = self.runs.run(run_id)
                 if operation == "pause":
                     if run["status"] != "RUNNING":
@@ -203,6 +214,8 @@ class Coordinator:
             if any(run['status'] == 'RUNNING' for run in runs) or (self.session_run_id in ids and self.thread and self.thread.is_alive()):
                 raise TaskError('RUN_BUSY', '请先暂停或结束正在执行的步骤，再清理任务')
             if self.session_run_id in ids:
+                if self.context_recordings:
+                    raise TaskError('CONTEXT_RECORDING_PENDING', '请先处理未保存录制，再清理运行')
                 self._stop_worker()
             self.runs.clear_task_run_records(task_id)
             directory = self.task_data_root / valid_id(task_id)
@@ -216,6 +229,8 @@ class Coordinator:
             if run['status'] == 'RUNNING' or (self.thread and self.thread.is_alive() and self.session_run_id == run_id):
                 raise TaskError('RUN_BUSY', '请先结束正在执行的步骤，再删除执行')
             if self.session_run_id == run_id:
+                if self.context_recordings:
+                    raise TaskError('CONTEXT_RECORDING_PENDING', '请先处理未保存录制，再删除运行')
                 self._stop_worker()
             self.runs.release_lease(run_id)
             self.runs.reset_run_results(run_id)
@@ -224,6 +239,8 @@ class Coordinator:
 
     def restart(self, run_id, command_id, target_step_id, start_step_id=None):
         with self.lock:
+            if self.context_recordings:
+                raise TaskError('CONTEXT_RECORDING_PENDING', '请先处理未保存录制，再重新运行')
             if self.runs.has_command_receipt(command_id):
                 return self.start(run_id, command_id, mode='UNTIL', target_step_id=target_step_id, start_step_id=start_step_id)
             run = self.runs.run(run_id)
@@ -326,7 +343,7 @@ class Coordinator:
         self.runs.event(run['run_id'], 'InputRequested', {'scope': scope, 'step_id': step['step_id'], 'missing': missing})
         self._done(run['run_id'], 'PAUSED')
 
-    def provide_inputs(self, run_id, command_id, inputs, step_inputs=None):
+    def provide_inputs(self, run_id, command_id, inputs, step_inputs=None, *, expected_input_id=None):
         with self.lock:
             def apply():
                 run = self.runs.run(run_id)
@@ -334,6 +351,8 @@ class Coordinator:
                 waiting = request.get('waiting_input')
                 if run['status'] != 'PAUSED' or not waiting or (self.thread and self.thread.is_alive()):
                     raise TaskError('RUN_STATE_INVALID')
+                if expected_input_id is not None and waiting.get('id') != expected_input_id:
+                    raise TaskError('INPUT_REQUEST_STALE', '补参请求已变化，请重新打开补参窗口')
                 if set(inputs) - set(waiting['schema'].get('properties', {})):
                     raise TaskError('INPUT_INVALID', '仅能填写当前请求的参数')
                 values = {**waiting['values'], **inputs}
@@ -359,7 +378,9 @@ class Coordinator:
                     uid(), dumps({'scope': waiting['scope'], 'step_id': waiting['step_id'], 'keys': list(inputs)}), now(),
                 )
                 return {'run_id': run_id, 'status': 'PAUSED'}
-            return self._receipt(command_id, run_id, {'operation': 'inputs', 'inputs': inputs, **({'step_inputs': step_inputs} if step_inputs is not None else {})}, apply)
+            return self._receipt(command_id, run_id, {'operation': 'inputs', 'inputs': inputs,
+                **({'step_inputs': step_inputs} if step_inputs is not None else {}),
+                **({'expected_input_id': expected_input_id} if expected_input_id is not None else {})}, apply)
 
     def _drive(self, run_id, mode, target):
         try:
@@ -596,10 +617,21 @@ class Coordinator:
     def collect_context(self, run_id, step_id, provider_id, request=None, expected_session_id=None, include_view=True):
         return self._observe_context(run_id, step_id, provider_id, request, expected_session_id=expected_session_id, include_view=include_view)
 
+    def record_context(self, run_id, step_id, provider_id, operation, *, recording_id=None,
+                       after=0, through=None, limit=100, request=None,
+                       expected_session_id=None, include_view=True):
+        from taskweave.core.context_recording import recording_command
+        command = recording_command(operation, recording_id=recording_id, after=after,
+                                    through=through, limit=limit)
+        if operation != 'start' and not expected_session_id:
+            raise TaskError('CONTEXT_SESSION_CHANGED', '录制命令必须核对原运行实例')
+        return self._observe_context(run_id, step_id, provider_id, request,
+            expected_session_id=expected_session_id, include_view=include_view, recording=command)
+
     def context_targets(self, run_id, step_id, provider_id, request=None):
         return self._observe_context(run_id, step_id, provider_id, request, targets=True)
 
-    def _observe_context(self, run_id, step_id, provider_id, request=None, targets=False, expected_session_id=None, include_view=True):
+    def _observe_context(self, run_id, step_id, provider_id, request=None, targets=False, expected_session_id=None, include_view=True, recording=None):
         if not self.lock.acquire(blocking=False):
             raise TaskError("CONTEXT_SESSION_BUSY", "该实例正在执行或采集上下文")
         try:
@@ -622,12 +654,26 @@ class Coordinator:
                     "SESSION_NOT_AVAILABLE",
                     "Browser resources were lost; restart in an explicit trial",
                 )
+            if recording is not None:
+                key = (step_id, provider_id, recording.recording_id)
+                if recording.operation == 'start' and len(self.context_recordings) >= 16:
+                    raise TaskError('CONTEXT_RECORDING_PENDING')
+                if (recording.operation != 'start' and key not in self.context_recordings
+                        and not (recording.operation == 'ack' and key in self.context_recording_delivered)):
+                    raise TaskError('CONTEXT_RECORDING_UNAVAILABLE')
+                if recording.operation == 'ack' and recording.through > self.context_recording_delivered.get(key, 0):
+                    raise TaskError('CONTEXT_RECORDING_REQUEST_INVALID', '不能确认未读取证据')
+                if recording.operation != 'start':
+                    # Only the already-owned recording keeps its original
+                    # provider authority. New sessions use the edited step.
+                    step = {**step, 'capabilities': self.context_recording_capabilities[key]}
             environment, secret_refs = self.environments.environment(run["environment_id"])
             request_id = uid()
             self.pipe.send(
                 dumps(
                     {
-                        "kind": "context_targets" if targets else "context",
+                        "kind": "context_record" if recording is not None else "context_targets" if targets else "context",
+                        **({"recording": asdict(recording)} if recording is not None else {}),
                         "provider_id": provider_id,
                         "request": request or {},
                         "include_view": include_view,
@@ -645,12 +691,33 @@ class Coordinator:
                     }
                 )
             )
-            deadline = time.monotonic() + 30
+            deadline = time.monotonic() + (60 if recording is not None else 30)
             while time.monotonic() < deadline:
                 if self.pipe.poll(0.1):
                     event = json.loads(self.pipe.recv())
                     if event["attempt_id"] != request_id:
                         continue
+                    if event['kind'] == 'ContextRecordingCompleted':
+                        result = event['payload']
+                        key = (step_id, provider_id, result['recording_id'])
+                        if recording.operation == 'start':
+                            self.context_recordings.add(key)
+                            self.context_recording_delivered[key] = 0
+                            self.context_recording_capabilities[key] = list(step['capabilities'])
+                            for previous in list(self.context_recording_delivered):
+                                if len(self.context_recording_delivered) <= 64: break
+                                if previous not in self.context_recordings:
+                                    del self.context_recording_delivered[previous]
+                                    self.context_recording_capabilities.pop(previous, None)
+                        elif recording.operation == 'read':
+                            self.context_recording_delivered[key] = max(self.context_recording_delivered.get(key, 0), result['cursor'])
+                        elif result['state'] == 'DISCARDED' or (recording.operation == 'ack'
+                                and result['state'] == 'STOPPED' and result['available_after'] == result['cursor']):
+                            self.context_recordings.discard(key)
+                            if result['state'] == 'DISCARDED':
+                                self.context_recording_delivered.pop(key, None)
+                                self.context_recording_capabilities.pop(key, None)
+                        return {**result, 'session_id': self.context_session_id}
                     if event["kind"] == "ContextCompleted":
                         return event["payload"]
                     if event["kind"] == "ContextTargetsCompleted":
@@ -784,6 +851,11 @@ class CoordinatorPool:
             code = "CONTEXT_SESSION_CHANGED" if kwargs.get("expected_session_id") else "SESSION_NOT_AVAILABLE"
             raise TaskError(code, "采集实例已结束或变化，请刷新后重新选择")
         return coordinator.collect_context(run_id, *args, **kwargs)
+    def record_context(self, run_id, *args, **kwargs):
+        coordinator = self._for_run(run_id, create=False)
+        if coordinator is None:
+            raise TaskError('CONTEXT_SESSION_CHANGED', '原运行实例已结束')
+        return coordinator.record_context(run_id, *args, **kwargs)
     def context_targets(self, run_id, step_id, provider_id, request=None):
         step = self.steps.step(step_id)
         if step["task_id"] != self.runs.run(run_id)["task_id"]:
@@ -811,28 +883,41 @@ class CoordinatorPool:
         run = self.runs.run(run_id)
         key = self._key(run)
         coordinator = self._for_run(run_id)
+        if coordinator.context_recordings:
+            raise TaskError('CONTEXT_RECORDING_PENDING', '此实例有未保存录制，请先处理再删除运行')
         result = coordinator.delete_run(run_id)
         coordinator.close()
         self.instances.pop(key, None)
         return result
     def clear_task_runs(self, task_id):
-        for key, coordinator in list(self.instances.items()):
-            belongs = key == ('trial', task_id)
-            if not belongs and coordinator.session_run_id:
-                try:
-                    belongs = self.runs.run(coordinator.session_run_id)['task_id'] == task_id
-                except TaskError as exc:
-                    if exc.code != 'NOT_FOUND':
-                        raise
-                    belongs = True  # stale instance whose run was already removed
-            if belongs:
+        with self.lock:
+            selected = []
+            for key, coordinator in list(self.instances.items()):
+                belongs = key == ('trial', task_id)
+                if not belongs and coordinator.session_run_id:
+                    try:
+                        belongs = self.runs.run(coordinator.session_run_id)['task_id'] == task_id
+                    except TaskError as exc:
+                        if exc.code != 'NOT_FOUND':
+                            raise
+                        belongs = True
+                if belongs:
+                    with coordinator.lock:
+                        if coordinator.context_recordings:
+                            raise TaskError('CONTEXT_RECORDING_PENDING', '请先处理未保存录制，再清理运行')
+                        if coordinator.thread and coordinator.thread.is_alive():
+                            raise TaskError('RUN_BUSY', '请先结束正在执行的步骤')
+                    selected.append((key, coordinator))
+            if any(run['status'] == 'RUNNING' for run in self.runs.runs_for_task(task_id)):
+                raise TaskError('RUN_BUSY', '请先结束正在执行的步骤')
+            for key, coordinator in selected:
                 coordinator.close()
                 self.instances.pop(key, None)
-        helper = Coordinator(
-            self.runs, self.tasks, self.steps, self.environments, self.results,
-            self.registry, self.factory, self.home, recover=False,
-        )
-        return helper.clear_task_runs(task_id)
+            helper = Coordinator(
+                self.runs, self.tasks, self.steps, self.environments, self.results,
+                self.registry, self.factory, self.home, recover=False,
+            )
+            return helper.clear_task_runs(task_id)
     def _stop_worker(self, force=False):
         if self.last: self.last._stop_worker(force)
     def close(self):

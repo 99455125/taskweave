@@ -100,13 +100,15 @@ class ValueForm:
 
 
 class SchemaEditor:
-    def __init__(self, schema=None):
+    def __init__(self, schema=None, *, on_change=None):
         self.original = schema or {"type": "object", "properties": {}}
+        self.on_change = None
         self.rows = []
         ui.label("参数定义").classes("font-medium")
         self.container = ui.column().classes("w-full")
         for name, spec in self.original.get("properties", {}).items():
             self.add(name, spec, name in self.original.get("required", []))
+        self.on_change = on_change
         ui.button("添加参数", on_click=lambda: self.add()).props("outline size=sm")
 
     def add(self, name="", spec=None, required=False):
@@ -133,12 +135,20 @@ class SchemaEditor:
                 required_control = ui.checkbox("必填", value=required)
                 record = (name_control, kind, default, description, required_control, spec)
                 self.rows.append(record)
+                def changed(_=None):
+                    if self.on_change:
+                        self.on_change()
+                for control in record[:-1]:
+                    control.on_value_change(changed)
 
                 def remove():
                     self.rows.remove(record)
                     row.delete()
+                    changed()
 
                 ui.button("移除", on_click=remove).props("flat size=sm")
+        if self.on_change:
+            self.on_change()
 
     def schema(self):
         properties, required = {}, []
@@ -180,3 +190,20 @@ class SchemaEditor:
         ):
             return self.original.copy()
         return result
+
+    def raw_rows(self):
+        """Keep even incomplete/invalid parameter edits for connection recovery."""
+        from copy import deepcopy
+        return [deepcopy([*(control.value for control in row[:-1]), row[-1]]) for row in self.rows]
+
+    def restore_rows(self, rows):
+        changed, self.on_change = self.on_change, None
+        try:
+            self.container.clear()
+            self.rows.clear()
+            for name, kind, default, description, required, original in rows:
+                self.add(name, original, required)
+                for control, value in zip(self.rows[-1][:-1], (name, kind, default, description, required)):
+                    control.value = value
+        finally:
+            self.on_change = changed

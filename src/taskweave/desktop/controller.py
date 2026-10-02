@@ -2,6 +2,7 @@
 
 import asyncio
 import ast
+from copy import deepcopy
 from difflib import unified_diff
 import json
 import logging
@@ -24,10 +25,36 @@ class DesktopController:
     def __init__(self, application):
         self.application = application
         self.native = False
+        self._authoring_requests = {}
+
+    def authoring_request(self, step_id):
+        return self._authoring_requests.get(step_id)
+
+    async def author_step(self, operation, saved, **params):
+        """Keep one step authoring request alive across replacement UI clients."""
+        if operation not in {'step.generate', 'step.generate_goal'}:
+            raise ValueError('Unsupported step authoring operation')
+        step_id = saved['step_id']
+        pending = self.authoring_request(step_id)
+        if pending and not pending['task'].done():
+            raise TaskError('AUTHORING_BUSY', '当前步骤的 AI 请求仍在处理中，请查看上次 AI 结果。')
+        if step_id not in self._authoring_requests and len(self._authoring_requests) >= 16:
+            completed = next((key for key, value in self._authoring_requests.items()
+                              if value['task'].done()), None)
+            if completed is None:
+                raise TaskError('AUTHORING_BUSY', '在途 AI 请求过多，请等待已有请求完成。')
+            del self._authoring_requests[completed]
+        task = asyncio.create_task(self.call(operation, **params))
+        self._authoring_requests[step_id] = {
+            'operation': operation, 'saved': deepcopy(saved), 'params': deepcopy(params), 'task': task,
+        }
+        # A vanished UI waiter must not leave an unobserved task exception.
+        task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
+        return await asyncio.shield(task)
 
     async def call(self, api_operation, **params):
         logger = logging.getLogger(__name__)
-        if api_operation not in {'run.get', 'run.events', 'task.list', 'step.list'}:
+        if api_operation not in {'run.get', 'run.events', 'run.events.page', 'task.list', 'step.list'}:
             logger.info('服务操作：%s', api_operation)
         try:
             return await asyncio.to_thread(self.application.dispatch, api_operation, params)

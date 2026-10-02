@@ -1,5 +1,6 @@
 """AI-generated step description flow and guarded candidate preview."""
 
+import asyncio
 import json
 
 from nicegui import ui
@@ -14,6 +15,11 @@ def exclusive_ai_flow(method):
     async def run(self, *args, **kwargs):
         if getattr(self, "_ai_flow_active", False):
             ui.notify("AI 操作正在处理中，请勿重复发起。", type="info")
+            return
+        lookup = getattr(self, 'retained_request', None)
+        retained = lookup() if lookup else None
+        if method.__name__ != 'recover_generation' and retained and not retained['task'].done():
+            ui.notify("当前步骤的 AI 请求仍在处理中，请查看上次 AI 结果。", type="info")
             return
         self._ai_flow_active = True
         try:
@@ -44,13 +50,70 @@ def submit_ai_choice(dialog, values):
 
 class StepAIEditor:
     def __init__(self, controller, button, save_editor, environment_id, controls, identity,
-                 *, debug_state=None, trials=None, reset_conversation=None):
+                 *, debug_state=None, trials=None, reset_conversation=None, confirmation_step=None,
+                 author_step=None, authoring_request=None):
         self.controller, self.button, self.save_editor = controller, button, save_editor
         self.environment_id, self.controls = environment_id, controls
         self.identity = identity
         self.debug_state, self.trials = debug_state, trials if trials is not None else {}
         self.reset_conversation = reset_conversation
+        self.confirmation_step = confirmation_step or save_editor
         self.pending_identity = None
+        self.author_step, self.authoring_request = author_step, authoring_request
+
+    def retained_request(self):
+        lookup = getattr(self, 'authoring_request', None)
+        return lookup(self.identity()[1]) if lookup else None
+
+    async def _request(self, operation, saved, **params):
+        if self.author_step:
+            return await self.author_step(operation, saved, **params)
+        return await self.controller.call(operation, **params)
+
+    @exclusive_ai_flow
+    async def recover_generation(self, *, repaint):
+        request = self.retained_request()
+        if request is None:
+            return
+        identity = self.identity()
+        proposal = await asyncio.shield(request['task'])
+        if self.identity() != identity or self.retained_request() is not request:
+            return
+        await self._validate_retained_request(request, identity)
+        if self.identity() != identity:
+            return
+        saved, params = request['saved'], request['params']
+        if request['operation'] == 'step.generate_goal':
+            await self._present_goal_result(saved, proposal, identity, web_chat=params.get('export_only', False))
+        else:
+            await self._present_generation_result((saved, proposal, identity), bool(params.get('feedback')), repaint,
+                                                  web_chat=params.get('export_only', False))
+
+    async def _validate_retained_request(self, request, identity):
+        if request is None:
+            return
+        if self.identity() != identity or self.retained_request() is not request:
+            raise TaskError('EDIT_CONFLICT', 'AI 请求或当前步骤已变化，请重新查看结果。')
+        saved, params = request['saved'], request['params']
+        latest = await self.controller.call('step.get', step_id=saved['step_id'])
+        if self.identity() != identity or self.retained_request() is not request:
+            raise TaskError('EDIT_CONFLICT')
+        controls = self.controls()
+        if (latest['content_hash'] != saved['content_hash'] or not controls
+                or controls['code'].value != saved['step_content']):
+            raise TaskError('EDIT_CONFLICT', '步骤已修改，上次 AI 结果不能采纳，请重新生成。')
+        feedback = params.get('feedback') or {}
+        if feedback.get('run_id'):
+            run_id = feedback['run_id']
+            run = await self.controller.call('run.get', run_id=run_id)
+            if self.identity() != identity or self.retained_request() is not request:
+                raise TaskError('EDIT_CONFLICT')
+            failure = next((attempt for attempt in reversed(run.get('attempts', []))
+                            if attempt.get('valid') and attempt.get('status') in {'FAILED', 'UNKNOWN'}), None)
+            if (self.trials.get(saved['step_id']) != run_id or failure is None
+                    or failure.get('step_id') != saved['step_id']
+                    or failure.get('attempt_id') != feedback.get('attempt_id')):
+                raise TaskError('VALIDATION_EVIDENCE_INVALID', '调试尝试已变化，请重新生成修复建议。')
 
     @exclusive_ai_flow
     async def choose_generation_mode(self, *, repaint):
@@ -159,7 +222,10 @@ class StepAIEditor:
 
     async def confirm_step(self, repaint):
         from taskweave.core.validation import TaskError
-        saved = await self.save_editor()
+        identity = self.identity()
+        saved = await self.confirmation_step()
+        if self.identity() != identity:
+            return
         step_id = saved["step_id"]
         run_id = self.trials.get(step_id)
         confirmed = None
@@ -170,13 +236,15 @@ class StepAIEditor:
                 if exc.code != "VALIDATION_EVIDENCE_INVALID": raise
         if confirmed is None:
             with ui.dialog() as dialog, ui.card().classes("w-full max-w-xl"):
-                ui.label("当前步骤内容尚未调试通过，是否手动确认验证通过并保存？")
+                ui.label("当前已保存的步骤尚未调试通过，是否手动确认验证通过？")
                 with ui.row().classes("w-full items-center gap-2 flex-wrap"):
                     ui.button("取消",on_click=lambda:dialog.submit(False)).props("outline")
-                    ui.button("确认验证通过并保存",on_click=lambda:dialog.submit(True)).props("outline text-color=teal-8").style("background: #f0fdfa; border: 1px solid #0f766e")
+                    ui.button("确认验证通过",on_click=lambda:dialog.submit(True)).props("outline text-color=teal-8").style("background: #f0fdfa; border: 1px solid #0f766e")
             if not await dialog: return
+            if self.identity() != identity: return
             confirmed = await self.controller.call("step.confirm.manual",step_id=step_id,expected_hash=saved["content_hash"],environment_id=self.environment_id() or None)
-        ui.notify("步骤验证并保存成功",type="positive")
+        if self.identity() != identity: return
+        ui.notify("步骤验证成功",type="positive")
         controls = self.controls()
         if controls is not None:
             self.pending_identity = None
@@ -268,8 +336,8 @@ class StepAIEditor:
             if not availability["available"]:
                 ui.notify("当前页面上下文无法刷新，将明确告知 AI；未打开新浏览器。", type="warning")
         ui.notify("正在准备网页对话内容。" if web_chat else "正在生成建议，界面保持响应；当前草稿已保存。")
-        proposal = await self.controller.call(
-            "step.generate", step_id=saved["step_id"], expected_hash=saved["content_hash"],
+        proposal = await self._request(
+            "step.generate", saved, step_id=saved["step_id"], expected_hash=saved["content_hash"],
             step_description=saved["step_description"], feedback=feedback, contexts=generation_contexts,
             environment_id=self.environment_id() or None, repair_notes=supplement,
             use_history=fix_logs and history_rounds != 0,
@@ -286,6 +354,7 @@ class StepAIEditor:
         controls = self.controls()
         if not controls:
             return
+        retained = self.retained_request()
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-4xl"):
             ui.label("AI 建议 · 采纳后保存为草稿").classes("text-lg")
             ui.label(proposal["explanation"])
@@ -294,6 +363,7 @@ class StepAIEditor:
                 ui.label(json.dumps(proposal["diagnostics"], ensure_ascii=False, indent=2, default=str))
 
             async def accept():
+                await self._validate_retained_request(retained, identity)
                 controls = self.controls()
                 if self.identity() != identity or not controls:
                     raise TaskError("EDIT_CONFLICT", "生成期间当前步骤已切换，请重新生成建议")
@@ -319,6 +389,7 @@ class StepAIEditor:
         identity = self.identity() if identity is None else identity
         if not self.identity() == identity:
             return
+        retained = self.retained_request()
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-4xl"):
             ui.label("网页 AI 对话 · 不需要 API Key").classes("text-lg")
             ui.label("复制以下内容到网页 AI，再将它的整段回复粘贴到下方。推荐回复为包含 step_content 和 explanation 的 JSON；也兼容完整 Python 代码。")
@@ -330,6 +401,7 @@ class StepAIEditor:
             render_preview_attachments(exported)
             reply = ui.textarea("粘贴网页 AI 回复").classes("w-full").props("autogrow")
             async def preview_reply():
+                await self._validate_retained_request(retained, identity)
                 source, explanation = parse_chat_reply(reply.value or "")
                 current = await self.controller.call("step.get", step_id=saved["step_id"])
                 if (not self.identity() == identity or not self.controls()
@@ -357,6 +429,7 @@ class StepAIEditor:
                         ui.label("校验提示：" + "；".join(warnings)).classes("text-amber-700")
 
                     async def adopt():
+                        await self._validate_retained_request(retained, identity)
                         latest = await self.controller.call("step.get", step_id=saved["step_id"])
                         if (not self.identity() == identity or not self.controls()
                                 or latest["content_hash"] != exported["expected_hash"]
@@ -421,15 +494,20 @@ class StepAIEditor:
         contexts = context_ai_items(await self.controller.call("context.ai", step_id=saved["step_id"]))
         if self.identity() != identity:
             return
-        proposal = await self.controller.call(
-            "step.generate_goal", step_id=saved["step_id"], expected_hash=saved["content_hash"],
+        proposal = await self._request(
+            "step.generate_goal", saved, step_id=saved["step_id"], expected_hash=saved["content_hash"],
             supplement=supplement,
             contexts=contexts,
-            environment_id=self.environment_id(), export_only=mode == "chat",
+            environment_id=self.environment_id() or None, export_only=mode == "chat",
         )
         if self.identity() != identity:
             return
-        if mode == "chat":
+        await self._present_goal_result(saved, proposal, identity, web_chat=mode == 'chat')
+
+    async def _present_goal_result(self, saved, proposal, identity, *, web_chat=False):
+        if self.identity() != identity:
+            return
+        if web_chat:
             with ui.dialog() as chat, ui.card().classes("w-full max-w-3xl"):
                 ui.label("网页 AI 生成步骤描述").classes("text-lg")
                 ui.textarea("复制到网页 AI", value=proposal["prompt"]).props("readonly autogrow").classes("w-full")
@@ -453,6 +531,7 @@ class StepAIEditor:
         identity = self.identity() if identity is None else identity
         if self.identity() != identity:
             return
+        retained = self.retained_request()
         with ui.dialog() as preview, ui.card().classes("w-full max-w-2xl"):
             ui.label("步骤描述预览").classes("text-lg")
             ui.label("步骤描述").classes("font-medium")
@@ -461,6 +540,7 @@ class StepAIEditor:
             ui.label(notes_text or "无").classes("whitespace-pre-wrap border rounded p-3 w-full text-gray-600")
 
             async def accept():
+                await self._validate_retained_request(retained, identity)
                 latest = await self.controller.call("step.get", step_id=saved["step_id"])
                 if self.identity() != identity or latest["content_hash"] != saved["content_hash"]:
                     raise TaskError("EDIT_CONFLICT")

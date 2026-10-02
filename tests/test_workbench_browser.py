@@ -285,7 +285,7 @@ class WorkbenchAcceptance(unittest.TestCase):
                         (Path(temporary) / "model.json").read_text(),
                     )
                     with page.expect_popup() as popup:
-                        page.get_by_role("button", name="服务日志", exact=True).click()
+                        page.get_by_role("button", name="实时日志", exact=True).click()
                     logs_page = popup.value
                     expect(logs_page.get_by_text("服务实时日志", exact=True)).to_be_visible()
                     expect(logs_page.get_by_text("AI 响应解析成功", exact=False).first).to_be_visible()

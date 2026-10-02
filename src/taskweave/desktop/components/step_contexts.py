@@ -11,6 +11,7 @@ from taskweave.desktop.contexts import (
 )
 from taskweave.desktop.display import execution_title
 from taskweave.desktop.forms import ValueForm
+from taskweave.desktop.context_recording import collection_workspace, RecordingControls
 
 STATUS = {"PAUSED":"已暂停", "FAILED":"失败", "SUCCEEDED":"成功"}
 
@@ -185,8 +186,23 @@ class StepContextPanel:
         saved = await self.save_editor()
         if not current() or saved.get('step_id') != target_step_id: return
         ids = sorted({identifier for contribution in self.plugin_contributions(saved['capabilities']) for identifier in contribution.context_provider_ids})
+        available_providers = set(ids)
+        workspace=collection_workspace(self.controller,('step',target_step_id,(existing or {}).get('context_id')),(existing or {}).get('captures', []))
+        # Continuing an existing recording retains its captured authority. A
+        # changed step must still allow stop/discard without granting a new
+        # recording or snapshot access to a removed provider.
+        retained_provider = (workspace.recording.options.get('provider_id')
+                             if workspace.recording and workspace.recording.pending else None)
+        provider_removed = retained_provider is not None and retained_provider not in ids
+        if provider_removed:
+            ids = sorted([*ids, retained_provider])
         if not ids: raise TaskError('CONTEXT_PROVIDER_UNAVAILABLE', '所选插件没有提供上下文')
-        draft = ContextCaptureDraft((existing or {}).get('captures', []))
+        if not await workspace.prepare_dialog(ui.context.client):
+            return
+        draft = workspace.draft
+        async def invoke_recording(operation, **options):
+            return await self.controller.call('context.record',step_id=target_step_id,operation=operation,**options)
+        workspace.bind(invoke_recording,source_page=source_page)
         initial_name = (existing or {}).get('name', '新上下文')
         initial_notes = (existing or {}).get('context_notes', '')
         with ui.dialog() as dialog, ui.card().classes('tw-context-collection-dialog w-full max-w-5xl'):
@@ -195,13 +211,15 @@ class StepContextPanel:
                 ui.label('编辑与采集上下文 · 步骤').classes('text-lg font-medium')
                 ui.button(icon='close',on_click=lambda:cancel()).props('flat round dense aria-label=关闭弹窗')
             ui.label('修改先暂存，确认保存时整组一次提交；取消不会写入。').classes('tw-context-dialog-note w-full')
-            name = ui.input('上下文名称', value=initial_name).classes('w-full')
-            notes = ui.textarea('操作说明（可选）', value=initial_notes).props('autogrow').classes('w-full')
+            if provider_removed:
+                ui.label('步骤的插件能力已变化，原录制仍保留。可停止或丢弃；保存素材需恢复原插件能力。').classes('text-sm text-amber-700')
+            name = ui.input('上下文名称', value=workspace.fields.get('name',initial_name)).classes('w-full')
+            notes = ui.textarea('操作说明（可选）', value=workspace.fields.get('notes',initial_notes)).props('autogrow').classes('w-full')
             staged_title = ui.label().classes('font-medium')
             staged_area = ui.column().classes('w-full gap-2')
             deleted_area = ui.column().classes('w-full gap-1')
             initial_provider = existing.get('provider_id') if existing and existing.get('provider_id') in ids else ids[0]
-            provider = ui.select(ids, label='插件上下文', value=initial_provider).classes('w-full')
+            provider = ui.select(ids, label='插件上下文', value=retained_provider or workspace.fields.get('provider',initial_provider)).classes('w-full')
             if existing and existing.get('context_id'): provider.disable()
             run_options = {'': '独立观察（不使用运行会话）'}
             runs = await self.controller.call('run.context.sessions', task_id=target_task_id)
@@ -209,7 +227,10 @@ class StepContextPanel:
                 dialog.close()
                 return
             run_options.update({r['run_id']: execution_title(r) + ' · ' + STATUS[r['status']] for r in runs if r['status'] in {'PAUSED','FAILED','SUCCEEDED'}})
-            initial_run = (existing or {}).get('source_session_id', '')
+            initial_run = (workspace.recording.options.get('run_id') or '' if retained_provider
+                           else workspace.fields.get('run',(existing or {}).get('source_session_id', '')))
+            if retained_provider and initial_run and initial_run not in run_options:
+                run_options[initial_run] = '原录制会话 · ' + initial_run[:8]
             run = ui.select(run_options, label='观察会话（可选）', value=initial_run if initial_run in run_options else '').classes('w-full')
             target_area = ui.column().classes('w-full gap-1')
             target_state = {'picker': None}
@@ -218,12 +239,14 @@ class StepContextPanel:
             for identifier in ids:
                 schema = request_schemas.get(identifier, {'type':'object','properties':{}})
                 if existing and identifier == initial_provider:
-                    import copy
                     schema = copy.deepcopy(schema)
                     for key,value in existing.get('request',{}).items():
                         if key in schema.get('properties',{}): schema['properties'][key]['default'] = value
                 with ui.column().classes('w-full') as group: request_forms[identifier] = ValueForm(schema)
                 request_groups[identifier] = group
+                for key,(_,control) in request_forms[identifier].controls.items():
+                    if key in workspace.fields.get('forms',{}).get(identifier,{}):
+                        control.value=workspace.fields['forms'][identifier][key]
 
             def update_request_form(_=None):
                 picker=target_state['picker']
@@ -239,13 +262,13 @@ class StepContextPanel:
                     dialog.close()
                     return
                 target_area.clear(); options=context_target_options(request_schemas.get(provider.value,{})); target_state['picker']=None
-                if options:
+                if options and not workspace.recording.pending and provider.value in available_providers:
                     with target_area: picker=ContextTargetPicker(load_targets,options)
                     target_state['picker']=picker; picker.select.on_value_change(update_request_form); await picker.refresh()
                     if not current():
                         dialog.close()
                         return
-                    selected=(existing or {}).get('request',{}).get('target_id')
+                    selected=workspace.fields.get('target',(existing or {}).get('request',{}).get('target_id'))
                     if selected and selected in picker.targets: picker.select.value=selected
                 update_request_form()
 
@@ -253,7 +276,7 @@ class StepContextPanel:
                 if not current():
                     dialog.close()
                     return
-                if target_state['picker']:
+                if target_state['picker'] and not workspace.recording.pending:
                     await target_state['picker'].refresh()
                     if not current():
                         dialog.close()
@@ -261,14 +284,14 @@ class StepContextPanel:
                     update_request_form()
             provider.on_value_change(select_provider); run.on_value_change(refresh_targets); await select_provider()
             view_default=context_view_default(request_schemas.get(provider.value,{})); view_state={'supported':view_default is not None}
-            include_view=ui.checkbox('同时生成预览',value=(existing or {}).get('include_view',view_default is True)); include_view.set_visibility(view_state['supported'])
+            include_view=ui.checkbox('同时生成预览',value=workspace.fields.get('include_view',(existing or {}).get('include_view',view_default is True))); include_view.set_visibility(view_state['supported'])
             def update_view_option(_=None):
                 value=context_view_default(request_schemas.get(provider.value,{})); view_state['supported']=value is not None; include_view.set_visibility(view_state['supported'])
                 if not existing: include_view.value=value is True
             provider.on_value_change(update_view_option)
             advanced_values=context_advanced_overrides(request_schemas.get(initial_provider,{}),(existing or {}).get('request',{}))
             with ui.expansion('高级参数 JSON（可选）',icon='tune').classes('w-full border rounded'):
-                advanced=ui.textarea('JSON 对象',value=json.dumps(advanced_values,ensure_ascii=False,indent=2)).classes('w-full')
+                advanced=ui.textarea('JSON 对象',value=workspace.fields.get('advanced',json.dumps(advanced_values,ensure_ascii=False,indent=2))).classes('w-full')
 
             async def preview_item(entry):
                 if not current():
@@ -298,10 +321,15 @@ class StepContextPanel:
             render_staged()
 
             async def collect():
+                if workspace.busy or workspace.recording.committed: return
                 if not current():
                     dialog.close()
                     return
+                workspace.busy=True
+                recording_controls.sync()
                 try:
+                    if provider.value not in available_providers:
+                        raise TaskError('CONTEXT_PROVIDER_UNAVAILABLE', '当前步骤已移除此插件能力，请恢复后再采集')
                     picker=target_state['picker']; hidden=context_hidden_parameters(request_schemas.get(provider.value,{}),picker is not None and not picker.uses_parameters)
                     form_values=request_forms[provider.value].values(exclude=hidden)
                     overrides=json.loads(advanced.value or '{}')
@@ -315,8 +343,15 @@ class StepContextPanel:
                     draft.append(capture,request,bool(include_view.value) if view_state['supported'] else False,run.value or None,source_page,label)
                     render_staged(); ui.notify(f'已暂存采集项：{label}，可继续采集',type='positive')
                 except Exception as exc: ui.notify(f'采集失败，暂存内容仍保留：{exc}',type='negative')
+                finally:
+                    workspace.busy=False
+                    if not dialog.is_deleted: recording_controls.sync()
 
             async def cancel():
+                if workspace.busy: return
+                if workspace.recording.committed:
+                    ui.notify('上下文已保存，请重试确认保存完成录制确认；关闭弹窗会保留草稿。',type='warning')
+                    return
                 if not current():
                     dialog.close()
                     return
@@ -330,39 +365,88 @@ class StepContextPanel:
                     answer = await confirm
                     if confirm in self._dialogs: self._dialogs.remove(confirm)
                     return answer
-                if not await self.may_discard_draft(draft, name.value, notes.value, initial_name, initial_notes, confirm_discard):
+                if workspace.recording.pending:
+                    if not await confirm_discard(): return
+                elif not await self.may_discard_draft(draft, name.value, notes.value, initial_name, initial_notes, confirm_discard):
                     return
                 if not current():
                     dialog.close()
                     return
+                try: await workspace.recording.discard()
+                except Exception as exc:
+                    ui.notify(f'丢弃失败，录制仍保留：{exc}',type='negative')
+                    return
+                workspace.forget()
                 dialog.close()
                 if dialog in self._dialogs: self._dialogs.remove(dialog)
 
-            save_in_progress = False
-
             async def save_batch():
-                nonlocal save_in_progress
-                if save_in_progress:
-                    return
+                if workspace.busy: return
                 if not current():
                     dialog.close()
                     return
-                if existing and not draft.dirty and (name.value or '') == initial_name and (notes.value or '') == initial_notes:
+                if existing and not workspace.recording.pending and not workspace.recording.committed and not draft.dirty and (name.value or '') == initial_name and (notes.value or '') == initial_notes:
+                    workspace.forget()
                     dialog.close()
                     return
-                save_in_progress = True
-                try:
-                    await self.save_batch(existing,provider.value,(name.value or '').strip(),notes.value or '',draft,
+                async def commit():
+                    return await self.save_batch(existing,provider.value,(name.value or '').strip(),notes.value or '',draft,
                                           step_id=target_step_id,generation=generation,task_id=target_task_id)
-                except Exception as exc:
-                    ui.notify(f'保存失败，暂存内容仍保留：{exc}',type='negative'); return
-                else:
+                async def save():
+                    await workspace.recording.persist(commit)
+                    workspace.forget()
                     dialog.close(); ui.notify('上下文已保存',type='positive')
                     if dialog in self._dialogs: self._dialogs.remove(dialog)
-                finally:
-                    save_in_progress = False
+                await recording_controls.run(save)
 
-            self.button('采集一项',collect,primary=True)
+            def start_options():
+                if not current(): raise TaskError('CONTEXT_SESSION_CHANGED')
+                if provider.value not in available_providers:
+                    raise TaskError('CONTEXT_PROVIDER_UNAVAILABLE', '当前步骤已移除此插件能力，请恢复后再录制')
+                picker=target_state['picker']
+                hidden=context_hidden_parameters(request_schemas.get(provider.value,{}),picker is not None and not picker.uses_parameters)
+                target_request,session_id=picker.selection() if picker else ({},None)
+                request=merge_context_request(request_forms[provider.value].values(exclude=hidden),json.loads(advanced.value or '{}'),target_request)
+                options={'provider_id':provider.value,'request':request,'expected_session_id':session_id,'run_id':run.value or None}
+                if not run.value: options['environment_id']=self.environment_id() or None
+                return options,bool(include_view.value) if view_state['supported'] else False
+
+            capture_control = None
+            def lock_inputs(locked):
+                for control in (provider,run,include_view,advanced):
+                    control.set_enabled(not locked and not (control is provider and existing and existing.get('context_id')))
+                for form in request_forms.values():
+                    for _,control in form.controls.values(): control.set_enabled(not locked)
+                picker=target_state['picker']
+                if picker: picker.select.set_enabled(not locked)
+                for control in (name,notes): control.set_enabled(not workspace.busy and not workspace.recording.committed)
+                if capture_control is not None:
+                    capture_control.set_enabled(provider.value in available_providers and not workspace.busy and not workspace.recording.committed)
+                if workspace.recording.committed:
+                    for element in staged_area.descendants():
+                        if hasattr(element,'disable'): element.disable()
+
+            recording_controls=RecordingControls(workspace,dialog,start_options,lock_inputs,render_staged)
+            def recording_supported():
+                return provider.value in available_providers and request_schemas.get(provider.value,{}).get('x-taskweave-context-recording') is True
+            recording_controls.sync(recording_supported())
+            provider.on_value_change(lambda _:recording_controls.sync(recording_supported()))
+            def capture_fields():
+                workspace.fields.update(name=name.value,notes=notes.value,provider=provider.value,run=run.value,
+                    include_view=include_view.value,advanced=advanced.value,
+                    target=target_state['picker'].select.value if target_state['picker'] else None,
+                    forms={identifier:{key:copy.deepcopy(control.value) for key,(_,control) in form.controls.items()} for identifier,form in request_forms.items()})
+            workspace.capture_fields=capture_fields
+            async def hidden():
+                if workspace.dialog is not dialog: return
+                capture_fields()
+                try: await workspace.hide()
+                except Exception as exc: ui.notify(f'暂停录制失败，原实例仍保留：{exc}',type='negative')
+            dialog.on('hide',hidden)
+            workspace.dialog=dialog
+
+            capture_control = self.button('采集一项',collect,primary=True)
+            recording_controls.sync()
             ui.label('采集结果仅暂存在弹窗；确认保存后才会进入 AI 输入。浏览器等外部操作不会因取消自动回滚。').classes('text-xs text-gray-500')
             with ui.row().classes('w-full justify-end gap-2'):
                 ui.button('取消',on_click=cancel).props('outline')
