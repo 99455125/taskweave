@@ -11,6 +11,103 @@ from taskweave.desktop.state import ExecutionPageState
 
 
 class ExecutionDetailsTests(unittest.TestCase):
+    def test_poll_reuses_unchanged_run_details_and_invalidates_on_new_event(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        async def scenario():
+            revision, queries = [1], []
+            run = {'run_id': 'r', 'mode': 'EXECUTION', 'task_id': 't', 'environment_id': None,
+                'request_json': '{}', 'definition_json': json.dumps({'steps': [{'step_id': 's', 'name': 's'}]}),
+                'status': 'PAUSED', 'attempts': [], 'started_at': None}
+            async def call(operation, **kwargs):
+                queries.append(operation)
+                if operation == 'run.list': return [{**run, 'event_revision': revision[0]}]
+                if operation == 'run.get': return dict(run)
+                if operation == 'environment.list': return []
+                if operation == 'task.list': return [{'task_id': 't', 'name': '任务'}]
+                raise AssertionError(operation)
+            state = ExecutionPageState(run_id='r', execution_rows=ui.column(), execution_list_area=ui.column())
+            details = ExecutionDetails(SimpleNamespace(call=call), state,
+                lambda title, cb, **kw: ui.button(title, on_click=cb), lambda: 'executions', lambda: 1,
+                *[AsyncMock() for _ in range(6)])
+            await details.render_rows(force=False)
+            area = state.run_area
+            await details.render_rows(force=False)
+            self.assertEqual(queries.count('run.get'), 1)
+            self.assertIs(state.run_area, area)
+            revision[0] += 1
+            await details.render_rows(force=False)
+            self.assertEqual(queries.count('run.get'), 2)
+        client = Client(page('/execution-summary-poll'))
+        try:
+            async def run():
+                with client:
+                    await scenario()
+            asyncio.run(run())
+        finally:
+            client.delete()
+
+    def test_live_log_host_survives_status_refresh_and_is_disposed_on_run_switch(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('stable logs')['task_id']
+            step = app.repo.save_step(task, {'name': 'first',
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=None)'})
+            app.confirm_step_manual(step['step_id'], step['content_hash'])
+            a, b = app.create_run(task), app.create_run(task)
+            client = Client(page('/execution-stable-live-log'))
+            async def scenario():
+                with client:
+                    state = ExecutionPageState(run_id=a['run_id'], execution_rows=ui.column(), execution_list_area=ui.column())
+                    details = ExecutionDetails(DesktopController(app), state,
+                        lambda title, cb, **kw: ui.button(title, on_click=cb), lambda: 'executions', lambda: 1,
+                        *[AsyncMock() for _ in range(6)])
+                    await details.refresh(force=False)
+                    viewer, host = details._live_logs, details._logs_host
+                    await viewer.toggle()
+                    previous = viewer.output.value
+                    app.runs.runs.event(a['run_id'], 'Changed', {'message': 'new event'})
+                    await details.refresh(force=False)
+                    self.assertIs(details._live_logs, viewer)
+                    self.assertIs(details._logs_host, host)
+                    self.assertEqual(viewer.output.value, previous)
+                    await details.select_run(b['run_id'])
+                    self.assertTrue(viewer.timer.is_deleted)
+                    self.assertIsNot(details._live_logs, viewer)
+                    self.assertEqual(details._live_logs.run_id, b['run_id'])
+                    details.dispose()
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_poll_skips_hidden_and_overlapping_requests(self):
+        async def scenario():
+            entered, release = asyncio.Event(), asyncio.Event()
+            async def refresh(**kwargs):
+                entered.set()
+                await release.wait()
+            details = ExecutionDetails(AsyncMock(), ExecutionPageState(), MagicMock(),
+                lambda: 'executions', lambda: 1, *[AsyncMock() for _ in range(6)])
+            details.refresh = AsyncMock(side_effect=refresh)
+            details.visible = False
+            await details.poll()
+            details.refresh.assert_not_awaited()
+            details.visible = True
+            pending = asyncio.create_task(details.poll())
+            await entered.wait()
+            await details.poll()
+            self.assertEqual(details.refresh.await_count, 1)
+            release.set()
+            await pending
+        asyncio.run(scenario())
+
     def test_execution_detail_tabs_keep_step_results_and_default_removed_result_tab_to_details(self):
         from nicegui import ui
         from nicegui.client import Client
@@ -373,8 +470,13 @@ class ExecutionDetailsTests(unittest.TestCase):
             details = ExecutionDetails(SimpleNamespace(call=call), state,
                 lambda title, callback, **kwargs: ui.button(title, on_click=callback), lambda: "executions", lambda: 1,
                 *[AsyncMock() for _ in range(6)])
-            old_refresh = asyncio.create_task(details.refresh())
-            await events_started.wait()
+            await details.refresh()
+            root = ui.context.client.layout
+            async def load():
+                with root:
+                    await details.load_run_logs()
+            old_refresh = asyncio.create_task(load())
+            await asyncio.wait_for(events_started.wait(), 2)
             await details.select_step("r", "two")
             release_events.set()
             await old_refresh
@@ -431,8 +533,13 @@ class ExecutionDetailsTests(unittest.TestCase):
             details = ExecutionDetails(SimpleNamespace(call=call), state,
                 lambda title, callback, **kwargs: ui.button(title, on_click=callback), lambda: "executions", lambda: 1,
                 *[AsyncMock() for _ in range(6)])
-            pending = asyncio.create_task(details.refresh())
-            await events_started.wait()
+            await details.refresh()
+            root = ui.context.client.layout
+            async def load():
+                with root:
+                    await details.load_run_logs()
+            pending = asyncio.create_task(load())
+            await asyncio.wait_for(events_started.wait(), 2)
             old_area = state.run_area
             details.dispose()
             rows.clear()

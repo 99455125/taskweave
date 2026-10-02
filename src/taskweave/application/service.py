@@ -57,9 +57,10 @@ class Application:
             self.authoring = Authoring(stores.tasks, stores.steps, stores.environments, stores.runs, stores.results, self.home, self.registry, model, lambda: self.ai_settings.get()["request_limit_bytes"], lambda: self.privacy_settings.get()["redact_for_ai"])
             self.plan_repo = PlanRepository(self.repo)
             self.organization: OrganizationRepositoryPort = stores.organization
-            self.context_sessions = ContextSessions(self.registry, stores.environments, stores.plans, self.home / "plans")
-            self.tasks = TaskUseCases(stores.tasks, stores.steps, stores.step_contexts, self.repo.unit_of_work, self.registry, self.authoring, self.coordinator)
-            self.steps = StepUseCases(stores.steps, stores.tasks, stores.runs, self.registry, self.authoring, self.coordinator)
+            self.context_sessions = ContextSessions(self.registry, stores.environments, stores.plans, self.home / "plans",
+                steps=stores.steps, tasks=stores.tasks)
+            self.tasks = TaskUseCases(stores.tasks, stores.steps, stores.step_contexts, self.repo.unit_of_work, self.registry, self.authoring, self.coordinator, self.context_sessions)
+            self.steps = StepUseCases(stores.steps, stores.tasks, stores.runs, self.registry, self.authoring, self.coordinator, self.context_sessions)
             self.environments = EnvironmentUseCases(stores.environments, stores.runs, self.coordinator, self.context_sessions, stores.plans)
             self.runs = RunUseCases(stores.runs, stores.tasks, stores.steps, stores.environments, stores.results, self.registry, self.authoring, self.coordinator, self.context_sessions)
             self.contexts = ContextUseCases(stores.step_contexts, stores.steps, self.registry, self.authoring, self.coordinator, self.context_sessions)

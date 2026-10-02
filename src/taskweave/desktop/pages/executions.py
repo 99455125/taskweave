@@ -168,7 +168,7 @@ class RunPage(Page):
         page_generation = self.page_generation()
         async def refresh_current_runs():
             if self.page_generation() == page_generation and self.page() in {'run', 'executions'}:
-                await self.execution_details.refresh()
+                await self.execution_details.poll()
         self.execution_details.own_timer(ui.timer(1, refresh_current_runs))
         await self.execution_details.refresh()
         if self.pending_task_id is not None:

@@ -15,7 +15,7 @@ uv run python scripts/check_project.py
 桌面工作台及可选插件：
 
 ```bash
-uv run --extra gui --extra browser --extra ocr --extra database --extra utility taskweave workbench
+uv run --extra gui --extra browser --extra ocr --extra database --extra utility --extra files taskweave workbench
 ```
 
 可按使用需要选择 extras。Playwright 需匹配的本机 Chromium；启动不会替你完成目标 Windows 便携交付验收。安装、服务与平台说明见 [运行与交付](docs/deployment.md)。

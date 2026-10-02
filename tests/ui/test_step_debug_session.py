@@ -175,7 +175,8 @@ class StepDebugSessionTests(unittest.TestCase):
             workbench.step_debug_panel.logs_area = MagicMock(is_deleted=False)
             workbench.step_debug_panel.pending_inputs = AsyncMock()
             self.assertIs(workbench.step_debug_panel.trials, workbench.trials)
-            with patch("taskweave.desktop.components.step_debug.ui", MagicMock()):
+            with patch("taskweave.desktop.components.step_debug.ui", MagicMock()), \
+                    patch("taskweave.desktop.components.step_debug.LiveRunLogs", MagicMock()):
                 await workbench.step_debug_panel.refresh_trial()
             self.assertEqual(workbench.trials, {"step":"restored-run"})
             self.assertEqual([call.args[0] for call in controller.call.await_args_list], ["run.list", "run.get", "step.list"])

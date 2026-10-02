@@ -124,6 +124,8 @@ class PlanningService:
             raise TaskError('CONTEXT_PROVIDER_UNAVAILABLE', provider_id)
         return self.contexts.save_context_batch(plan_id, expected_revision, context_id, provider_id, name, context_notes, captures)
     def context_targets(self, plan_id, provider_id, request=None): return self.sessions.targets(plan_id, provider_id, request)
+    def context_record(self, plan_id, provider_id, operation, **options):
+        return self.sessions.record(plan_id, provider_id, operation, **options)
     def context_list(self, plan_id): return self.contexts.contexts(plan_id)
     def context_capture_get(self, plan_id, context_id, capture_id): return self.contexts.get_capture(context_id, capture_id, plan_id)
     def context_capture_append(self, plan_id, expected_revision, context_id, capture, *, request=None, include_view=True, session_id=None, label=""):

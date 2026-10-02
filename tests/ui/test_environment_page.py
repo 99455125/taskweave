@@ -9,6 +9,37 @@ from taskweave.desktop.pages.environments import EnvironmentPage
 
 
 class EnvironmentPageTests(unittest.TestCase):
+    def test_empty_environment_page_can_be_left_without_a_dirty_dialog(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page as nice_page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        async def scenario(app, client):
+            with client:
+                environment = EnvironmentPage(DesktopController(app),
+                    lambda title, callback, **kw: ui.button(title, on_click=callback), AsyncMock(), AsyncMock())
+                await environment.render()
+                async def leave():
+                    with client:
+                        return await environment.prepare_leave()
+                pending = asyncio.create_task(leave())
+                try:
+                    done, _ = await asyncio.wait([pending], timeout=.1)
+                    self.assertIn(pending, done, 'An unedited empty page must not await a save decision')
+                    self.assertTrue(pending.result())
+                    self.assertFalse(any(isinstance(el, ui.dialog) for el in client.elements.values()))
+                finally:
+                    pending.cancel()
+                    await asyncio.gather(pending, return_exceptions=True)
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            client = Client(nice_page('/empty-environment-leave'))
+            try:
+                asyncio.run(scenario(app, client))
+            finally:
+                client.delete()
+
     def test_set_default_updates_only_the_originating_environment_view(self):
         async def scenario():
             controller = AsyncMock()

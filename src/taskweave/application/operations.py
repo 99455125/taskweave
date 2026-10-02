@@ -7,13 +7,13 @@ from taskweave.core.validation import TaskError
 
 LOCK_EXEMPT_OPERATIONS = frozenset({
     "ai.settings.get", "ai.settings.update", "capabilities", "context.ai",
-    "context.capture.get", "context.list", "context.read", "context.targets",
+    "context.capture.get", "context.list", "context.read", "context.targets", "context.record",
     "draft.export", "feedback.export", "instance.end", "instance.list",
     "plan.context.capture.get", "plan.context.collect", "plan.context.delete",
-    "plan.context.list", "plan.context.read", "plan.context.targets",
+    "plan.context.list", "plan.context.read", "plan.context.targets", "plan.context.record",
     "plan.context.update", "plan.create", "plan.delete", "plan.generation.get", "plan.generation.import", "plan.generation.imports", "plan.generation.list",
     "plan.generation.parse", "plan.get", "plan.list", "plan.update", "result.read",
-    "run.events", "run.get", "run.instances", "run.list", "run.output", "run.wait",
+    "run.events", "run.events.page", "run.get", "run.instances", "run.list", "run.output", "run.wait",
     "step.get", "step.list", "task.export", "task.get", "task.list", "organization.category.list",
 })
 
@@ -28,6 +28,7 @@ def build_operation_routes(app):
         "organization.category.delete": app.organization.delete_category,
         "organization.metadata.set": app.organization.set_metadata,
         "context.read": app.contexts.collect,
+        "context.record": app.contexts.record,
         "context.targets": app.contexts.targets,
         "context.list": app.contexts.list,
         "context.ai": app.contexts.ai_records,
@@ -56,6 +57,7 @@ def build_operation_routes(app):
         "plan.context.read": app.planning.context_collect,
         "plan.context.save_batch": app.planning.context_save_batch,
         "plan.context.targets": app.planning.context_targets,
+        "plan.context.record": app.planning.context_record,
         "plan.context.list": app.planning.context_list,
         "plan.context.capture.get": app.planning.context_capture_get,
         "plan.context.capture.append": app.planning.context_capture_append,
@@ -111,6 +113,7 @@ def build_operation_routes(app):
         "run.wait": app.runs.wait,
         "run.output": app.runs.output,
         "run.events": app.runs.events,
+        "run.events.page": app.runs.event_page,
         "result.read": app.runs.read_result,
         "result.delete": app.runs.delete_result,
     }

@@ -5,6 +5,7 @@ from pathlib import Path
 import asyncio
 import json
 import logging
+from copy import deepcopy
 
 from nicegui import ui
 from taskweave.desktop.theme import STYLE
@@ -276,7 +277,8 @@ class Workbench:
             self.step_state = StepEditorState()
         return self.step_state
 
-    def __init__(self, controller, route_writer=None):
+    def __init__(self, controller, route_writer=None, *, reload_state=None):
+        self.reload_state = None
         self.route_writer = route_writer
         self.controller = controller
         self.page = "home"
@@ -300,6 +302,9 @@ class Workbench:
             lambda: (self.task_id, self.step_id, self.step_state.generation, self.page_generation),
             debug_state=self.debug_state, trials=self.trials,
             reset_conversation=controller.reset_debug_conversation,
+            confirmation_step=self.step_for_confirmation,
+            author_step=controller.author_step if hasattr(type(controller), 'author_step') else None,
+            authoring_request=controller.authoring_request if hasattr(type(controller), 'authoring_request') else None,
         )
         self.busy = False
         self.save_lock = self.step_state.save_lock
@@ -321,7 +326,7 @@ class Workbench:
                     ui.label("本地工作空间")
                 self.button("执行实例", self.instance_dialog, flat=True, icon="devices")
                 if hasattr(controller, "open_logs"):
-                    self.button("服务日志", controller.open_logs, flat=True, icon="description")
+                    self.button("实时日志", controller.open_logs, flat=True, icon="description")
         self.content = ui.column().classes("tw-content tw-app-content w-full")
         self.tasks_page = TasksPage(
             controller, self.button, self.navigate, self.paint,
@@ -360,6 +365,18 @@ class Workbench:
             self.pending_inputs, self.choose_run_step, self.confirm_end, self.step_error_dialog,
             self.step_result_dialog, self.reconcile_dialog,
         )
+        self._document_visible = True
+        ui.context.client.on_delete(self._client_deleted)
+        if reload_state is not None:
+            self.attach_reload_state(reload_state)
+        ui.on('tw_document_visibility', lambda event: self.document_visibility_changed(event.args))
+        ui.context.client.on_connect(lambda: ui.run_javascript('''
+            if (!window.twVisibilityListener) {
+                window.twVisibilityListener = () => emitEvent('tw_document_visibility', !document.hidden);
+                document.addEventListener('visibilitychange', window.twVisibilityListener);
+            }
+            window.twVisibilityListener();
+        '''))
         self.step_list = StepList(
             controller, self.button, lambda: self.task_id, lambda: self.step_id,
             lambda: (self.task_id, self.step_id, self.step_state.generation, self.page_generation),
@@ -414,7 +431,16 @@ class Workbench:
             pending_inputs=self.pending_inputs, step_result_dialog=self.step_result_dialog,
             navigate_step_debug=self.navigate_step_debug,
             debug_round_fresh=lambda: self.debug_round_fresh,
+            logs_allowed=lambda: (getattr(self, '_document_visible', True) and not self.busy
+                and self.tasks_page.workspace_tab == 'steps'
+                and self.step_debug_panel.logs_area is not None
+                and not self.step_debug_panel.logs_area.is_deleted
+                and getattr(self, '_debug_visible', False)),
         )
+
+    def _client_deleted(self):
+        # A short reconnect retains the client. Only expiration invalidates late UI replies.
+        self.page_generation += 1
 
     def _select_step_from_list(self, step_id):
         self.step_id = step_id
@@ -534,12 +560,13 @@ class Workbench:
                         return
                     for instance in instances:
                         with ui.row().classes("w-full items-center justify-between border rounded p-3 gap-3"):
-                            if instance["instance_type"] == "plan":
+                            if instance["instance_type"] in {'plan','step'}:
+                                owner_label = '步骤' if instance['instance_type']=='step' else '规划'
                                 with ui.column().classes("gap-0 min-w-0"):
-                                    ui.label("规划采集 · " + ("采集中" if instance.get("busy") else "资源保留")).classes("font-medium")
-                                    ui.label("规划实例 " + instance["owner_id"]).classes("text-sm text-gray-500")
+                                    ui.label(owner_label + "采集 · " + ("采集中" if instance.get("busy") else "资源保留")).classes("font-medium")
+                                    ui.label(owner_label + "实例 " + instance["owner_id"]).classes("text-sm text-gray-500")
                                 async def end_plan(current=instance):
-                                    await self.controller.call("instance.end", instance_type="plan", owner_id=current["owner_id"])
+                                    await self.controller.call("instance.end", instance_type=current['instance_type'], owner_id=current["owner_id"])
                                     await refresh()
                                 self.button("结束实例", end_plan)
                                 continue
@@ -638,6 +665,39 @@ class Workbench:
             self.tasks_page.workspace_tab = "steps"
         self._open_debug_on_navigation = debug
 
+    def capture_reload_state(self):
+        """One snapshot on disconnect; no periodic scan, disk write or auto-save."""
+        if self.reload_state is None:
+            return
+        draft = (self.step_editor.snapshot_draft()
+                 if self.page == 'editor' and self._step_editor_is_dirty() else None)
+        if draft:
+            self.reload_state['step'] = draft
+        else:
+            self.reload_state.pop('step', None)
+        self.reload_state['input_drafts'] = deepcopy(self.run_input_dialog.state.drafts)
+        from dataclasses import asdict
+        self.reload_state['debug'] = deepcopy({
+            'trials': self.trials, 'state': asdict(self.debug_state),
+            'inputs': self.step_editor.snapshot_debug_inputs() if self.page == 'editor' else None,
+        })
+
+    def attach_reload_state(self, state):
+        """Bind only this tab's in-memory recovery data, after its handshake."""
+        self.reload_state = state
+        self.step_state.reload_draft = deepcopy(state.get('step'))
+        self.run_input_dialog.state.drafts = deepcopy(state.get('input_drafts', {}))
+        debug = state.get('debug', {})
+        # Components retain these shared objects; never replace trials/state.
+        self.trials.update(deepcopy(debug.get('trials', {})))
+        for key, value in debug.get('state', {}).items():
+            if key != 'trial_signature':
+                setattr(self.debug_state, key, deepcopy(value))
+        self.step_state.reload_debug = deepcopy(debug.get('inputs'))
+        if self.step_state.reload_debug:
+            self.environment_id = self.step_state.reload_debug['environment_id']
+        ui.context.client.on_disconnect(self.capture_reload_state)
+
     def remember_route(self):
         payload = {"view": self.page, "task_id": self.task_id, "step_id": self.step_id,
                    "debug": "true" if getattr(self, "_debug_visible", False) else None}
@@ -648,6 +708,10 @@ class Workbench:
     def debug_visibility_changed(self, visible):
         self._debug_visible = visible
         self.remember_route()
+
+    def document_visibility_changed(self, visible):
+        self._document_visible = bool(visible)
+        self.execution_details.set_visible(self._document_visible)
 
     async def navigate(self, page, task_id=None, step_id=None):
         if self.page == "planning" and self.planning_page.state.save_callback:
@@ -744,6 +808,8 @@ class Workbench:
                     }[self.page]()
 
     def _dispose_page(self, route):
+        if hasattr(self, 'run_input_dialog'):
+            self.run_input_dialog.dismiss()
         if route in {"editor", "history"}:
             self.tasks_page.dispose()
         if route == "editor":
@@ -1206,7 +1272,25 @@ class Workbench:
         return self._step_editor().document()
 
     async def save_editor(self):
-        return await self._step_editor().save(self.document())
+        editor = self._step_editor()
+        identity = editor.identity()
+        label = editor.view.get('save_state')
+        try:
+            saved = await editor.save(self.document())
+        except Exception:
+            if editor.identity() == identity and label and not label.is_deleted:
+                label.text = '保存失败，点击重试'
+            raise
+        if editor.identity() == identity:
+            if label and not label.is_deleted:
+                label.text = '未保存修改' if self._step_editor_is_dirty() else '已保存'
+            await editor.refresh_trial_inputs(saved, preserve_values=True)
+        return saved
+
+    async def step_for_confirmation(self):
+        if self._step_editor_is_dirty():
+            raise TaskError('STEP_UNSAVED', '请先保存步骤，再确认验证。')
+        return self.old_step
 
     async def mark_step_pending(self):
         """Compatibility delegate to the component that owns step editor state."""
@@ -1229,10 +1313,10 @@ class Workbench:
             refresh_trial_inputs=self.refresh_trial_inputs,
             debug_session=self.step_debug_session, ai_editor=self.step_ai_editor,
             context_component=self.step_context_panel, confirm_end=self.confirm_end,
-            autosave_snapshot=None, autosave_running=False,
             open_debug_on_navigation=getattr(self, "_open_debug_on_navigation", False),
             on_debug_visibility=self.debug_visibility_changed,
-            debug_poll_allowed=lambda: not self.busy and self.tasks_page.workspace_tab == "steps",
+            debug_poll_allowed=lambda: (getattr(self, '_document_visible', True) and not self.busy
+                                        and self.tasks_page.workspace_tab == "steps"),
         )
 
     async def editor(self):

@@ -358,7 +358,35 @@ class RunRepository:
         return run
 
     def list_runs(self, task_id=None):
-        return self.query('SELECT run_id,task_id,mode,trial_step_id,status,started_at,finished_at FROM task_runs' + (' WHERE task_id=?' if task_id else '') + ' ORDER BY started_at', (task_id,) if task_id else ())
+        # Additive read-model markers: old clients keep their fields; desktop can
+        # discover changes without reading every frozen definition and output.
+        return self.query('SELECT r.run_id,r.task_id,r.mode,r.trial_step_id,r.status,r.started_at,r.finished_at,'
+            'COALESCE(e.revision,0) AS event_revision,COALESCE(f.total,0) AS result_count '
+            'FROM task_runs r '
+            'LEFT JOIN (SELECT run_id,MAX(rowid) AS revision FROM run_events GROUP BY run_id) e USING(run_id) '
+            'LEFT JOIN (SELECT run_id,COUNT(*) AS total FROM result_refs GROUP BY run_id) f USING(run_id)'
+            + (' WHERE r.task_id=?' if task_id else '') + ' ORDER BY r.started_at', (task_id,) if task_id else ())
+
+    def event_page(self, run_id, after=0, limit=100):
+        """Additive cursor API; existing full-history events() stays unchanged."""
+        if type(after) is not int or after < 0 or type(limit) is not int or not 1 <= limit <= 1000:
+            raise TaskError('EVENT_CURSOR_INVALID', '日志游标或分页大小无效')
+        run = self.query('SELECT status FROM task_runs WHERE run_id=?', (run_id,), True)
+        if run is None:
+            raise TaskError('RUN_NOT_FOUND')
+        with self.transaction() as db:
+            latest = db.execute('SELECT COALESCE(MAX(rowid),0) FROM run_events WHERE run_id=?', (run_id,)).fetchone()[0]
+            reset = after > latest
+            if reset:
+                after = 0
+            rows = [dict(row) for row in db.execute(
+                'SELECT rowid AS sequence,event_id,run_id,attempt_id,kind,substr(payload_json,1,12000) AS payload_json,'
+                'length(payload_json)>12000 AS payload_truncated,created_at FROM run_events '
+                'WHERE run_id=? AND rowid>? ORDER BY rowid LIMIT ?',
+                (run_id, after, limit + 1)).fetchall()]
+        events = rows[:limit]
+        return {'events': events, 'cursor': events[-1]['sequence'] if events else after,
+                'has_more': len(rows) > limit, 'reset': reset, 'status': run['status']}
 
     def events(self, run_id):
         return self.query('SELECT * FROM run_events WHERE run_id=? ORDER BY created_at', (run_id,))

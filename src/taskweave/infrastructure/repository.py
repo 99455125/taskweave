@@ -127,6 +127,9 @@ class Repository(Store):
     def events(self, run_id):
         return self.run_repository.events(run_id)
 
+    def event_page(self, run_id, after=0, limit=100):
+        return self.run_repository.event_page(run_id, after, limit)
+
     def feedback(self, attempt_id):
         return self.run_repository.feedback(attempt_id)
 

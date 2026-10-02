@@ -104,6 +104,30 @@ class ContextCollection:
 
 
 @dataclass(frozen=True)
+class ContextRecordingCommand:
+    """Optional capture lifecycle command; cursors never imply persistence."""
+
+    operation: str
+    recording_id: str | None = None
+    after: int = 0
+    through: int | None = None
+    limit: int = 100
+
+
+@dataclass(frozen=True)
+class ContextRecordingBatch:
+    """Non-consuming evidence page or lifecycle acknowledgement."""
+
+    recording_id: str
+    state: str  # RECORDING, PAUSED, STOPPED, DISCARDED
+    cursor: int
+    collection: ContextCollection = field(default_factory=lambda: ContextCollection(()))
+    available_after: int = 0
+    dropped_count: int = 0
+    has_more: bool = False
+
+
+@dataclass(frozen=True)
 class StagedFile:
     token: str
     local_path: str  # plugin-only, never sent to a model or returned by ctx.call
@@ -205,6 +229,19 @@ class ContextTargetProvider(Protocol):
     async def list_context_targets(
         self, provider_id: str, ctx: PluginContext, request: JSON
     ) -> Sequence[ContextTarget]: ...
+
+
+class ContextRecordingProvider(Protocol):
+    """Optional extension, independent of the mandatory Plugin protocol.
+
+    read must not consume events. ack consumes only explicitly acknowledged,
+    previously delivered evidence; failed persistence must not call ack.
+    """
+
+    async def record_context(
+        self, provider_id: str, ctx: PluginContext, command: ContextRecordingCommand,
+        request: JSON, *, include_view: bool = True,
+    ) -> ContextRecordingBatch: ...
 
 
 class Plugin(Protocol):

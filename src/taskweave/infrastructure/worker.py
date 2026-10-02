@@ -94,6 +94,18 @@ async def list_plugin_context_targets(plugin, provider_id, ctx, request):
     return redact(list(await hook(provider_id, ctx, request or {}))) if hook else []
 
 
+async def record_plugin_context(plugin, provider_id, ctx, command, request, renderers, *, include_view=True):
+    from taskweave.core.context_recording import serialize_recording_batch
+    hook = getattr(plugin, 'record_context', None)
+    if not callable(hook):
+        raise TaskError('CONTEXT_RECORDING_UNAVAILABLE', '该上下文提供器不支持录制，仍可使用快照采集')
+    batch = await hook(provider_id, ctx, command, request or {}, include_view=include_view)
+    result = serialize_recording_batch(batch, renderers)
+    if command.recording_id and result['recording_id'] != command.recording_id:
+        raise TaskError('CONTEXT_RECORDING_RESULT_INVALID', '插件返回了不同录制身份')
+    return result
+
+
 class StepContext:
     def __init__(self, step, plugin_ctx, registry):
         self.step, self.context, self.registry = step, plugin_ctx, registry
@@ -172,7 +184,9 @@ def worker_main(connection, cancellation, home, factory, parent_pid):
     try:
         while True:
             try:
-                message = json.loads(connection.recv())
+                # Keep retained browser callbacks alive while waiting for the
+                # next command; a blocking recv here freezes manual recording.
+                message = json.loads(loop.run_until_complete(asyncio.to_thread(connection.recv)))
             except EOFError:
                 break
             if message["kind"] == "close":
@@ -219,7 +233,7 @@ def worker_main(connection, cancellation, home, factory, parent_pid):
 
                 beat = asyncio.create_task(heartbeat())
                 try:
-                    if message["kind"] in {"context", "context_targets"}:
+                    if message["kind"] in {"context", "context_targets", "context_record"}:
                         provider_id = message["provider_id"]
                         plugin = next(
                             (
@@ -236,6 +250,14 @@ def worker_main(connection, cancellation, home, factory, parent_pid):
                         )
                         if plugin is None:
                             raise TaskError("CONTEXT_PROVIDER_UNAVAILABLE")
+                        if message['kind'] == 'context_record':
+                            from taskweave.core.context_recording import recording_command
+                            command = recording_command(**message['recording'])
+                            batch = await record_plugin_context(plugin, provider_id, pc, command,
+                                message.get('request', {}), registry.views,
+                                include_view=message.get('include_view', True))
+                            emit('ContextRecordingCompleted', batch)
+                            return
                         if message["kind"] == "context_targets":
                             targets = await list_plugin_context_targets(
                                 plugin, provider_id, pc, message.get("request", {})
@@ -280,7 +302,7 @@ def worker_main(connection, cancellation, home, factory, parent_pid):
                         if (
                             hook
                             and ctx.phase != "persist"
-                            and message["kind"] not in {"context", "context_targets"}
+                            and message["kind"] not in {"context", "context_targets", "context_record"}
                         ):
                             try:
                                 requests = await asyncio.wait_for(
@@ -321,5 +343,12 @@ def worker_main(connection, cancellation, home, factory, parent_pid):
         try:
             loop.run_until_complete(resources.release_all())
         finally:
+            pending = asyncio.all_tasks(loop)
+            for task in pending:
+                task.cancel()
+            if pending:
+                loop.run_until_complete(asyncio.gather(*pending, return_exceptions=True))
+            loop.run_until_complete(loop.shutdown_asyncgens())
+            loop.run_until_complete(loop.shutdown_default_executor(timeout=1))
             loop.close()
             connection.close()

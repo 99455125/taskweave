@@ -8,7 +8,7 @@
 uv sync --locked
 uv run taskweave --help
 uv run taskweave --home .runtime/workbench serve
-uv run --extra gui --extra browser --extra ocr --extra database --extra utility taskweave workbench
+uv run --extra gui --extra browser --extra ocr --extra database --extra utility --extra files taskweave workbench
 ```
 
 serve 是本地 HTTP 入口，workbench 启动桌面工作台；按需要选择 extras，不要求默认核心安装所有插件。浏览器依赖需在开发/构建环境准备匹配 Chromium。工作空间配置和数据留在本地，迁移或删除之前先核对占用、路径与备份。

@@ -7,6 +7,7 @@ from nicegui import ui
 from taskweave.core.validation import TaskError
 from taskweave.desktop.controller import command_id
 from taskweave.desktop.display import readable_metadata, step_names
+from taskweave.desktop.components.run_logs import LiveRunLogs
 
 STATUS = {"DRAFT":"草稿", "VALIDATED":"已验证", "READY":"就绪", "RUNNING":"执行中", "PAUSED":"已暂停", "FAILED":"失败", "INTERRUPTED":"中断 / 待核对", "SUCCEEDED":"成功", "CANCELLED":"已结束", "UNKNOWN":"结果待核对"}
 
@@ -216,7 +217,7 @@ class StepDebugPanel:
                  task_id=lambda: None, step_id=lambda: None, edit_controls=lambda: None,
                  trials=None, state=None, pending_inputs=None,
                  step_result_dialog=None, navigate_step_debug=None,
-                 debug_round_fresh=lambda: False):
+                 debug_round_fresh=lambda: False, logs_allowed=lambda: True):
         self.button, self.controller = button, controller
         self.identity, self.run_id, self.status = identity, run_id, status
         self.page, self.task_id, self.step_id = page, task_id, step_id
@@ -229,12 +230,17 @@ class StepDebugPanel:
         self._refresh_lock = asyncio.Lock()
         self._settled_identity = None
         self._logs_identity = None
+        self._live_logs = None
+        self.logs_allowed = logs_allowed
 
     def _current(self, identity, run_id=None):
         return (self.page() == "editor" and self.identity() == identity
                 and (run_id is None or self.run_id(identity[1]) == run_id))
 
     def dispose(self):
+        if self._live_logs is not None:
+            self._live_logs.dispose()
+            self._live_logs = None
         self.trial_area = None
         self.logs_area = None
         self.actions.clear()
@@ -274,10 +280,15 @@ class StepDebugPanel:
         if self.logs_area is not None and not self.logs_area.is_deleted and self._logs_identity != key:
             self._logs_identity = key
             area = self.logs_area
+            if self._live_logs is not None:
+                self._live_logs.dispose()
             area.clear()
             with area:
                 ui.label("暂无调试日志" if not run_id else "运行编号：" + run_id).classes("text-xs break-all")
                 if run_id:
+                    self._live_logs = LiveRunLogs(self.controller, run_id,
+                        lambda: self._current(identity, run_id) and self.logs_area is area and not area.is_deleted,
+                        allowed=self.logs_allowed)
                     output = ui.textarea("调试日志（按需加载）").props("readonly rows=12").classes("w-full font-mono")
                     log_text, page_index = "", 0
                     page_size = 24000

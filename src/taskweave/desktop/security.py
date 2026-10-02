@@ -2,7 +2,7 @@
 
 from http.cookies import SimpleCookie
 import secrets
-from urllib.parse import parse_qs
+from urllib.parse import parse_qs, parse_qsl, urlencode
 from starlette.responses import PlainTextResponse, RedirectResponse
 
 
@@ -37,7 +37,11 @@ class LocalAccess:
             and scope["path"] in {"/", "/logs"}
             and secrets.compare_digest(access, self.token)
         ):
-            response = RedirectResponse(scope["path"], status_code=303)
+            remaining = [(key, value) for key, value in parse_qsl(
+                scope.get('query_string', b'').decode(), keep_blank_values=True,
+            ) if key != 'access']
+            target = scope['path'] + ('?' + urlencode(remaining) if remaining else '')
+            response = RedirectResponse(target, status_code=303)
             response.set_cookie(
                 self.cookie_name, self.token, httponly=True, samesite="strict"
             )

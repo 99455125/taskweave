@@ -67,10 +67,11 @@ def render_logs(logs, open_path=None):
     paused = ui.switch('暂停显示')
     output = ui.log(max_lines=2000).classes('w-full h-[70vh] font-mono')
     cursor = 0
+    visible = True
 
     def refresh():
         nonlocal cursor
-        if paused.value:
+        if paused.value or not visible:
             return
         rows, cursor = logs.after(cursor, int(level.value))
         for _, text in rows:
@@ -92,4 +93,24 @@ def render_logs(logs, open_path=None):
             ui.button('打开日志目录', on_click=lambda: open_path(logs.path.parent))
     ui.label('日志自动保存为 server.log；可暂停显示后选中文字复制。')
     refresh()
-    ui.timer(0.5, refresh)
+    timer = ui.timer(0.5, refresh)
+
+    def synchronize():
+        timer.active = visible and not paused.value
+        if timer.active:
+            refresh()
+
+    def visibility_changed(event):
+        nonlocal visible
+        visible = bool(event.args)
+        synchronize()
+
+    paused.on_value_change(lambda _: synchronize())
+    ui.on('tw_service_logs_visible', visibility_changed)
+    ui.context.client.on_connect(lambda: ui.run_javascript('''
+        if (!window.twServiceLogVisibilityListener) {
+            window.twServiceLogVisibilityListener = () => emitEvent('tw_service_logs_visible', !document.hidden);
+            document.addEventListener('visibilitychange', window.twServiceLogVisibilityListener);
+        }
+        window.twServiceLogVisibilityListener();
+    '''))

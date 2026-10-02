@@ -1,6 +1,11 @@
 README.md
 pyproject.toml
 src/taskweave_playwright/__init__.py
+src/taskweave_playwright/actions.py
+src/taskweave_playwright/observation.py
+src/taskweave_playwright/protocol.py
+src/taskweave_playwright/recording.py
+src/taskweave_playwright/side_effects.py
 src/taskweave_playwright.egg-info/PKG-INFO
 src/taskweave_playwright.egg-info/SOURCES.txt
 src/taskweave_playwright.egg-info/dependency_links.txt

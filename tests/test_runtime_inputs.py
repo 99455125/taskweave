@@ -10,6 +10,60 @@ from taskweave.infrastructure.storage import uid
 
 
 class RuntimeInputs(unittest.TestCase):
+    def test_incremental_event_pages_are_isolated_bounded_and_compatible(self):
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task, _, _ = self.setup_task(app)
+            a = app.create_run(task, defer_inputs=True)['run_id']
+            b = app.create_run(task, defer_inputs=True)['run_id']
+            for number in range(7):
+                app.runs.runs.event(a, 'Fixture', {'number': number})
+                app.runs.runs.event(b, 'OtherRun', {})
+            rows, cursor = [], 0
+            while True:
+                result = app.dispatch('run.events.page', {'run_id': a, 'after': cursor, 'limit': 3})
+                self.assertLessEqual(len(result['events']), 3)
+                self.assertTrue(all(event['run_id'] == a for event in result['events']))
+                rows.extend(result['events'])
+                cursor = result['cursor']
+                if not result['has_more']:
+                    break
+            original = app.dispatch('run.events', {'run_id': a})
+            self.assertEqual([r['event_id'] for r in rows], [r['event_id'] for r in original])
+            self.assertEqual(app.dispatch('run.events.page', {'run_id': a, 'after': cursor})['events'], [])
+            with self.assertRaises(TaskError):
+                app.dispatch('run.events.page', {'run_id': a, 'limit': 1001})
+
+    def test_run_list_revision_tracks_events_without_reading_full_details(self):
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task, first, second = self.setup_task(app)
+            run = app.create_run(task, defer_inputs=True)
+            before = app.dispatch('run.list', {})[0]
+            app.runs.runs.event(run['run_id'], 'FixtureChanged', {})
+            after = app.dispatch('run.list', {})[0]
+            self.assertNotEqual(before['event_revision'], after['event_revision'])
+            self.assertNotIn('definition_json', after)
+            self.assertNotIn('attempts', after)
+
+    def test_waiting_request_identity_is_checked_atomically_before_writing_inputs(self):
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task, first, second = self.setup_task(app)
+            run = app.create_run(task, defer_inputs=True)
+            app.coordinator.start(run['run_id'], uid())
+            paused = app.coordinator.wait(run['run_id'])
+            request = json.loads(paused['request_json'])
+            old_id = request['waiting_input']['id']
+            request['waiting_input']['id'] = replacement = uid()
+            app.runs.runs.update_run_request(run['run_id'], json.dumps(request))
+            with self.assertRaises(TaskError) as error:
+                app.dispatch('run.inputs', {'run_id': run['run_id'], 'command_id': uid(),
+                    'inputs': {'org': 'stale'}, 'expected_input_id': old_id})
+            self.assertEqual(error.exception.code, 'INPUT_REQUEST_STALE')
+            self.assertEqual(app.runs.request(run['run_id'])['waiting_input']['id'], replacement)
+            self.assertNotIn('org', app.runs.input_values(run['run_id'])['task'])
+            app.dispatch('run.inputs', {'run_id': run['run_id'], 'command_id': uid(),
+                'inputs': {'org': 'current'}, 'expected_input_id': replacement})
+            self.assertEqual(app.runs.input_values(run['run_id'])['task']['org'], 'current')
+
     def setup_task(self, app):
         task=app.repo.create_task('human inputs',{'type':'object','properties':{'org':{'type':'string'}},'required':['org']})['task_id']
         first=app.repo.save_step(task,{'name':'first','step_content':'async def run(ctx, inputs):\n    return ctx.result(data={"org": inputs["org"]})'})
@@ -186,6 +240,10 @@ class RuntimeInputs(unittest.TestCase):
             with patch('taskweave.desktop.components.run_inputs.ui',fake),patch('taskweave.desktop.components.trial_inputs.ui',fake),patch('taskweave.desktop.forms.ui',fake):
                 asyncio.run(bench.pending_inputs(paused))
                 asyncio.run(bench.pending_inputs(paused))
+                self.assertEqual(fake.dialog.call_count,0)
+                open_entry=bench.button.call_args.args[1]
+                asyncio.run(open_entry())
+                asyncio.run(open_entry())
                 self.assertEqual(fake.dialog.call_count,1)
             titles=[call.args[0] for call in fake.expansion.call_args_list]
             self.assertEqual(titles,['环境变量 · 只读','任务变量 · 本次运行输入','步骤变量与依赖 · 本次步骤输入'])

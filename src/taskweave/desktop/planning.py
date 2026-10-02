@@ -11,6 +11,7 @@ from taskweave.desktop.pages.base import Page
 from taskweave.desktop.forms import ValueForm
 from taskweave.desktop.state import PlanningPageState
 from taskweave.desktop.components.organization import CategoryManager
+from taskweave.desktop.context_recording import collection_workspace, RecordingControls
 from taskweave.desktop.contexts import (
     render_context_draft_rows, ContextCards, show_context_preview,
     ContextCaptureDraft,
@@ -433,11 +434,8 @@ class PlanningPage(Page):
         if plan["plan_id"] != identity[0]:
             return
         mutation_lock = asyncio.Lock()
-        catalog = await self.controller.call("capabilities")
-        if not self._identity_is_current(identity):
-            return
         with ui.column().classes("tw-planning-workspace w-full min-w-0 gap-3"):
-            with ui.tabs().classes("w-full tw-task-tabs") as planning_tabs:
+            with ui.tabs(value="基础配置").classes("w-full tw-task-tabs") as planning_tabs:
                 ui.tab("基础配置")
                 ui.tab("能力与素材")
                 ui.tab("生成记录")
@@ -451,233 +449,264 @@ class PlanningPage(Page):
                             notes = ui.textarea("操作说明（可选）", value=plan.get("plan_notes", ""), placeholder="说明全局操作顺序、变量抽取和特殊规则").props("outlined autogrow").classes("w-full")
                             save_state = ui.label("已保存").classes("text-sm text-gray-500")
                     materials_panel = ui.column().classes("tw-plan-materials tw-panel w-full min-w-0")
+                    materials_panel.set_visibility(False)
                     history_panel = ui.column().classes("tw-plan-history w-full min-w-0")
+                    history_panel.set_visibility(False)
                 assistant_panel = ui.column().classes("tw-panel tw-plan-assist gap-3 shrink-0")
-        with materials_panel:
-            ui.label("所用插件能力与上下文素材").classes("tw-section-title")
-            environments = await self.controller.call("environment.list")
-            if not self._identity_is_current(identity) or materials_panel.is_deleted:
-                return
-            environment = ui.select(
-                {item["environment_id"]: item["name"] for item in environments},
-                value=plan.get("environment_id"), label="采集环境（可选）", clearable=True,
-            ).props("outlined dense").classes("w-full")
-            plugins = ui.select(list(catalog["manifests"]), value=plan.get("plugin_ids", []), label="所用插件", multiple=True).props("outlined dense use-chips").classes("w-full")
-            ui.label("所选插件用于规划材料与能力参考；能力目录仍按已安装插件动态提供。").classes("text-xs text-gray-500")
+        environment = plugins = cards = None
+        selected_tab = "基础配置"
+        materials_loaded = False
+        materials_lock = asyncio.Lock()
+        history_revision, history_loaded_revision = 0, -1
+        history_lock = asyncio.Lock()
+        def mark_changed(_=None):
+            save_state.text = "未保存"
 
-            def mark_changed(_=None):
-                save_state.text = "未保存"
+        for control in (name, description, notes):
+            control.on_value_change(mark_changed)
 
-            for control in (name, description, notes, environment, plugins):
-                control.on_value_change(mark_changed)
+        def values():
+            return {
+                "name": name.value.strip() or "新规划",
+                "plan_description": description.value or "",
+                "plan_notes": notes.value or "",
+                "environment_id": environment.value if environment is not None else plan.get("environment_id"),
+                "plugin_ids": (plugins.value or []) if plugins is not None else plan.get("plugin_ids", []),
+            }
 
-            def values():
-                return {
-                    "name": name.value.strip() or "新规划",
-                    "plan_description": description.value or "",
-                    "plan_notes": notes.value or "",
-                    "environment_id": environment.value,
-                    "plugin_ids": plugins.value or [],
-                }
-
-            async def save_if_changed():
-                async with mutation_lock:
-                    current = values()
-                    if all(plan.get(key) == value for key, value in current.items()):
-                        return plan
-                    save_state.text = "正在保存…"
-                    updated = await self.controller.call("plan.update", plan_id=plan["plan_id"], expected_revision=plan["revision"], **current)
-                    plan.update(updated); save_state.text = "已保存"
+        async def save_if_changed():
+            async with mutation_lock:
+                current = values()
+                if all(plan.get(key) == value for key, value in current.items()):
                     return plan
+                save_state.text = "正在保存…"
+                updated = await self.controller.call("plan.update", plan_id=plan["plan_id"], expected_revision=plan["revision"], **current)
+                plan.update(updated); save_state.text = "已保存"
+                return plan
 
-            self.state.save_callback = save_if_changed
+        self.state.save_callback = save_if_changed
 
-            with assistant_panel:
-                ui.label("AI 生成任务").classes("tw-section-title")
-                ui.label("使用当前规划配置与已保存的上下文快照生成候选；生成不会启动执行。 ").classes("text-sm text-gray-500")
-                self.button("大模型api调用", lambda: generate_after_save("api"), primary=True, icon="auto_awesome").classes("w-full")
-                self.button("大模型网页chat调用", lambda: generate_after_save("web_chat"), icon="forum").classes("w-full")
-                ui.separator()
-                candidate_area = ui.column().classes("tw-plan-current-candidate w-full gap-2")
-
-                async def refresh_candidate_summary(expected_identity=identity):
-                    self._candidate_summary_generation += 1
-                    request_generation = self._candidate_summary_generation
-
-                    def current():
-                        return (request_generation == self._candidate_summary_generation
-                                and self._identity_is_current(expected_identity)
-                                and not candidate_area.is_deleted)
-
-                    if not current():
-                        return False
-                    is_current, generation = await self.latest_generation_for_view(plan["plan_id"], expected_identity)
-                    if not is_current or not current():
-                        return False
-                    latest = generation
-                    candidate_area.clear()
-                    with candidate_area:
-                        ui.label("候选预览").classes("font-medium")
-                        if generation is None:
-                            ui.label("暂无生成候选。完成一次实际生成后，可在这里查看候选与诊断。").classes("text-sm text-gray-500")
-                            return True
-                        summary = generation_summary(generation)
-                        ui.label(f'{summary["created_at"]} · {summary["channel"]} · {summary["status"]}').classes("text-sm text-gray-500")
-                        if summary["can_import"]:
-                            ui.label(summary["name"] or "未命名任务").classes("font-medium")
-                            ui.label(f'共 {summary["step_count"]} 个步骤').classes("text-sm text-gray-600")
-                            for row in summary["steps"]:
-                                ui.label(f'{row["index"]:02d} · {row["name"]}').classes("text-sm text-gray-600")
-                            async def import_latest(generation_id=summary["generation_id"], expected=expected_identity):
-                                await self.import_generation(generation_id, expected)
-                            with ui.row().classes("w-full items-center gap-2 flex-wrap"):
-                                self.button("查看完整预览", lambda item=latest: self.open_generation(item["generation_id"], expected_identity), flat=True, icon="visibility")
-                                self.button("导入为任务", import_latest, primary=True)
-                        else:
-                            ui.label("当前最新候选尚未就绪，不能导入。").classes("text-sm text-amber-800")
-                            if summary["diagnostics"]:
-                                ui.label("诊断：" + "；".join(str(item) for item in summary["diagnostics"])).classes("text-sm text-red-700 whitespace-pre-wrap")
-                            with ui.row().classes("w-full items-center gap-2 flex-wrap"):
-                                self.button("查看诊断", lambda item=latest: self.open_generation(item["generation_id"], expected_identity), flat=True, icon="visibility")
-                                disabled_import = self.button("导入为任务", lambda: None, primary=True)
-                                disabled_import.disable()
-                    return current()
-
-                self._refresh_candidate_summary = refresh_candidate_summary
-                async def end_candidate_collection(expected_identity=identity, owner_id=plan["plan_id"]):
-                    await self.end_collection_instance(owner_id, expected_identity)
-                self.button("结束采集实例", end_candidate_collection, flat=True)
-
-            async def collect_after_save():
-                await self.save_then(self.collect_dialog, plan, on_saved=sync_group)
-
-            async def generate_after_save(channel):
-                await self.save_then(self.generate, plan, channel)
-
-            candidate_loaded = await refresh_candidate_summary(identity)
-            if (not candidate_loaded or not self._identity_is_current(identity)
-                    or basic_panel.is_deleted or materials_panel.is_deleted
-                    or assistant_panel.is_deleted):
-                return
-
+        with assistant_panel:
+            ui.label("AI 生成任务").classes("tw-section-title")
+            ui.label("使用当前规划配置与已保存的上下文快照生成候选；生成不会启动执行。 ").classes("text-sm text-gray-500")
+            self.button("大模型api调用", lambda: generate_after_save("api"), primary=True, icon="auto_awesome").classes("w-full")
+            self.button("大模型网页chat调用", lambda: generate_after_save("web_chat"), icon="forum").classes("w-full")
             ui.separator()
-            contexts = plan.get("contexts", [])
+            candidate_area = ui.column().classes("tw-plan-current-candidate w-full gap-2")
 
-            async def save_context(context, name, notes):
-                async with mutation_lock:
-                    updated = await self.controller.call(
-                        "plan.context.update", plan_id=plan["plan_id"], expected_revision=plan["revision"],
-                        context_id=context["context_id"], name=name, context_notes=notes,
-                    )
-                    plan.update(updated)
+            async def refresh_candidate_summary(expected_identity=identity):
+                self._candidate_summary_generation += 1
+                request_generation = self._candidate_summary_generation
 
-            async def delete_context(context):
-                async with mutation_lock:
-                    updated = await self.controller.call(
-                        "plan.context.delete", plan_id=plan["plan_id"], expected_revision=plan["revision"],
-                        context_id=context["context_id"],
-                    )
-                    plan.update(updated)
+                def current():
+                    return (request_generation == self._candidate_summary_generation
+                            and self._identity_is_current(expected_identity)
+                            and not candidate_area.is_deleted)
 
-            async def move_context(context, direction):
-                async with mutation_lock:
-                    updated = await self.controller.call(
-                        "plan.context.reorder", plan_id=plan["plan_id"], expected_revision=plan["revision"],
-                        context_id=context["context_id"], direction=direction,
-                    )
-                    plan.update(updated)
+                if not current():
+                    return False
+                is_current, generation = await self.latest_generation_for_view(plan["plan_id"], expected_identity)
+                if not is_current or not current():
+                    return False
+                latest = generation
+                candidate_area.clear()
+                with candidate_area:
+                    ui.label("候选预览").classes("font-medium")
+                    if generation is None:
+                        ui.label("暂无生成候选。完成一次实际生成后，可在这里查看候选与诊断。").classes("text-sm text-gray-500")
+                        return True
+                    summary = generation_summary(generation)
+                    ui.label(f'{summary["created_at"]} · {summary["channel"]} · {summary["status"]}').classes("text-sm text-gray-500")
+                    if summary["can_import"]:
+                        ui.label(summary["name"] or "未命名任务").classes("font-medium")
+                        ui.label(f'共 {summary["step_count"]} 个步骤').classes("text-sm text-gray-600")
+                        for row in summary["steps"]:
+                            ui.label(f'{row["index"]:02d} · {row["name"]}').classes("text-sm text-gray-600")
+                        async def import_latest(generation_id=summary["generation_id"], expected=expected_identity):
+                            await self.import_generation(generation_id, expected)
+                        with ui.row().classes("w-full items-center gap-2 flex-wrap"):
+                            self.button("查看完整预览", lambda item=latest: self.open_generation(item["generation_id"], expected_identity), flat=True, icon="visibility")
+                            self.button("导入为任务", import_latest, primary=True)
+                    else:
+                        ui.label("当前最新候选尚未就绪，不能导入。").classes("text-sm text-amber-800")
+                        if summary["diagnostics"]:
+                            ui.label("诊断：" + "；".join(str(item) for item in summary["diagnostics"])).classes("text-sm text-red-700 whitespace-pre-wrap")
+                        with ui.row().classes("w-full items-center gap-2 flex-wrap"):
+                            self.button("查看诊断", lambda item=latest: self.open_generation(item["generation_id"], expected_identity), flat=True, icon="visibility")
+                            disabled_import = self.button("导入为任务", lambda: None, primary=True)
+                            disabled_import.disable()
+                return current()
 
-            async def recollect_context(context):
-                await save_if_changed()
-                await self.collect_dialog(plan, context, sync_group)
+            self._refresh_candidate_summary = refresh_candidate_summary
+            async def end_candidate_collection(expected_identity=identity, owner_id=plan["plan_id"]):
+                await self.end_collection_instance(owner_id, expected_identity)
+            self.button("结束采集实例", end_candidate_collection, flat=True)
 
-            async def preview_context(context):
-                await self.context_preview(context)
+        async def collect_after_save():
+            await self.save_then(self.collect_dialog, plan, on_saved=sync_group)
 
-            async def mutate_capture(operation, context, capture, **params):
-                await mutate_planning_capture(
-                    self.controller, plan, context, capture, operation, mutation_lock,
-                    lambda: self._identity_is_current(identity), cards, **params,
-                )
+        async def generate_after_save(channel):
+            await self.save_then(self.generate, plan, channel)
 
-            async def delete_capture(context, capture):
-                await mutate_capture('plan.context.capture.delete', context, capture)
-
-            async def move_capture(context, capture, direction):
-                await mutate_capture('plan.context.capture.reorder', context, capture, direction=direction)
-
-            async def label_capture(context, capture, label, **metadata):
-                await mutate_capture('plan.context.capture.label', context, capture, label=label, **metadata)
-
-            async def preview_one_capture(context, capture):
-                saved = await self.controller.call("plan.context.capture.get", plan_id=plan["plan_id"], context_id=context["context_id"], capture_id=capture["capture_id"])
-                if self._identity_is_current(identity):
-                    await self.show_context_preview(capture.get("label") or "采集项", saved)
-
-            cards = ContextCards(
-                contexts, save_context, delete_context, move=move_context,
-                recollect=recollect_context, preview=preview_context,
-                append=collect_after_save, delete_capture=delete_capture,
-                move_capture=move_capture, update_capture=label_capture,
-                preview_capture=preview_one_capture,
-                redact_on_display=self.controller.privacy_settings()["redact_on_display"],
-                is_active=lambda: self._identity_is_current(identity),
-            )
-
-            async def sync_group(group):
-                contexts = plan.setdefault('contexts', [])
-                current = next((item for item in contexts if item['context_id'] == group['context_id']), None)
-                if current: current.update(group)
-                else: contexts.append(group)
+        async def sync_group(group):
+            contexts = plan.setdefault('contexts', [])
+            current = next((item for item in contexts if item['context_id'] == group['context_id']), None)
+            if current: current.update(group)
+            else: contexts.append(group)
+            if cards is not None:
                 cards.sync_group(group)
 
 
-        with history_panel:
-            async def refresh_generation_history(expected_identity=identity):
-                if not self._identity_is_current(expected_identity):
-                    return False
-                generations = await self.controller.call("plan.generation.list", plan_id=plan["plan_id"])
-                if not self._identity_is_current(expected_identity) or history_panel.is_deleted:
-                    return False
-                history_panel.clear()
-                with history_panel:
-                    with ui.column().classes("tw-plan-history-content w-full gap-1"):
-                        ui.label("生成记录").classes("text-lg font-semibold")
-                        with ui.row().classes("tw-plan-history-table-head w-full"):
-                            ui.label("生成时间")
-                            ui.label("调用渠道")
-                            ui.label("状态")
-                        if not generations:
-                            ui.label("暂无生成记录").classes("text-sm text-gray-500 px-2 py-3")
-                        for item in generations:
-                            summary = generation_summary(item)
-                            with ui.row().classes("tw-plan-history-row w-full"):
-                                ui.label(summary["created_at"])
-                                ui.label(summary["channel"])
-                                with ui.row().classes("items-center justify-between gap-2"):
-                                    ui.label(summary["status"])
-                                    self.button("查看", lambda record=item: self.open_generation(record["generation_id"], identity), flat=True)
+        async def load_materials():
+            nonlocal environment, plugins, cards, materials_loaded
+            async with materials_lock:
+                if materials_loaded or not self._identity_is_current(identity) or materials_panel.is_deleted:
+                    return
+                catalog, environments = await asyncio.gather(
+                    self.controller.call("capabilities"), self.controller.call("environment.list"))
+                if not self._identity_is_current(identity) or materials_panel.is_deleted:
+                    return
+                with materials_panel:
+                    ui.label("所用插件能力与上下文素材").classes("tw-section-title")
+                    environment = ui.select(
+                        {item["environment_id"]: item["name"] for item in environments},
+                        value=plan.get("environment_id"), label="采集环境（可选）", clearable=True,
+                    ).props("outlined dense").classes("w-full")
+                    plugins = ui.select(list(catalog["manifests"]), value=plan.get("plugin_ids", []), label="所用插件", multiple=True).props("outlined dense use-chips").classes("w-full")
+                    ui.label("所选插件用于规划材料与能力参考；能力目录仍按已安装插件动态提供。").classes("text-xs text-gray-500")
+
+                    for control in (environment, plugins):
+                        control.on_value_change(mark_changed)
+                    ui.separator()
+                    contexts = plan.get("contexts", [])
+
+                    async def save_context(context, name, notes):
+                        async with mutation_lock:
+                            updated = await self.controller.call(
+                                "plan.context.update", plan_id=plan["plan_id"], expected_revision=plan["revision"],
+                                context_id=context["context_id"], name=name, context_notes=notes,
+                            )
+                            plan.update(updated)
+
+                    async def delete_context(context):
+                        async with mutation_lock:
+                            updated = await self.controller.call(
+                                "plan.context.delete", plan_id=plan["plan_id"], expected_revision=plan["revision"],
+                                context_id=context["context_id"],
+                            )
+                            plan.update(updated)
+
+                    async def move_context(context, direction):
+                        async with mutation_lock:
+                            updated = await self.controller.call(
+                                "plan.context.reorder", plan_id=plan["plan_id"], expected_revision=plan["revision"],
+                                context_id=context["context_id"], direction=direction,
+                            )
+                            plan.update(updated)
+
+                    async def recollect_context(context):
+                        await save_if_changed()
+                        await self.collect_dialog(plan, context, sync_group)
+
+                    async def preview_context(context):
+                        await self.context_preview(context)
+
+                    async def mutate_capture(operation, context, capture, **params):
+                        await mutate_planning_capture(
+                            self.controller, plan, context, capture, operation, mutation_lock,
+                            lambda: self._identity_is_current(identity), cards, **params,
+                        )
+
+                    async def delete_capture(context, capture):
+                        await mutate_capture('plan.context.capture.delete', context, capture)
+
+                    async def move_capture(context, capture, direction):
+                        await mutate_capture('plan.context.capture.reorder', context, capture, direction=direction)
+
+                    async def label_capture(context, capture, label, **metadata):
+                        await mutate_capture('plan.context.capture.label', context, capture, label=label, **metadata)
+
+                    async def preview_one_capture(context, capture):
+                        saved = await self.controller.call("plan.context.capture.get", plan_id=plan["plan_id"], context_id=context["context_id"], capture_id=capture["capture_id"])
+                        if self._identity_is_current(identity):
+                            await self.show_context_preview(capture.get("label") or "采集项", saved)
+
+                    cards = ContextCards(
+                        contexts, save_context, delete_context, move=move_context,
+                        recollect=recollect_context, preview=preview_context,
+                        append=collect_after_save, delete_capture=delete_capture,
+                        move_capture=move_capture, update_capture=label_capture,
+                        preview_capture=preview_one_capture,
+                        redact_on_display=self.controller.privacy_settings()["redact_on_display"],
+                        is_active=lambda: self._identity_is_current(identity),
+                    )
+
+                materials_loaded = True
+
+        async def refresh_generation_history(expected_identity=identity):
+            nonlocal history_revision
+            if not self._identity_is_current(expected_identity):
+                return False
+            history_revision += 1
+            if selected_tab != "生成记录":
+                return self._identity_is_current(expected_identity)
+            async with history_lock:
+                return await load_history(expected_identity)
+
+        async def load_history(expected_identity):
+            nonlocal history_loaded_revision
+            if history_loaded_revision == history_revision:
                 return True
+            if not self._identity_is_current(expected_identity):
+                return False
+            request_revision = history_revision
+            generations = await self.controller.call("plan.generation.list", plan_id=plan["plan_id"])
+            if not self._identity_is_current(expected_identity) or history_panel.is_deleted:
+                return False
+            history_panel.clear()
+            with history_panel:
+                with ui.column().classes("tw-plan-history-content w-full gap-1"):
+                    ui.label("生成记录").classes("text-lg font-semibold")
+                    with ui.row().classes("tw-plan-history-table-head w-full"):
+                        ui.label("生成时间")
+                        ui.label("调用渠道")
+                        ui.label("状态")
+                    if not generations:
+                        ui.label("暂无生成记录").classes("text-sm text-gray-500 px-2 py-3")
+                    for item in generations:
+                        summary = generation_summary(item)
+                        with ui.row().classes("tw-plan-history-row w-full"):
+                            ui.label(summary["created_at"])
+                            ui.label(summary["channel"])
+                            with ui.row().classes("items-center justify-between gap-2"):
+                                ui.label(summary["status"])
+                                self.button("查看", lambda record=item: self.open_generation(record["generation_id"], identity), flat=True)
+            history_loaded_revision = request_revision
+            return True
 
-            history_loaded = await refresh_generation_history(identity)
-            if (not history_loaded or not self._identity_is_current(identity)
-                    or basic_panel.is_deleted or materials_panel.is_deleted
-                    or assistant_panel.is_deleted or history_panel.is_deleted):
+        self._refresh_generation_history = refresh_generation_history
+
+        async def select_planning_tab(event):
+            nonlocal selected_tab
+            if not self._identity_is_current(identity) or basic_panel.is_deleted:
                 return
-            self._refresh_candidate_summary = refresh_candidate_summary
-            self._refresh_generation_history = refresh_generation_history
-        def select_tab(selected):
-            basic_panel.set_visibility(selected == "基础配置")
-            materials_panel.set_visibility(selected == "能力与素材")
-            history_panel.set_visibility(selected == "生成记录")
-            planning_tabs.value = selected
-            planning_tabs.update()
+            selected_tab = event.value
+            basic_panel.set_visibility(selected_tab == "基础配置")
+            materials_panel.set_visibility(selected_tab == "能力与素材")
+            history_panel.set_visibility(selected_tab == "生成记录")
+            try:
+                if selected_tab == "能力与素材":
+                    await load_materials()
+                elif selected_tab == "生成记录":
+                    async with history_lock:
+                        await load_history(identity)
+            except Exception:
+                if self._identity_is_current(identity):
+                    ui.notify("加载失败，请重新打开此页签重试", type="negative")
+                logger.warning("Could not load planning tab", exc_info=True)
 
-        def select_planning_tab(event):
-            select_tab(event.value)
         planning_tabs.on_value_change(select_planning_tab)
-        materials_panel.set_visibility(False)
-        history_panel.set_visibility(False)
+        await refresh_candidate_summary(identity)
 
 
     async def collect_dialog(self, plan, existing=None, on_saved=None):
@@ -689,9 +718,16 @@ class PlanningPage(Page):
         requests = self.controller.plugin_context_requests()
         available = {key: value for key, value in requests.items() if key.split(".", 1)[0] in set(plan.get("plugin_ids", []))}
         if not available: raise TaskError("CONTEXT_PROVIDER_UNAVAILABLE", "所选插件没有上下文采集器")
-        draft = ContextCaptureDraft((existing or {}).get('captures', []))
+        workspace = collection_workspace(self.controller, ('plan',plan['plan_id'],(existing or {}).get('context_id')), (existing or {}).get('captures', []))
+        if not await workspace.prepare_dialog(ui.context.client):
+            return
+        draft = workspace.draft
         initial_name = (existing or {}).get('name', '新上下文')
         initial_notes = (existing or {}).get('context_notes', '')
+        async def invoke_recording(operation, **options):
+            return await self.controller.call('plan.context.record', plan_id=plan['plan_id'],
+                expected_revision=plan['revision'], operation=operation, **options)
+        workspace.bind(invoke_recording, source_page='planning')
         with ui.dialog() as dialog, ui.card().classes("tw-context-collection-dialog w-full max-w-5xl"):
             with ui.row().classes('tw-context-dialog-header w-full justify-between items-center'):
                 ui.label("编辑与采集上下文 · 规划").classes("text-lg font-medium")
@@ -701,11 +737,11 @@ class PlanningPage(Page):
             if initial_provider not in available:
                 initial_provider = next(iter(sorted(available)))
             with ui.row().classes("tw-context-dialog-fields w-full items-center gap-3"):
-                name = ui.input("上下文名称", value=initial_name).classes("grow min-w-0")
-                provider = ui.select(sorted(available), value=initial_provider, label="插件采集器").classes("grow min-w-0")
+                name = ui.input("上下文名称", value=workspace.fields.get('name',initial_name)).classes("grow min-w-0")
+                provider = ui.select(sorted(available), value=workspace.fields.get('provider',initial_provider), label="插件采集器").classes("grow min-w-0")
             if existing and existing.get('context_id'):
                 provider.disable()
-            notes = ui.textarea("操作说明（可选）", value=initial_notes, placeholder="说明本组页面或数据的用途，以及操作顺序").props("autogrow").classes("w-full")
+            notes = ui.textarea("操作说明（可选）", value=workspace.fields.get('notes',initial_notes), placeholder="说明本组页面或数据的用途，以及操作顺序").props("autogrow").classes("w-full")
             staged_title = ui.label().classes("font-medium")
             staged_area = ui.column().classes("w-full gap-2")
             deleted_area = ui.column().classes("w-full gap-1")
@@ -729,6 +765,9 @@ class PlanningPage(Page):
                 with ui.column().classes("w-full gap-1") as group:
                     request_forms[identifier] = ValueForm(schema)
                 request_groups[identifier] = group
+                for key, (_, control) in request_forms[identifier].controls.items():
+                    if key in workspace.fields.get('forms', {}).get(identifier, {}):
+                        control.value = workspace.fields['forms'][identifier][key]
 
             def update_request_form(_=None):
                 picker = target_state["picker"]
@@ -748,7 +787,7 @@ class PlanningPage(Page):
                     target_state["picker"] = picker
                     picker.select.on_value_change(update_request_form)
                     await picker.refresh()
-                    selected = (existing or {}).get("request", {}).get("target_id")
+                    selected = workspace.fields.get('target', (existing or {}).get("request", {}).get("target_id"))
                     if selected and selected in picker.targets:
                         picker.select.value = selected
                 update_request_form()
@@ -757,7 +796,7 @@ class PlanningPage(Page):
             await select_provider()
             view_default = context_view_default(available[provider.value])
             view_state = {"supported": view_default is not None}
-            include_view = ui.checkbox("同时生成预览", value=(existing or {}).get("include_view", view_default is True))
+            include_view = ui.checkbox("同时生成预览", value=workspace.fields.get('include_view',(existing or {}).get("include_view", view_default is True)))
             include_view.set_visibility(view_state["supported"])
 
             def update_view_option(_=None):
@@ -772,7 +811,7 @@ class PlanningPage(Page):
             )
             with ui.expansion("高级参数 JSON（可选）", icon="tune").classes("w-full border rounded"):
                 advanced = ui.textarea(
-                    "JSON 对象", value=json.dumps(advanced_values, ensure_ascii=False, indent=2)
+                    "JSON 对象", value=workspace.fields.get('advanced',json.dumps(advanced_values, ensure_ascii=False, indent=2))
                 ).classes("w-full")
 
             async def preview_item(entry):
@@ -800,6 +839,10 @@ class PlanningPage(Page):
             render_staged()
 
             async def collect():
+                if workspace.busy or workspace.recording.committed:
+                    return
+                workspace.busy = True
+                recording_controls.sync()
                 try:
                     picker = target_state["picker"]
                     hidden = context_hidden_parameters(
@@ -823,33 +866,87 @@ class PlanningPage(Page):
                     ui.notify(f'采集失败，暂存内容仍保留：高级参数需要有效 JSON 对象（{exc}）', type='negative')
                 except Exception as exc:
                     ui.notify(f'采集失败，暂存内容仍保留：{exc}', type='negative')
+                finally:
+                    workspace.busy = False
+                    if not dialog.is_deleted:
+                        recording_controls.sync()
 
             async def cancel():
-                if draft.dirty or (name.value or '') != initial_name or (notes.value or '') != initial_notes:
+                if workspace.busy: return
+                if workspace.recording.committed:
+                    ui.notify('上下文已保存，请重试确认保存以完成录制确认；关闭弹窗会保留草稿。',type='warning')
+                    return
+                if workspace.recording.pending or draft.dirty or (name.value or '') != initial_name or (notes.value or '') != initial_notes:
                     with ui.dialog() as confirm, ui.card():
                         ui.label('关闭将丢弃本次未保存的编辑和采集项。')
                         with ui.row():
                             ui.button('继续编辑', on_click=lambda: confirm.submit(False)).props('outline')
                             ui.button('丢弃并关闭', on_click=lambda: confirm.submit(True)).props('text-color=red-7')
                     if not await confirm: return
+                try:
+                    await workspace.recording.discard()
+                except Exception as exc:
+                    ui.notify(f'丢弃失败，录制仍保留：{exc}',type='negative')
+                    return
+                workspace.forget()
                 dialog.close()
 
             async def save_batch():
-                if existing and not draft.dirty and (name.value or '') == initial_name and (notes.value or '') == initial_notes:
+                if workspace.busy: return
+                if existing and not workspace.recording.pending and not workspace.recording.committed and not draft.dirty and (name.value or '') == initial_name and (notes.value or '') == initial_notes:
+                    workspace.forget()
                     dialog.close()
                     return
-                try:
+                async def commit():
                     result = await self.controller.call(
                         'plan.context.save_batch', plan_id=plan['plan_id'], expected_revision=plan['revision'],
                         context_id=(existing or {}).get('context_id'), provider_id=provider.value,
                         name=name.value or '', context_notes=notes.value or '', captures=draft.payload(),
                     )
-                except Exception as exc:
-                    ui.notify(f'保存失败，暂存内容仍保留：{exc}', type='negative')
-                    return
-                plan.update(result['plan'])
-                if on_saved: await on_saved(result['group'])
-                dialog.close()
+                    plan.update(result['plan'])
+                    return result
+                async def save():
+                    result = await workspace.recording.persist(commit)
+                    if on_saved: await on_saved(result['group'])
+                    workspace.forget()
+                    dialog.close()
+                await recording_controls.run(save)
+
+            def start_options():
+                picker=target_state['picker']
+                hidden=context_hidden_parameters(available[provider.value],picker is not None and not picker.uses_parameters)
+                target_request,session_id=picker.selection() if picker else ({},None)
+                request=merge_context_request(request_forms[provider.value].values(exclude=hidden),json.loads(advanced.value or '{}'),target_request)
+                return {'provider_id':provider.value,'request':request,'expected_session_id':session_id}, bool(include_view.value) if view_state['supported'] else False
+
+            def lock_inputs(locked):
+                for control in (provider,include_view,advanced):
+                    control.set_enabled(not locked and not (control is provider and existing and existing.get('context_id')))
+                for form in request_forms.values():
+                    for _,control in form.controls.values(): control.set_enabled(not locked)
+                picker=target_state['picker']
+                if picker: picker.select.set_enabled(not locked)
+                for control in (name,notes): control.set_enabled(not workspace.busy and not workspace.recording.committed)
+                if workspace.recording.committed:
+                    for element in staged_area.descendants():
+                        if hasattr(element,'disable'): element.disable()
+
+            recording_controls=RecordingControls(workspace,dialog,start_options,lock_inputs,render_staged)
+            recording_controls.sync(available[provider.value].get('x-taskweave-context-recording') is True)
+            provider.on_value_change(lambda _:recording_controls.sync(available[provider.value].get('x-taskweave-context-recording') is True))
+            def capture_fields():
+                workspace.fields.update(name=name.value,notes=notes.value,provider=provider.value,
+                    include_view=include_view.value,advanced=advanced.value,
+                    target=target_state['picker'].select.value if target_state['picker'] else None,
+                    forms={identifier:{key:copy.deepcopy(control.value) for key,(_,control) in form.controls.items()} for identifier,form in request_forms.items()})
+            workspace.capture_fields=capture_fields
+            async def hidden():
+                if workspace.dialog is not dialog: return
+                capture_fields()
+                try: await workspace.hide()
+                except Exception as exc: ui.notify(f'暂停录制失败，原实例仍保留：{exc}',type='negative')
+            dialog.on('hide',hidden)
+            workspace.dialog=dialog
 
             self.button('采集一项', collect, primary=True)
             ui.label('每次采集只暂存在此弹窗；确认保存后才会进入规划材料。浏览器等外部操作不会因取消自动回滚。').classes('text-xs text-gray-500')
