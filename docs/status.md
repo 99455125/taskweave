@@ -4,6 +4,16 @@
 
 ## 当前工作
 
+- 微信发布能力增量：新增 wechat_dev.preview/upload 与构建、自测、预览组合，动作总数135；独立锁定 CI SDK、上传密钥引用、产物副本及 PNG/JPEG 二维码保存。当前模拟器工程根仍不能由运行时证明，组合须显式确认；真实微信云端预览/上传未验收。配置与验证边界见 [wechat_dev](../plugins/wechat_dev/README.md#微信预览与上传)。
+
+- 2026-10-03 用户确认宝塔按本地验收即可，不要求公网证书签发和续期的真实外部验证；此前已取消有效 DCloud AppID 下原生 H5 production 验收要求。按这一确认口径，六个可选插件、133动作、两份组合示例、依赖/映射/文档及原项目集成完成。公网签发/续期、H5 production和其他外部目标历史未实测范围保留，不改写为通过；本地与受控协议证据按实际类型记录。 详见[交付记录](design/devops-miniprogram-plugin-delivery-2026-10-03.md)。
+
+- 2026-10-03 用户确认：uni-app 微信模拟器自测已完成，不需要有效 uni-app AppID；取消有效 DCloud AppID 下原生 H5 production 的本次交付验收要求。历史未实测记录保留，不改写为通过。已验证的微信模拟器运行使用 touristappid 游客模式，启动和附着均覆盖26动作；DCloud AppID与微信项目AppID分别配置。
+
+- 2026-10-03：六个 DevOps 插件、两份组合示例和133动作已完成源审查；最终三项缓存 owner/相对 source 修复限定复审 Spec PASS、Quality Ready。83个公共文件已安全整合原项目（11修改、72新增、0删除），原有 OCR 修改保留；原项目锁定 extras 同步及133动作精确注册检查通过。真实工具与组合外部验收分列，公网 ACME/可续期、真实 TiDB/同host外部全链与 Windows/真机历史未验证范围保留，外部材料不阻塞本次本地交付；非阻塞 M1 保留。已按用户确认的验收口径完成，未提交或发布，见[本次交付记录](design/devops-miniprogram-plugin-delivery-2026-10-03.md)。
+
+- 2026-10-02：用户要求完整开发 process、SSH/SFTP、baota_dashboard（宝塔 Linux）、WordPress、uni-app 和 wechat_dev（微信模拟器）六个插件，不缩减为首期。[完整设计](superpowers/specs/2026-10-02-devops-miniprogram-plugins-design.md)已由用户明确批准；[完整实施计划](superpowers/plans/2026-10-02-devops-miniprogram-plugins.md)已编写，用户已批准计划并选择子代理实施；已在隔离工作区按依赖顺序开发及审查，并安全集成原项目。目标包含全部能力、锁文件、示例、模块测试与真实目标证据；已有 OCR 升级修改保留，安装/识别仍未验证。
+
 - 2026-10-01：本轮修复清单已完成。补参显式入口/草稿/防重、八页查询及慢请求性能、规划/调试懒加载、独立配置/调试/日志与手动保存、Playwright统一能力及可选录制、文件→步骤绑定→TiDB SQL链路已有本轮定向验证和真实临时浏览器证据。用户确认“无法复现说明已解决”，偶发原生断连/跳首页按该口径关闭，不再阻塞本轮；事件式连接诊断保留，未宣称已确定原始全部根因。逐条要求、当前实现、证据及关闭裁决见[实施记录](design/next-repair-implementation-2026-09-30.md)末节。未连接实际TiDB、未做Windows实机验收、未运行全量、未提交或改用户数据；这些验证边界保留，不作为本轮重复待办。
 
 - 2026-09-28：共享采集项的操作说明、默认关闭的发送预览、分组折叠及调试日志独立卡片已实现；AI 双通道防重与重载路由恢复已验证。71 项定向测试通过，临时真实 Workbench 调试和四宽截图已留存。偶发跳首页完整触发链仍未复现，不列为完全闭合；见 [本次记录](design/context-ai-and-debug-2026-09-28.md)。未调用外部模型。

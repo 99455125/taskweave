@@ -1,0 +1,8 @@
+{
+  "name": "taskweave-wechat-dev-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "miniprogram-automator": "0.12.1"
+  }
+}

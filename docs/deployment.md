@@ -24,3 +24,9 @@ Windows 目标是完整便携 ZIP：程序、Python 依赖、插件、匹配 Chr
 源码安装、编译打包成功、功能测试通过、真实平台验收是四种不同证据，交付时分别说明。
 
 Windows目标约束、构建命令、包布局与完整实机清单见 [便携交付](windows-portable.md)。HTTP/CLI及配置见 [API与配置](reference/api-and-configuration.md)，发布证据按 [集成验收](release-checklist.md) 记录。
+
+## DevOps 可选组合
+
+`uv sync` 只保留显式选择的 extras；仅选择六新包会移除未选择的旧可选包。需要保留 gui/browser/database/utility/files 等时，须把对应 flags 一并带上。本次原项目实际选择六包与 gui/browser/database/utility（未选择 OCR/files）：`uv sync --locked --extra process --extra ssh --extra baota_dashboard --extra wordpress --extra uniapp --extra wechat_dev --extra browser --extra database --extra gui --extra utility`。同步后可用 `uv run --no-sync taskweave workbench` 复用该环境；本次未自动启动。建站示例需 browser，可选 TiDB 核对需 database；固定执行不安装外部 Node/HX/微信/PHP/WP-CLI/SSH/Chromium。包源码与 API v1/0.1.0 不改变核心默认依赖、任务包或数据库格式。具体变量、逻辑秘密引用、工具准备及输出见 [组合示例](../examples/devops/README.md)。
+
+真实工具 targets 登记在模块映射的 opt-in browser_targets 通道，普通快速目标不会隐式跑 WordPress 集成、HX/微信工具。先 changed dry-run 检查选中范围，外部目标仅显式选择并配置自有环境。macOS 证据不替代 Windows/真机；uniapp Windows native 缺安全目录原语时返回准备要求，宝塔已按用户确认采用本地验收口径；公网 ACME 签发/续期及有效 uni-app AppID 下原生 H5 production 的外部验收不再阻塞本次交付，其未实测记录保留。

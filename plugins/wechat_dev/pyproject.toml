@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+[project]
+name = "taskweave-wechat-dev"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["taskweave-process"]
+[project.entry-points."taskweave.plugins"]
+wechat_dev = "taskweave_wechat_dev:WechatDevPlugin"
+[tool.setuptools.packages.find]
+where = ["src"]
+[tool.setuptools.package-data]
+taskweave_wechat_dev = ["node/*.cjs", "node/*.json", "node/ci/*.json"]

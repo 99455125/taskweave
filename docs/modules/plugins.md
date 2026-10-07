@@ -24,6 +24,8 @@
 | TiDB | [连接、schema 采集、只读查询、显式 SQL 执行与展示](../../plugins/tidb/README.md) | plugins.tidb |
 | file | [有界本地文件读取与步骤数据链路](../../plugins/file/README.md) | plugins.file |
 | utility | [时间、UUID、精确十进制计算](../../plugins/utility/README.md) | plugins.utility |
+| WordPress | [53 个本地/SSH 独立动作、站点文件与 SQL 完整备份恢复](../../plugins/wordpress/README.md) | plugins.wordpress |
+| uni-app | [CLI/HBuilderX 五动作、构建身份与本轮 Jest 报告](../../plugins/uniapp/README.md) | plugins.uniapp |
 
 ## Playwright 观察与定位
 
@@ -45,8 +47,24 @@ TiDB 新增 `tidb.execute_sql` WRITE、不可自动重试；旧 `tidb.query` 保
 
 ## 验证入口
 
+OCR 的 ONNX Runtime 按 Python 版本选择：Python 3.14+ 固定 1.30.0（macOS ARM64 包要求 macOS 14+），较旧 Python 保留 1.20.1；ddddocr 和动作契约保持不变。本次升级仅更新依赖声明与锁文件，安装和实际识别尚未验证，见 [OCR 说明](../../plugins/ocr/README.md)。
+
 修改插件只选择对应键；SDK/注册变化使用 `shared.contracts` 和 changed dry-run 核对消费者。真实 Playwright 测试需显式 `--include-browser`；插件 fixture 测试不代表真实业务系统验收。新增扩展要保护无该可选钩子的旧插件行为。关联：[上下文](contexts.md)、[AI 编写](authoring.md)、[执行结果](execution.md)。
 
 ## 按需深入
 
 [插件开发](../reference/plugin-development.md)。只在本次修改涉及相应契约时阅读。
+
+### wechat_dev 可选插件
+
+wechat_dev 通过随包 Node bridge 和明确准备的官方 miniprogram-automator0.12.1 提供26个模拟器动作，使用 ordinary process.OwnedProcessSession 库；核心和默认依赖不含 SDK。配置资源/页面上下文/工具/编写贡献/文件图片JSON失败 handler 均属本插件。attach 仅 AppID+页身份/root_verified=false；官方 agent-start 与独立私有准备根组合才允许定向关自有窗口。存储前缀、静态 allowlisted mock、过期句柄、有限观察/日志/完整截图及累计 WRITE UNKNOWN 诊断见 [wechat_dev README](../../plugins/wechat_dev/README.md)。跨角色共享 borrowed 实例不声明事务隔离，host成功持久化后的自动资源清理只能警告，建议显式restore/disconnect。实际工具账号/真机/后端权限门与代码交付区分。普通进程库增量API复用既有tree ownership，原3动作与run_command不变，详见processREADME。
+
+### DevOps 组合与测试边界
+
+process/ssh/baota_dashboard/wordpress/uniapp/wechat_dev 六个可选 API v1 包注册135个独立动作（3/13/33/53/5/28）。[三份组合步骤](../../examples/devops/README.md)通过 ctx.call 与 JSON 结果组合，并把文件/截图/日志/报告显式纳入 ctx.result(outputs=...)；不传连接对象，不调用模型，不自动安装工具。失败不返回推测成功报告，先前已提交步骤输出与未返回的当前 StepResult 区分。
+
+映射依实际普通库消费登记 wordpress→process/ssh、uniapp→process、wechat_dev→process；changed 选择沿反向闭包定位消费者。examples.devops 快速目标验证真实 worker/registered actions 和受控协议路径；WordPress/uniapp/微信外部工具目标在 browser_targets 通道显式 opt-in，无模块/方法重复映射。注册/schema 检查与完整外部建站、真实数据库、真机或公网验收分别报告；参见 [测试规则](../testing.md)。
+
+六插件整合修复保留宿主跨步骤缓存语义：WeChat 每次动作/活跃页面上下文迁移当前 attempt/context，拒绝 transport 秘密策略变化与已关闭会话复活；uniapp 公共动作迁移 project owner。两者只在 last-owner 离开后剪除历史 journal，保留 peer 证据，微信失败 payload 在清理/prune 前持有当前记录。WordPress install_theme/install_plugin/import_media 消费配置根校验后的 canonical absolute source，site cwd 不再改变相对源含义。原生 quarantine/ownership、既有133动作及默认依赖接口不变；本轮定向验证与待限定复审状态见当前交付记录。
+
+微信 CI 增量：wechat_dev.preview/upload 使用独立可选 wechat_release_config 与准备好的 miniprogram-ci2.1.48，无模拟器资源依赖；私钥由逻辑引用经 stdin 传入。完整清单、独立字节副本与 PNG/JPEG 二维码 handler 保障发布产物身份；失败 hook 保留已生成二维码。uniapp.check_artifact 新增兼容字段 output_path；旧输入、动作及 API v1 不变。组合要求确认当前模拟器工程根（运行时 root_verified 仍为 false），详见 [预览组合](../../examples/devops/README.md#构建自测与预览二维码)。真实微信云端发布未验证。
