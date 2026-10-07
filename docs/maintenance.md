@@ -16,6 +16,7 @@
 | 插件契约、Playwright/OCR/TiDB/utility | [插件](modules/plugins.md) | plugins/sdk.py、registry.py；仓库根 plugins/ 下对应插件 | shared.contracts、plugins.playwright、plugins.ocr、plugins.tidb、plugins.utility |
 | CLI/HTTP 操作路由或整体依赖边界 | [架构](architecture.md)及受影响模块 | __main__.py；application/operations.py、service.py；infrastructure/http.py | 用 --changed 预览实际消费者 |
 | 打包、安装或启动 | [交付与运行](deployment.md) | pyproject.toml；packaging/windows/；scripts/build_windows.ps1 | 按受影响平台验证，见 testing.md |
+| DevOps 组合步骤、跨插件结果保存 | [插件](modules/plugins.md)及[组合示例](../examples/devops/README.md) | examples/devops/；infrastructure/worker.py 既有结果契约 | examples.devops |
 | 测试选择器或模块映射 | [测试规则](testing.md) | scripts/test_modules.py；tests/module-map.json | shared.testing |
 | 文档、协作规则 | [协作方法](ai-operating-model.md) | AGENTS.md、本索引及受影响模块文档 | 仅工程与链接检查 |
 

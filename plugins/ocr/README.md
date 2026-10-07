@@ -1,6 +1,6 @@
 # 本地图片验证码插件
 
-独立 `ocr` 插件提供 `ocr.recognize`，内嵌本机 CPU OCR 服务，不要求 API Key、GPU 或另开 HTTP 服务；识别时不联网。使用 [ddddocr](https://github.com/sml2h3/ddddocr) 1.6.1 随包模型、ONNX Runtime 1.20.1，OpenCV 固定 4.11.0.86 以使用当前平台预编译包、避免源码构建。固定版本兼顾当前 macOS 13 / Python 3.13；Windows 10 x64 实机与免安装包依赖尚待验证。
+独立 `ocr` 插件提供 `ocr.recognize`，内嵌本机 CPU OCR 服务，不要求 API Key、GPU 或另开 HTTP 服务；识别时不联网。使用 [ddddocr](https://github.com/sml2h3/ddddocr) 1.6.1 随包模型；Python 3.14+ 使用 ONNX Runtime 1.30.0，较旧 Python 保留 1.20.1，以兼顾 macOS 13 / Python 3.13 环境。1.30.0 的 macOS ARM64 预编译包要求 macOS 14+。OpenCV 固定 4.11.0.86 以使用当前平台预编译包、避免源码构建。本次 Python 3.14 依赖升级尚未执行安装或识别验证；Windows 10 x64 实机与免安装包依赖亦尚待验证。
 
 ## 启动与使用
 

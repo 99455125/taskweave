@@ -1,0 +1,6 @@
+{
+  "name": "taskweave-wechat-release",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {"miniprogram-ci": "2.1.48"}
+}

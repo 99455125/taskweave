@@ -696,6 +696,19 @@
       ],
       "browser_targets": []
     },
+    "plugins.process": {
+      "source_globs": [
+        "plugins/process/**"
+      ],
+      "targets": [
+        "tests.test_process",
+        "tests.test_devops_discovery"
+      ],
+      "depends_on": [
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
     "plugins.utility": {
       "source_globs": [
         "plugins/utility/src/taskweave_utility/__init__.py"
@@ -742,6 +755,104 @@
       ],
       "depends_on": [],
       "browser_targets": []
+    },
+    "plugins.ssh": {
+      "source_globs": [
+        "plugins/ssh/**"
+      ],
+      "targets": [
+        "tests.test_ssh",
+        "tests.test_devops_discovery"
+      ],
+      "depends_on": [
+        "shared.contracts",
+        "plugins.process"
+      ],
+      "browser_targets": []
+    },
+    "plugins.baota_dashboard": {
+      "source_globs": [
+        "plugins/baota_dashboard/**"
+      ],
+      "targets": [
+        "tests.test_baota_dashboard",
+        "tests.test_devops_discovery"
+      ],
+      "depends_on": [
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "plugins.wordpress": {
+      "source_globs": [
+        "plugins/wordpress/**"
+      ],
+      "targets": [
+        "tests.test_wordpress",
+        "tests.test_devops_discovery"
+      ],
+      "depends_on": [
+        "shared.contracts",
+        "plugins.process",
+        "plugins.ssh"
+      ],
+      "browser_targets": [
+        "tests.test_wordpress_integration"
+      ]
+    },
+    "plugins.uniapp": {
+      "source_globs": [
+        "plugins/uniapp/**"
+      ],
+      "targets": [
+        "tests.test_uniapp",
+        "tests.test_devops_discovery"
+      ],
+      "depends_on": [
+        "shared.contracts",
+        "plugins.process"
+      ],
+      "browser_targets": [
+        "tests.test_uniapp_tools"
+      ]
+    },
+    "plugins.wechat_dev": {
+      "source_globs": [
+        "plugins/wechat_dev/**"
+      ],
+      "targets": [
+        "tests.test_wechat_dev",
+        "tests.test_wechat_release",
+        "tests.test_devops_discovery"
+      ],
+      "depends_on": [
+        "shared.contracts",
+        "plugins.process"
+      ],
+      "browser_targets": [
+        "tests.test_wechat_dev_tools"
+      ]
+    },
+    "examples.devops": {
+      "source_globs": [
+        "examples/devops/**"
+      ],
+      "targets": [
+        "tests.test_devops_workflows.DevopsWorkflowTests"
+      ],
+      "depends_on": [
+        "plugins.process",
+        "plugins.ssh",
+        "plugins.baota_dashboard",
+        "plugins.wordpress",
+        "plugins.uniapp",
+        "plugins.wechat_dev",
+        "plugins.playwright",
+        "plugins.tidb"
+      ],
+      "browser_targets": [
+        "tests.test_devops_workflows.DevopsControlledBrowserTests"
+      ]
     }
   }
 }
