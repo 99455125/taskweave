@@ -82,6 +82,24 @@ class RunInputValidationTests(unittest.TestCase):
             self.assertTrue(state.dialog.value)
         self.in_client(scenario)
 
+    def test_submit_and_validation_use_draft_after_control_handles_are_removed(self):
+        async def scenario():
+            dialog, state, entries, forms, identity, controller, run = self.input_fixture()
+            await dialog.show(run)
+            await self.open_entry(entries)
+            form = forms.return_value
+            form.task_form.controls['org'][1].value = 'ordinary draft'
+            form.task_form.controls.clear()
+            form.step_form.controls.clear()
+            form.task_values = lambda: self.fail('read form at submit')
+            form.step_values = lambda: self.fail('read form at submit')
+            submit = next(el for el in state.dialog.descendants() if getattr(el, 'text', None) == '提交输入并继续')
+            await submit._test_click()
+            self.assertEqual(controller.call.await_args_list[0].kwargs['inputs'], {'org': 'ordinary draft'})
+            self.assertFalse(state.dialog.value)
+            self.assertEqual(state.drafts, {})
+        self.in_client(scenario)
+
     def test_slow_double_submit_writes_and_resumes_only_once(self):
         async def scenario():
             dialog, state, entries, forms, identity, controller, run = self.input_fixture()
@@ -149,8 +167,15 @@ class RunInputValidationTests(unittest.TestCase):
         async def build(*args, **kwargs):
             task_form = ValueForm(schema)
             step_form = ValueForm(step['input_schema'])
-            form = SimpleNamespace(task_form=task_form, step_form=step_form,
-                task_values=task_form.values, step_values=step_form.values,
+            from taskweave.presentation.debug import TrialInputDraft
+            from taskweave.desktop.components.trial_inputs import _watch_input_scope
+            draft = TrialInputDraft()
+            draft.task.configure(schema, {})
+            draft.step.configure(step['input_schema'], {})
+            _watch_input_scope(task_form, draft.task)
+            _watch_input_scope(step_form, draft.step)
+            form = SimpleNamespace(task_form=task_form, step_form=step_form, input_draft=draft,
+                task_values=draft.task.values, step_values=draft.step.values,
                 apply_task_values=lambda values: _apply_draft(task_form, values),
                 apply_step_values=lambda values: _apply_draft(step_form, values))
             forms.return_value = form

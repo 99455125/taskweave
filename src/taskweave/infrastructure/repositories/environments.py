@@ -1,11 +1,11 @@
 """SQLite persistence for execution environments and their history links."""
 
 from taskweave.core.validation import TaskError, dumps
-from taskweave.infrastructure.storage import uid
+from taskweave.infrastructure.sqlite_storage import SQLiteStorage, uid
 
 
 class EnvironmentRepository:
-    def __init__(self, store):
+    def __init__(self, store: SQLiteStorage):
         self.store = store
 
     def save_environment(self, name, public_config, secret_refs=None, environment_id=None, descriptions=None):

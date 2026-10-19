@@ -10,7 +10,9 @@ from taskweave.core.validation import TaskError
 from taskweave.desktop.forms import SchemaEditor
 from taskweave.desktop.components.organization import CategoryManager
 
-_ORGANIZATION_UNSET = object()
+from taskweave.presentation.catalog import CatalogFilter, filter_tasks
+from taskweave.presentation.tasks import TaskOrganization, UNSET as _ORGANIZATION_UNSET
+from taskweave.presentation.task_import import TaskImportSession, TASK_IMPORT_LIMIT_BYTES
 
 
 def document_text(value):
@@ -32,21 +34,6 @@ def run_status_label(status):
             "PAUSED": "已暂停", "INTERRUPTED": "已中断", "CANCELLED": "已取消", "PENDING": "等待执行"}.get(status, "未知状态")
 
 
-def filter_tasks(tasks, query, favorite=None, category_id=None):
-    query = (query or "").strip().casefold()
-    if not query:
-        visible = list(tasks)
-    else:
-        visible = [
-        task for task in tasks
-        if query in (task.get("name") or "").casefold()
-        or query in (task.get("description") or "").casefold()
-        ]
-    if favorite is True:
-        visible = [task for task in visible if task.get("is_favorite")]
-    if category_id:
-        visible = [task for task in visible if task.get("category_id") == category_id]
-    return visible
 
 
 class TasksPage(Page):
@@ -54,37 +41,149 @@ class TasksPage(Page):
 
     WORKSPACE_TABS = ("overview", "steps", "execution_history", "debug_history")
 
+    @property
+    def search_query(self): return self.catalog_filter.query
+    @search_query.setter
+    def search_query(self, value): self.catalog_filter.query = value
+
+    # Legacy view hooks remain explicit adapters; production composition uses narrow panels.
+    @property
+    def on_runs_cleared(self): return self.lifecycle.runs_cleared
+    @on_runs_cleared.setter
+    def on_runs_cleared(self, value):
+        from dataclasses import replace
+        self.lifecycle = replace(self.lifecycle, runs_cleared=value)
+
+    @property
+    def on_task_deleted(self): return self.lifecycle.deleted
+    @on_task_deleted.setter
+    def on_task_deleted(self, value):
+        from dataclasses import replace
+        self.lifecycle = replace(self.lifecycle, deleted=value)
+
+    @property
+    def before_task_update(self): return self.lifecycle.before_update
+    @before_task_update.setter
+    def before_task_update(self, value):
+        from dataclasses import replace
+        self.lifecycle = replace(self.lifecycle, before_update=value)
+
+    @property
+    def after_task_update(self): return self.lifecycle.after_update
+    @after_task_update.setter
+    def after_task_update(self, value):
+        from dataclasses import replace
+        self.lifecycle = replace(self.lifecycle, after_update=value)
+
+    @property
+    def save_step(self): return self.editor_panel.save
+    @save_step.setter
+    def save_step(self, value):
+        from dataclasses import replace
+        self.editor_panel = replace(self.editor_panel, save=value)
+
+    @property
+    def render_step_details(self): return self.editor_panel.render
+    @render_step_details.setter
+    def render_step_details(self, value):
+        from dataclasses import replace
+        self.editor_panel = replace(self.editor_panel, render=value)
+
+    @property
+    def render_execution_history(self): return self.history_panels.execution
+    @render_execution_history.setter
+    def render_execution_history(self, value):
+        from dataclasses import replace
+        self.history_panels = replace(self.history_panels, execution=value)
+
+    @property
+    def render_debug_history(self): return self.history_panels.debug
+    @render_debug_history.setter
+    def render_debug_history(self, value):
+        from dataclasses import replace
+        self.history_panels = replace(self.history_panels, debug=value)
+
+    @property
+    def open_task_execution(self): return self.history_panels.open_execution
+    @open_task_execution.setter
+    def open_task_execution(self, value):
+        from dataclasses import replace
+        self.history_panels = replace(self.history_panels, open_execution=value)
+
+    @property
+    def prepare_step_leave(self): return self.editor_panel.prepare_leave
+    @prepare_step_leave.setter
+    def prepare_step_leave(self, value):
+        from dataclasses import replace
+        self.editor_panel = replace(self.editor_panel, prepare_leave=value)
+
+    @property
+    def discard_step_for_tab(self): return self.editor_panel.discard_for_tab
+    @discard_step_for_tab.setter
+    def discard_step_for_tab(self, value):
+        from dataclasses import replace
+        self.editor_panel = replace(self.editor_panel, discard_for_tab=value)
+
+    @property
+    def create_first_step_callback(self): return self.editor_panel.create_first
+    @create_first_step_callback.setter
+    def create_first_step_callback(self, value):
+        from dataclasses import replace
+        self.editor_panel = replace(self.editor_panel, create_first=value)
+
+    @property
+    def workspace(self):
+        from taskweave.presentation.workspace import TaskWorkspace
+        if not hasattr(self, '_workspace_state'):
+            self._workspace_state = TaskWorkspace()
+        return self._workspace_state
+
+    @property
+    def workspace_tab(self): return self.workspace.tab
+    @workspace_tab.setter
+    def workspace_tab(self, value): self.workspace.tab = value
+
+    @property
+    def workspace_generation(self): return self.workspace.generation
+    @workspace_generation.setter
+    def workspace_generation(self, value): self.workspace.generation = value
+
+    @property
+    def workspace_switch_generation(self): return self.workspace.switch_generation
+    @workspace_switch_generation.setter
+    def workspace_switch_generation(self, value): self.workspace.switch_generation = value
+
     def __init__(self, controller, button, navigate, repaint, *, on_runs_cleared=None, on_task_deleted=None, before_task_update=None, after_task_update=None,
                  task_id=None, step_id=None, page_generation=None, save_step=None, render_step_details=None,
                  render_execution_history=None, render_debug_history=None, open_task_execution=None,
-                 prepare_step_leave=None, discard_step_for_tab=None, create_first_step=None, page_identity=None):
+                 prepare_step_leave=None, discard_step_for_tab=None, create_first_step=None, page_identity=None,
+                 editor_panel=None, history_panels=None, lifecycle=None):
+        from taskweave.desktop.task_panels import TaskEditorPanel, TaskHistoryPanels, TaskLifecycle
+        from taskweave.presentation.tasks import TaskCommands
+        self.commands = TaskCommands(controller.call)
+        self.editor_panel = editor_panel or TaskEditorPanel(
+            render_step_details or _noop, save_step or _noop, prepare_step_leave,
+            discard_step_for_tab, create_first_step)
+        self.history_panels = history_panels or TaskHistoryPanels(
+            render_execution_history or _noop, render_debug_history or _noop, open_task_execution or _noop)
+        self.lifecycle = lifecycle or TaskLifecycle(on_runs_cleared or _noop, on_task_deleted or _noop,
+                                                   before_task_update or _noop, after_task_update or _noop)
         self.controller = controller
         self.button = button
         self.navigate = navigate
         self.repaint = repaint
-        self.on_runs_cleared = on_runs_cleared or _noop
-        self.on_task_deleted = on_task_deleted or _noop
-        self.before_task_update = before_task_update or _noop
-        self.after_task_update = after_task_update or _noop
-        self.search_query = ""
+        self.catalog_filter = CatalogFilter()
         self.task_id = task_id or (lambda: None)
         self.step_id = step_id or (lambda: None)
         self.page_generation = page_generation or (lambda: 0)
         self.page_identity = page_identity or (lambda: ("tasks", self.page_generation()))
-        self.save_step = save_step or _noop
-        self.render_step_details = render_step_details or _noop
-        self.render_execution_history = render_execution_history or _noop
-        self.render_debug_history = render_debug_history or _noop
-        self.open_task_execution = open_task_execution or _noop
-        self.prepare_step_leave = prepare_step_leave
-        self.discard_step_for_tab = discard_step_for_tab
-        self.create_first_step_callback = create_first_step
         self.workspace_tab = "overview"
         self.workspace_generation = 0
         self.workspace_switch_generation = 0
         self.workspace_views = {}
-        self.organization_by_task_id = {}
-        self.organization_locks = {}
+        self.organization = TaskOrganization(controller.call, self.page_identity)
+        self.organization_by_task_id = self.organization.records
+        self.organization_locks = self.organization.locks
         self._refresh_organization_controls = None
         self.category_manager = CategoryManager(controller, button, repaint, self.refresh_organization_controls)
 
@@ -127,17 +226,13 @@ class TasksPage(Page):
             search = ui.input("搜索任务", value=self.search_query, placeholder="搜索名称或说明").props(
                 "clearable debounce=250 prepend-icon=search"
             ).classes("grow min-w-72")
-            category_filter = ui.select(filter_options, value="", label="分类筛选").classes("w-48")
+            self.catalog_filter.reset_category()
+            category_filter = ui.select(filter_options, value=self.catalog_filter.category, label="分类筛选").classes("w-48")
             result_count = ui.label().classes("text-sm text-gray-500 whitespace-nowrap")
         task_list_area = ui.column().classes("w-full gap-4")
 
         def render_tasks():
-            self.search_query = search.value or ""
-            visible = filter_tasks(
-                tasks, self.search_query,
-                favorite=True if category_filter.value == "favorites" else None,
-                category_id=category_filter.value if category_filter.value not in {"", "favorites"} else None,
-            )
+            visible = self.catalog_filter.tasks(tasks)
             result_count.text = (
                 f"共 {len(tasks)} 个任务"
                 if not self.search_query.strip()
@@ -176,8 +271,14 @@ class TasksPage(Page):
                             self.button("清理运行", lambda t=task: self.clear_task_runs(t))
                             self.button("", lambda t=task: self.delete_task(t), flat=True).props("icon=delete round dense text-color=red-7 aria-label=删除").classes("tw-danger").tooltip("删除任务")
 
-        search.on_value_change(lambda _: render_tasks())
-        category_filter.on_value_change(lambda _: render_tasks())
+        def search_changed(event):
+            self.search_query = event.value or ""
+            render_tasks()
+        def category_changed(event):
+            self.catalog_filter.category = event.value or ""
+            render_tasks()
+        search.on_value_change(search_changed)
+        category_filter.on_value_change(category_changed)
         render_tasks()
         expected_identity = self.page_identity()
 
@@ -195,59 +296,37 @@ class TasksPage(Page):
             category_options.clear()
             category_options.update({"": "未分类"} | {item["category_id"]: item["name"] for item in latest_categories})
             filter_options = {"": "全部任务", "favorites": "仅收藏"} | {item["category_id"]: item["name"] for item in latest_categories}
-            selected = category_filter.value
-            category_filter.set_options(filter_options, value=selected if selected in filter_options else "")
+            self.catalog_filter.retain_categories(filter_options)
+            category_filter.set_options(filter_options, value=self.catalog_filter.category)
             render_tasks()
             return True
 
         self._refresh_organization_controls = refresh_task_list_organization
 
     def _remember_task_organizations(self, tasks):
-        for task in tasks:
-            self.organization_by_task_id[task["task_id"]] = {
-                "is_favorite": bool(task.get("is_favorite")),
-                "category_id": task.get("category_id"),
-            }
+        self.organization.remember(tasks)
 
     def _task_organization(self, task):
-        return self.organization_by_task_id.setdefault(task["task_id"], {
-            "is_favorite": bool(task.get("is_favorite")), "category_id": task.get("category_id"),
-        })
+        return self.organization.metadata(task)
 
     async def set_organization(self, task, *, favorite=_ORGANIZATION_UNSET, category_id=_ORGANIZATION_UNSET,
                                toggle_favorite=False, favorite_control=None):
-        task_id = task["task_id"]
         identity = self.page_identity()
-        lock = self.organization_locks.setdefault(task_id, asyncio.Lock())
-        async with lock:
-            if identity != self.page_identity():
-                return False
-            current = self._task_organization(task).copy()
-            if toggle_favorite:
-                current["is_favorite"] = not current["is_favorite"]
-            elif favorite is not _ORGANIZATION_UNSET:
-                current["is_favorite"] = bool(favorite)
-            if category_id is not _ORGANIZATION_UNSET:
-                current["category_id"] = category_id
-            try:
-                await self.controller.call(
-                    "organization.metadata.set", entity="task", entity_id=task_id,
-                    is_favorite=current["is_favorite"], category_id=current["category_id"],
-                )
-            except Exception as exc:
-                if identity == self.page_identity() and (favorite_control is None or not favorite_control.is_deleted):
-                    ui.notify(f"收藏或分类保存失败：{exc}", type="negative")
-                return False
-            self.organization_by_task_id[task_id] = current
-            task.update(current)
-            if identity != self.page_identity():
-                return True
-            if favorite_control is not None and not favorite_control.is_deleted:
-                favorite_control.text = "★" if current["is_favorite"] else "☆"
-                favorite_control.update()
-            if self._refresh_organization_controls:
-                await self._refresh_organization_controls()
-            return True
+        try:
+            result = await self.organization.update(task, favorite=favorite, category_id=category_id,
+                                                    toggle_favorite=toggle_favorite)
+        except Exception as exc:
+            if identity == self.page_identity() and (favorite_control is None or not favorite_control.is_deleted):
+                ui.notify(f"收藏或分类保存失败：{exc}", type="negative")
+            return False
+        if not result.current:
+            return result.saved
+        if favorite_control is not None and not favorite_control.is_deleted:
+            favorite_control.text = "★" if result.metadata['is_favorite'] else "☆"
+            favorite_control.update()
+        if self._refresh_organization_controls:
+            await self._refresh_organization_controls()
+        return result.saved
 
     async def refresh_organization_controls(self):
         if self._refresh_organization_controls:
@@ -270,67 +349,55 @@ class TasksPage(Page):
         return await self.navigate("tasks", task_id=task["task_id"])
 
     async def create_first_step(self, task_id):
-        if not self.create_first_step_callback or self.task_id() != task_id:
+        if not self.editor_panel.create_first or self.task_id() != task_id:
             return False
         previous_tab = self.workspace_tab
         self.workspace_tab = "steps"
-        result = await self.create_first_step_callback(task_id)
+        result = await self.editor_panel.create_first(task_id)
         if result is False and self.task_id() == task_id:
             self.workspace_tab = previous_tab
         return result
 
     async def select_workspace_tab(self, value, tabs):
-        if value not in self.WORKSPACE_TABS:
-            return False
-        # The step editor owns its own guarded route lifecycle. Route into it
-        # before rendering the steps panel so async callbacks retain the same
-        # identity checks as explicit “编辑步骤” navigation.
-        if value == "steps" and self.page_identity()[0] != "editor":
-            previous = self.workspace_tab
-            self.workspace_tab = value
+        from taskweave.presentation.workspace import TaskTabTransition
+
+        transition = TaskTabTransition(self.workspace, value, page=self.page_identity()[0])
+        identity = self._workspace_identity()
+        action = transition.begin()
+        if action.kind == "route_editor":
             try:
-                navigated = await self.navigate("editor", task_id=self.task_id())
+                accepted = await self.navigate("editor", task_id=self.task_id())
             except Exception:
-                self.workspace_tab = previous
-                if not tabs.is_deleted:
-                    tabs.value = previous
+                action = transition.route_result(False)
+                if action.kind == "restore_tab" and not tabs.is_deleted:
+                    tabs.value = action.value
                     tabs.update()
                 raise
-            if navigated is False:
-                self.workspace_tab = previous
-                if not tabs.is_deleted:
-                    tabs.value = previous
-                    tabs.update()
-            return navigated
-        self.workspace_switch_generation += 1
-        switch_generation = self.workspace_switch_generation
-        previous = self.workspace_tab
-        identity = self._workspace_identity()
-        if previous == "steps" and value != "steps":
+            action = transition.route_result(accepted)
+        elif action.kind == "leave_editor":
             try:
-                decision = await self.prepare_step_leave() if self.prepare_step_leave else "save"
-                if self.prepare_step_leave is None:
-                    await self.save_step()
+                decision = await self.editor_panel.prepare_leave() if self.editor_panel.prepare_leave else "save"
+                if self.editor_panel.prepare_leave is None:
+                    await self.editor_panel.save()
             except Exception as exc:
-                if (switch_generation != self.workspace_switch_generation
+                if (transition.token != self.workspace_switch_generation
                         or not self._workspace_current(identity)):
                     return False
                 ui.notify(f"步骤保存失败，仍停留在步骤详情：{exc}", type="negative", timeout=8000)
                 decision = "stay"
-            if (switch_generation != self.workspace_switch_generation
-                    or not self._workspace_current(identity)):
+            if not self._workspace_current(identity):
                 return False
-            if decision == "stay":
-                if not tabs.is_deleted and tabs.value != previous:
-                    tabs.value = previous
-                    tabs.update()
-                return False
-            if decision == "discard":
-                self.workspace_tab = value
-                if self.discard_step_for_tab:
-                    await self.discard_step_for_tab(value)
-                    return False
-        self.workspace_tab = value
+            action = transition.resolve(decision)
+        if action.kind == "done":
+            return action.value
+        if action.kind == "restore_tab":
+            if not tabs.is_deleted and tabs.value != action.value:
+                tabs.value = action.value
+                tabs.update()
+            return False
+        if action.kind == "discard_render" and self.editor_panel.discard_for_tab:
+            await self.editor_panel.discard_for_tab(value)
+            return False
         if not tabs.is_deleted and tabs.value != value:
             tabs.value = value
             tabs.update()
@@ -341,7 +408,7 @@ class TasksPage(Page):
             area.clear()
             with area:
                 await self._render_workspace_panel(value, identity)
-            if (switch_generation != self.workspace_switch_generation
+            if (transition.token != self.workspace_switch_generation
                     or not self._workspace_current(identity)):
                 return False
             self.workspace_loaded.add(value)
@@ -393,16 +460,13 @@ class TasksPage(Page):
                 search = ui.input("搜索任务", value=self.search_query, placeholder="搜索名称或说明").props(
                     "clearable debounce=250 prepend-icon=search"
                 ).classes("w-full")
-                category_filter = ui.select(filter_options, value="", label="任务范围").classes("w-full")
+                self.catalog_filter.reset_category()
+                category_filter = ui.select(filter_options, value=self.catalog_filter.category, label="任务范围").classes("w-full")
                 task_rows = ui.column().classes("w-full gap-2")
 
                 def render_task_rows():
-                    self.search_query = search.value or ""
                     task_rows.clear()
-                    selected_filter = category_filter.value
-                    visible = filter_tasks(tasks, self.search_query,
-                                           favorite=True if selected_filter == "favorites" else None,
-                                           category_id=selected_filter if selected_filter not in {"", "favorites"} else None)
+                    visible = self.catalog_filter.tasks(tasks)
                     with task_rows:
                         if not visible:
                             ui.label("没有匹配的任务").classes("text-sm text-gray-500")
@@ -419,8 +483,14 @@ class TasksPage(Page):
                                     ui.label(category).classes("tw-home-tag")
                                     ui.label(short_updated_at(row.get("updated_at") or row.get("created_at"))).classes("tw-home-task-meta")
                                     ui.label(f"{step_counts.get(row['task_id'], 0)} 个步骤").classes("tw-home-task-meta")
-                search.on_value_change(lambda _: render_task_rows())
-                category_filter.on_value_change(lambda _: render_task_rows())
+                def search_changed(event):
+                    self.search_query = event.value or ""
+                    render_task_rows()
+                def category_changed(event):
+                    self.catalog_filter.category = event.value or ""
+                    render_task_rows()
+                search.on_value_change(search_changed)
+                category_filter.on_value_change(category_changed)
                 render_task_rows()
 
                 expected_page_identity = self.page_identity()
@@ -443,8 +513,8 @@ class TasksPage(Page):
                     category_names.clear()
                     category_names.update({item["category_id"]: item["name"] for item in latest_categories})
                     options = {"": "全部任务", "favorites": "仅收藏"} | category_names
-                    selected = category_filter.value
-                    category_filter.set_options(options, value=selected if selected in options else "")
+                    self.catalog_filter.retain_categories(options)
+                    category_filter.set_options(options, value=self.catalog_filter.category)
                     render_task_rows()
                     return True
 
@@ -463,7 +533,7 @@ class TasksPage(Page):
                         favorite_control_ref["control"] = self.button("★" if self._task_organization(task)["is_favorite"] else "☆",
                                                                       toggle_task_favorite, flat=True)
                         self.button("编辑步骤", lambda: self.open_task(task), flat=True)
-                        self.button("新建执行", lambda: self.open_task_execution(task_id), primary=True)
+                        self.button("新建执行", lambda: self.history_panels.open_execution(task_id), primary=True)
                         with ui.button("更多", icon="more_horiz").props("flat"):
                             with ui.menu():
                                 ui.menu_item("任务配置", lambda: self.task_dialog(task))
@@ -571,9 +641,9 @@ class TasksPage(Page):
                             ui.label("暂无调试记录").classes("text-sm text-gray-500")
             return
         if name == "steps":
-            await self.render_step_details()
+            await self.editor_panel.render()
             return
-        callback = self.render_execution_history if name == "execution_history" else self.render_debug_history
+        callback = self.history_panels.execution if name == "execution_history" else self.history_panels.debug
         await callback(task_id)
 
     async def copy_task(self, task):
@@ -582,18 +652,10 @@ class TasksPage(Page):
 
     async def save_task(self, task, name, input_schema, description, *, before_update=None):
         if not name.strip():
-            raise TaskError("FORM_INVALID", "请填写任务名称")
-        if task:
-            if before_update:
-                await before_update()
-            await self.controller.call(
-                "task.update", task_id=task["task_id"], name=name.strip(),
-                input_schema=input_schema, description=description,
-            )
-            return task
-        return await self.controller.call(
-            "task.create", name=name.strip(), input_schema=input_schema, description=description,
-        )
+            raise TaskError('FORM_INVALID', '请填写任务名称')
+        if task and before_update:
+            await before_update()
+        return await self.commands.save(task, name, input_schema, description)
 
     async def create_and_open_task(self, name, input_schema, description):
         saved = await self.save_task(None, name, input_schema, description)
@@ -627,19 +689,46 @@ class TasksPage(Page):
         dialog.open()
 
     async def import_task_dialog(self):
+        draft = TaskImportSession(lambda package: self.controller.call("task.import", package=package))
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-4xl"):
             ui.label("导入任务").classes("text-lg")
-            ui.label("粘贴任务 JSON 创建独立副本。已有任务导出会恢复每步状态；AI 生成任务的步骤均为待确认。请先启用所需插件。")
-            source = ui.textarea("任务 JSON").classes("w-full").props('placeholder="粘贴导出的任务 JSON"')
+            ui.label("导入任务 JSON 创建独立副本，保留步骤对应的素材及预览。已有任务导出会恢复每步状态；AI 生成任务的步骤均为待确认。请先启用所需插件。")
+            mode = ui.toggle({'file': '选择 JSON 文件', 'text': '粘贴 JSON'}, value='file')
+            mode.on_value_change(lambda event: setattr(draft, 'mode', event.value))
+            dialog.on('hide', draft.close)
+            with ui.column().classes('w-full').bind_visibility_from(mode, 'value', lambda value: value == 'file'):
+                status = ui.label('请选择任务 JSON 文件，最大 32 MiB。')
+
+                def clear_file():
+                    draft.clear_file()
+                    status.set_text('请选择任务 JSON 文件，最大 32 MiB。')
+
+                async def load_file(event):
+                    clear_file()
+                    try:
+                        token = draft.begin_file(event.file.size())
+                        content = await event.file.read()
+                        if not draft.accept_file(token, content):
+                            return
+                    except (UnicodeError, ValueError):
+                        if not dialog.is_deleted and dialog.value:
+                            status.set_text('文件无效：请选择不超过 32 MiB 的 UTF-8 JSON 文件。')
+                        return
+                    if dialog.is_deleted or not dialog.value:
+                        return
+                    status.set_text(f'已读取：{event.file.name}（{len(content) / 1024 / 1024:.2f} MiB），点击“导入为新任务”完成导入。')
+
+                ui.upload(label='任务 JSON 文件', auto_upload=True, max_files=1,
+                          max_file_size=TASK_IMPORT_LIMIT_BYTES, on_upload=load_file,
+                          on_rejected=clear_file).props('accept=".json,application/json"').classes('w-full').on('removed', clear_file)
+            source = ui.textarea("任务 JSON").classes("w-full").props('placeholder="仅粘贴小型任务；包含截图的任务请选择 JSON 文件"')
+            source.bind_visibility_from(mode, 'value', lambda value: value == 'text')
+
+            source.on_value_change(lambda event: setattr(draft, 'source', event.value))
 
             async def import_package():
-                if len(source.value or "") > 2 * 1024 * 1024:
-                    raise TaskError("TASK_PACKAGE_INVALID", "任务 JSON 超过 2MB")
-                try:
-                    package = json.loads(source.value or "")
-                except ValueError as exc:
-                    raise TaskError("TASK_PACKAGE_INVALID", "请粘贴有效 JSON") from exc
-                await self.controller.call("task.import", package=package)
+                if await draft.submit() is None:
+                    return
                 dialog.close()
                 await self.repaint()
                 ui.notify("任务已导入，步骤状态已按任务包恢复")
@@ -658,7 +747,7 @@ class TasksPage(Page):
                 ui.button("确认清理", on_click=lambda: dialog.submit(True)).props("outline color=negative")
         if await dialog:
             result = await self.controller.call("task.clear_runs", task_id=task["task_id"])
-            await self.on_runs_cleared(task["task_id"])
+            await self.lifecycle.runs_cleared(task["task_id"])
             ui.notify("已清理 " + str(result["deleted_runs"]) + " 条运行记录", type="positive")
             await self.repaint()
 
@@ -670,27 +759,33 @@ class TasksPage(Page):
                 ui.button("确认删除", on_click=lambda: dialog.submit(True)).props("color=negative")
         if await dialog:
             await self.controller.call("task.delete", task_id=task["task_id"])
-            await self.on_task_deleted(task["task_id"])
+            await self.lifecycle.deleted(task["task_id"])
             await self.repaint()
 
     async def task_dialog(self, task=None):
+        from taskweave.presentation.tasks import TaskDraft
         if task is not None:
             task = await self.controller.call("task.get", task_id=task["task_id"])
+        draft = TaskDraft(task)
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-3xl"):
             ui.label("任务配置" if task else "新建任务").classes("text-lg")
             name = ui.input("任务名称", value=task["name"] if task else "").classes("w-full")
             description = ui.textarea("说明", value=task["description"] if task else "").classes("w-full")
-            schema = SchemaEditor(json.loads(task["input_schema_json"]) if task else None)
+            schema = SchemaEditor(draft.schema_original)
+            name.on_value_change(lambda event: setattr(draft, 'name', event.value))
+            description.on_value_change(lambda event: setattr(draft, 'description', event.value))
+            schema.on_change = lambda: setattr(draft, 'schema_rows', schema.raw_rows())
+            schema.on_change()
 
             async def save():
                 saved = await self.save_task(
-                    task, name.value, schema.schema(), description.value,
-                    before_update=self.before_task_update if task else None,
+                    task, draft.name, draft.schema(), draft.description,
+                    before_update=self.lifecycle.before_update if task else None,
                 )
                 dialog.close()
                 if task:
-                    await self.after_task_update(saved)
-                    if self.before_task_update is _noop:
+                    await self.lifecycle.after_update(saved)
+                    if self.lifecycle.before_update is _noop:
                         await self.repaint()
                 else:
                     self.workspace_tab = "overview"

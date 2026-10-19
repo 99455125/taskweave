@@ -1,11 +1,14 @@
 """Executable acceptance example: step five reads step one from SQLite."""
 
-from taskweave.infrastructure.storage import uid
+from uuid import uuid4
+
+def uid():
+    return str(uuid4())
 from taskweave.core.validation import TaskError
 
 
 def run_demo(app):
-    task = app.repo.create_task("REQ-003 five-step database demo")
+    task = app.tasks.create("REQ-003 five-step database demo")
     task_id = task["task_id"]
     steps = []
     for i in range(5):
@@ -29,7 +32,7 @@ def run_demo(app):
                 }
             }
             sample = {"order_id": "ORD-1001"}
-        step = app.repo.save_step(
+        step = app.steps.save(
             task_id,
             {"name": f"Step {i + 1}", "step_content": source, "bindings": bindings},
         )
@@ -52,7 +55,7 @@ def run_demo(app):
     done = app.coordinator.wait(run["run_id"])
     if done["status"] != "SUCCEEDED":
         raise TaskError("DEMO_RUN_FAILED", str(done))
-    output = app.repo.read_output(run["run_id"], steps[4]["step_id"])
+    output = app.runs.output(run["run_id"], steps[4]["step_id"])
     return {
         "status": done["status"],
         "task_id": task_id,
@@ -60,6 +63,6 @@ def run_demo(app):
         "step_1_id": steps[0]["step_id"],
         "step_5_id": steps[4]["step_id"],
         "step_5_output": output,
-        "control_db": str(app.repo.path),
-        "task_db": str(app.repo.task_path(task_id)),
+        "control_db": str(app.storage.path),
+        "task_db": str(app.storage.task_path(task_id)),
     }

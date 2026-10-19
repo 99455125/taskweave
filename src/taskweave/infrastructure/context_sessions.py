@@ -8,8 +8,9 @@ import threading
 from taskweave.core.ports import Scope, StagedFile
 from taskweave.core.repositories import EnvironmentRepository, PlanRepositoryPort
 from taskweave.core.validation import TaskError
-from taskweave.infrastructure.storage import uid
-from taskweave.infrastructure.worker import PluginContext, Resources, list_plugin_context_targets, record_plugin_context
+from taskweave.infrastructure.sqlite_storage import uid
+from taskweave.infrastructure.resource_sessions import PluginContext, Resources
+from taskweave.infrastructure.worker import list_plugin_context_targets, record_plugin_context
 
 
 class _PlanFiles:

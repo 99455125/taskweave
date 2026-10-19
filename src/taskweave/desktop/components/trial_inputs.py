@@ -6,6 +6,7 @@ from nicegui import ui
 
 from taskweave.core.validation import TaskError
 from taskweave.desktop.forms import ValueForm
+from taskweave.presentation.debug import TrialInputDraft
 
 
 def _draft_edits(form, current=None):
@@ -77,6 +78,16 @@ def _validated_partial_values(form):
     return values
 
 
+def _watch_input_scope(form, scope):
+    for name, (_kind, control) in form.controls.items():
+        control.on_value_change(lambda event, field=name: scope.change(field, event.value))
+
+
+def _render_scope_values(form, scope):
+    for name, (_kind, control) in form.controls.items():
+        control.value = scope.raw.get(name)
+
+
 class TrialInputPanel:
     def __init__(self, controller, task_id, format_value):
         self.controller, self.task_id, self.format_value = controller, task_id, format_value
@@ -92,7 +103,8 @@ class TrialInputPanel:
             task_schema = json.loads(task["input_schema_json"])
         area = ui.column().classes("w-full gap-2")
         form = step_form = None
-        task_edits, step_edits = {}, {}
+        draft = TrialInputDraft()
+        task_edits, step_edits = draft.task.edits, draft.step.edits
         render_sequence = 0
 
         async def render_environment(selected, sequence):
@@ -118,9 +130,9 @@ class TrialInputPanel:
                         ui.label(f"{key} = {self.format_value(value)} · 环境{suffix}").classes("tw-code w-full")
                 with ui.expansion("任务变量 · 本次运行输入", icon="edit", value=bool(task_schema.get("required")) and focus in {None, "task"}).classes("w-full border rounded"):
                     form = ValueForm(task_schema, task_defaults)
-                    form.defaults = {key: control.value for key, (_, control) in form.controls.items()}
-                    _apply_draft(form, task_edits)
-                    _watch_draft(form, task_edits)
+                    draft.task.configure(task_schema, task_defaults)
+                    _render_scope_values(form, draft.task)
+                    _watch_input_scope(form, draft.task)
                     if readonly_other and focus != "task":
                         for _, control in form.controls.values():
                             control.disable()
@@ -133,16 +145,17 @@ class TrialInputPanel:
                     step_defaults = {key: spec["default"] for key, spec in editable.items() if "default" in spec}
                     step_base = {**task_values, **step_defaults}
                     step_form = ValueForm(step_schema, step_base)
-                    step_form.defaults = {key: control.value for key, (_, control) in step_form.controls.items()}
-                    _apply_draft(step_form, step_edits)
-                    _watch_draft(step_form, step_edits)
+                    draft.step.configure(step_schema, step_base)
+                    _render_scope_values(step_form, draft.step)
+                    _watch_input_scope(step_form, draft.step)
                     if readonly_other and focus != "step":
                         for _, control in step_form.controls.values():
                             control.disable()
 
                     def update_step_defaults(_):
                         try:
-                            step_form.apply_defaults({**env, **defaults, **form.values()})
+                            draft.step.update_defaults({**env, **defaults, **draft.task.values()})
+                            _render_scope_values(step_form, draft.step)
                         except TaskError:
                             return  # Incomplete JSON is a draft until submit.
 
@@ -176,6 +189,7 @@ class TrialInputPanel:
                                 except TaskError:
                                     source = f"前序结果 · {previous}（暂无可用结果）"
                         ui.label(f"{key} = {self.format_value(value)} · {source}").classes("tw-code w-full").style("max-height: 10rem; overflow: auto")
+            draft.set_environment(selected)
             return form
 
         stored_inputs = await self.controller.execution_inputs(run["run_id"]) if run else None
@@ -183,56 +197,58 @@ class TrialInputPanel:
         supplied_step = stored_inputs["steps"].get(current_step["step_id"], {}) if run else values
         await render_environment(environment.value or None, render_sequence)
         if supplied_task:
-            _apply_draft(form, supplied_task)
+            draft.task.apply(supplied_task)
+            _render_scope_values(form, draft.task)
         if supplied_step:
-            _apply_draft(step_form, supplied_step)
+            draft.step.apply(supplied_step)
+            _render_scope_values(step_form, draft.step)
 
         class TrialInputs:
+            input_draft = draft
+
             async def replace(_, selected, task_values, step_values):
                 nonlocal render_sequence
-                task_edits.clear()
-                task_edits.update(task_values or {})
-                step_edits.clear()
-                step_edits.update(step_values or {})
+                draft.task.replace_edits(task_values)
+                draft.step.replace_edits(step_values)
                 render_sequence += 1
                 await render_environment(selected, render_sequence)
 
             async def refresh(_, new_step, selected, task_values=None, step_values=None):
                 nonlocal current_step, render_sequence
                 current_step = new_step
-                task_edits.clear()
-                task_edits.update(task_values or {})
-                step_edits.clear()
-                step_edits.update(step_values or {})
+                draft.task.replace_edits(task_values)
+                draft.step.replace_edits(step_values)
                 render_sequence += 1
                 await render_environment(selected, render_sequence)
 
             def values(_):
-                return {**form.values(), **step_form.values()}
+                return draft.values()
 
             def task_values(_):
-                return form.values()
+                return draft.task.values()
 
             def step_values(_):
-                return step_form.values()
+                return draft.step.values()
 
             def task_draft_values(_):
-                return _validated_partial_values(form)
+                return draft.task.values(partial=True)
 
             def step_draft_values(_):
-                return _validated_partial_values(step_form)
+                return draft.step.values(partial=True)
 
             def task_edits(_):
-                return _draft_edits(form, task_edits)
+                return dict(draft.task.edits)
 
             def step_edits(_):
-                return _draft_edits(step_form, step_edits)
+                return dict(draft.step.edits)
 
             def apply_task_values(_, values):
-                _apply_draft(form, values)
+                draft.task.apply(values)
+                _render_scope_values(form, draft.task)
 
             def apply_step_values(_, values):
-                _apply_draft(step_form, values)
+                draft.step.apply(values)
+                _render_scope_values(step_form, draft.step)
 
             @property
             def task_form(_):
@@ -249,8 +265,7 @@ class TrialInputPanel:
             if getattr(environment, "_tw_skip_change", False):
                 environment._tw_skip_change = False
                 return
-            _capture_draft(form, task_edits)
-            _capture_draft(step_form, step_edits)
+            draft.set_environment(event.value or None)
             render_sequence += 1
             await render_environment(event.value or None, render_sequence)
 

@@ -1,5 +1,6 @@
 """AI is an optional authoring service; proposals never execute or overwrite drafts."""
 
+from taskweave.core.run_ports import AuthoringRunReader
 import asyncio
 from dataclasses import asdict, replace
 import json
@@ -9,15 +10,15 @@ from taskweave.core.validation import (
 )
 from taskweave.core.ports import Scope
 from taskweave.infrastructure.privacy import redact, redact_ai_payload
-from taskweave.infrastructure.storage import uid, Results
-from taskweave.infrastructure.worker import PluginContext, Resources
+from taskweave.infrastructure.sqlite_storage import uid
+from taskweave.core.authoring_ports import AuthoringResourceFactory
 from taskweave.application.prompts import (
     DOMAIN_RULES, EXECUTABLE_STEP_RULES, STEP_CONTENT_RULES,
     STEP_DESCRIPTION_RULES, STEP_RESPONSE_RULES, WEB_CHAT_RULES,
     WEB_CHAT_CODE_RULES, REPAIR_RULES, CAPABILITY_CORRECTION,
 )
 from taskweave.application.ai_requests import web_chat_export, ensure_limit, utf8_size
-from taskweave.core.repositories import EnvironmentRepository, ResultRepository, RunRepository, StepRepository, TaskRepository
+from taskweave.core.repositories import EnvironmentRepository, ResultRepository, StepRepository, TaskRepository
 
 def last_dialogue_rounds(history, count=2):
     if count == 0:
@@ -92,13 +93,24 @@ def _context_items(contexts):
 
 
 class Authoring:
-    def __init__(self, tasks: TaskRepository, steps: StepRepository, environments: EnvironmentRepository, runs: RunRepository, results: ResultRepository, home, registry, model=None, request_limit=None, redact_for_ai=None):
+    def __init__(self, tasks: TaskRepository, steps: StepRepository, environments: EnvironmentRepository, runs: AuthoringRunReader, results: ResultRepository, home, registry, model=None, request_limit=None, redact_for_ai=None, *, resource_sessions: AuthoringResourceFactory):
         self.tasks, self.steps, self.environments = tasks, steps, environments
         self.runs, self.results, self.home = runs, results, home
         self.registry, self.model = registry, model
         self.request_limit = request_limit or (lambda: 2048 * 1024)
         self.redact_for_ai = redact_for_ai or (lambda: True)
         self.conversations = {}
+        self.resource_sessions = resource_sessions
+
+    def _resource_session(self, step, step_id, environment_id):
+        environment, secret_refs = self.environments.environment(environment_id)
+        parameters = {key: spec["default"] for key, spec in
+                      json.loads(self.tasks.task(step["task_id"])["input_schema_json"])
+                      .get("properties", {}).items() if "default" in spec}
+        return self.resource_sessions(
+            scope=Scope(step["task_id"], uid(), step_id, uid()), registry=self.registry,
+            environment=environment, secret_refs=secret_refs, task_parameters=parameters,
+        )
 
     def _outbound(self, value):
         return redact_ai_payload(value) if self.redact_for_ai() else value
@@ -329,22 +341,8 @@ class Authoring:
             ensure_limit(utf8_size(messages), self.request_limit())
             logging.getLogger(__name__).info("网页 AI 对话内容：%s", redact(text))
             return {"prompt": text, "attachments": attachments, "messages": messages, "expected_hash": expected_hash, "history_trimmed": history_trimmed}
-        import threading
-
-        scope = Scope(step["task_id"], uid(), step_id, uid())
-        resources = Resources(self.registry)
-        environment, secret_refs = self.environments.environment(environment_id)
-        pc = PluginContext(
-            scope,
-            Results(self.home, scope, self.registry),
-            resources,
-            environment,
-            secret_refs,
-            threading.Event(),
-            lambda *args: None,
-        )
-        pc.task_parameters = {key: spec["default"] for key, spec in json.loads(self.tasks.task(step["task_id"])["input_schema_json"]).get("properties", {}).items() if "default" in spec}
-        resources.context = pc
+        resource_session = self._resource_session(step, step_id, environment_id)
+        pc = resource_session.context
         contract = {
             "type": "object",
             "properties": {
@@ -445,7 +443,7 @@ class Authoring:
         finally:
             if use_history:
                 self.conversations[step_id] = stored_history + [message for message in messages[2+len(history):] if message['role'] != 'system']
-            await resources.release_all()
+            await resource_session.close()
 
     def _context_plugin(self, step_id, provider_id):
         step = self.steps.step(step_id)
@@ -474,22 +472,8 @@ class Authoring:
         if expected_session_id:
             raise TaskError("CONTEXT_SESSION_CHANGED", "采集实例已结束或变化，请刷新后重新选择")
         step, plugin = self._context_plugin(step_id, provider_id)
-        import threading
-
-        scope = Scope(step["task_id"], uid(), step_id, uid())
-        resources = Resources(self.registry)
-        environment, secret_refs = self.environments.environment(environment_id)
-        pc = PluginContext(
-            scope,
-            Results(self.home, scope, self.registry),
-            resources,
-            environment,
-            secret_refs,
-            threading.Event(),
-            lambda *args: None,
-        )
-        pc.task_parameters = {key: spec["default"] for key, spec in json.loads(self.tasks.task(step["task_id"])["input_schema_json"]).get("properties", {}).items() if "default" in spec}
-        resources.context = pc
+        resource_session = self._resource_session(step, step_id, environment_id)
+        pc = resource_session.context
         try:
             context = await asyncio.wait_for(
                 plugin.collect_context(provider_id, pc, request or {}, include_view=include_view), 60
@@ -498,7 +482,7 @@ class Authoring:
             from taskweave.core.context_collection import serialize_context_collection
             return serialize_context_collection(context, self.registry.views)
         finally:
-            await resources.release_all()
+            await resource_session.close()
 
     async def diagnose(self, attempt_id):
         from taskweave.core.ports import ErrorInfo

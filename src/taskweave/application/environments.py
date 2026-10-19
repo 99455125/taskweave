@@ -1,11 +1,12 @@
 """Environment configuration and lock-aware lifecycle use cases."""
 
+from taskweave.core.run_ports import EnvironmentRunReader
 from taskweave.core.validation import TaskError
-from taskweave.core.repositories import EnvironmentRepository, PlanRepositoryPort, RunRepository
+from taskweave.core.repositories import EnvironmentRepository, PlanRepositoryPort
 
 
 class EnvironmentUseCases:
-    def __init__(self, environments: EnvironmentRepository, runs: RunRepository, coordinator, context_sessions, plans: PlanRepositoryPort):
+    def __init__(self, environments: EnvironmentRepository, runs: EnvironmentRunReader, coordinator, context_sessions, plans: PlanRepositoryPort):
         self.environments, self.runs = environments, runs
         self.coordinator, self.context_sessions, self.plans = coordinator, context_sessions, plans
 

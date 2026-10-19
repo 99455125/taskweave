@@ -1,6 +1,7 @@
 """Reusable local category management dialog."""
 
 from nicegui import ui
+from taskweave.presentation.organization import CategorySession
 
 
 class CategoryManager:
@@ -19,13 +20,15 @@ class CategoryManager:
         self.button("管理分类", self.open)
 
     async def open(self):
+        session = CategorySession(self.controller.call)
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-xl"):
             ui.label("管理分类").classes("text-lg font-medium")
             area = ui.column().classes("w-full gap-2")
             name = ui.input("新分类名称").classes("w-full")
+            name.on_value_change(lambda event: setattr(session, 'new_name', event.value))
 
             async def refresh():
-                categories = await self.controller.call("organization.category.list")
+                categories = await session.load()
                 area.clear()
                 with area:
                     if not categories:
@@ -34,19 +37,21 @@ class CategoryManager:
                         with ui.row().classes("w-full items-center"):
                             edit = ui.input(value=category["name"]).classes("grow")
 
-                            async def rename(item=category, field=edit):
-                                await self.controller.call("organization.category.rename", category_id=item["category_id"], name=field.value)
+                            edit.on_value_change(lambda event, key=category['category_id']: session.names.__setitem__(key, event.value))
+
+                            async def rename(item=category):
+                                await session.rename(item['category_id'])
                                 await self._refresh_after_change(dialog)
 
                             async def delete(item=category):
-                                await self.controller.call("organization.category.delete", category_id=item["category_id"])
+                                await session.delete(item['category_id'])
                                 await self._refresh_after_change(dialog)
 
                             self.button("重命名", rename)
                             self.button("删除并移到未分类", delete)
 
             async def create():
-                await self.controller.call("organization.category.create", name=name.value or "")
+                await session.create()
                 await self._refresh_after_change(dialog)
 
             await refresh()

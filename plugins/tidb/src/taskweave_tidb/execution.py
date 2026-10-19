@@ -3,7 +3,7 @@ import asyncio
 import json
 import time
 from taskweave.plugins.sdk import CapabilitySpec, PluginError
-from . import configuration, wire_value
+from .database import configuration, wire_value
 
 MAX_SQL_BYTES = 1024 * 1024
 MAX_STATEMENTS = 100

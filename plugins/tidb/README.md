@@ -39,6 +39,10 @@ uv run --extra gui --extra browser --extra ocr --extra database taskweave workbe
 
 查询返回 `title/columns/rows/row_count/truncated/query_info`。数量是本次保存行数；`truncated=true` 时不能把部分数据当作完整结果核对。金额 Decimal 保存为字符串，日期时间保存为 ISO 字符串，二进制字段保存为 Base64 对象。查询信息含 SQL、参数数量、数据库和耗时，不包含密码或参数值。每次查询结束关闭连接，没有长期保留的数据库会话。
 
+通过握手识别 TiDB 时，使用 `START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_PARSE_TSO(TIDB_CURRENT_TSO())` 建立原生只读快照：先启动空事务取得集群 TSO，再替换为只读事务，之后才运行用户 SELECT。这样避免普通 `READ ONLY` 的 1235 错误，也避免墙上时钟快于 PD 导致的未来时间错误；不启用 noop、不改全局配置、不降级成可写事务。该快照读取集群 TSO 对应物理时间的数据，结果增加兼容字段 `query_info.transaction_mode=tidb_read_only_snapshot_tso`。本地 TiDB 8.5.4 已验证；缺少所需函数或快照不可用时明确失败。MySQL 保留普通只读事务。原理见 [TiDB 只读快照](https://docs.pingcap.com/tidb/stable/as-of-timestamp/)和 [TSO 函数](https://docs.pingcap.com/tidb/stable/tidb-functions/)。
+
+查询失败后仍依次尝试关闭流式游标、回滚并关闭连接；清理错误保留为说明，不覆盖原始脱敏数据库错误码。查询本身成功而清理失败时仍报告失败。
+
 ## 显式 SQL 执行
 
 0.2.0 新增 `tidb.execute_sql` 是独立 WRITE 动作，`retry_safe=false`，不作为编写阶段的只读工具提供；`tidb.query` 的参数、结果和只读限制保持兼容。插件 API v1 不变，旧运行仍校验原插件版本；不改写旧任务包或绕过版本保护。它接受 SQL 文本（包括前序 `file.read` 的完整 content），不直接访问文件路径。

@@ -95,6 +95,73 @@ class WorkbenchHomeTests(unittest.TestCase):
         finally:
             client.delete()
 
+    def test_home_create_plan_opens_the_created_plan(self):
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.desktop.planning import PlanningPage
+        from taskweave.desktop.state import PlanningPageState
+
+        async def scenario():
+            created = []
+            callbacks = {}
+
+            async def operation(operation_name, **params):
+                if operation_name == "plan.create":
+                    created.append(params)
+                    return {"plan_id": "created-plan"}
+                return []
+
+            workbench = Workbench.__new__(Workbench)
+            workbench.controller = SimpleNamespace(call=operation)
+            workbench.page, workbench.page_generation = "home", 1
+            workbench.paint = AsyncMock()
+
+            async def navigate(route):
+                workbench.page = route
+                workbench.page_generation += 1
+                home.clear()
+                self.assertFalse(ui.context.slot.parent.is_deleted)
+                return True
+
+            workbench.navigate = AsyncMock(side_effect=navigate)
+            workbench.tasks_page = SimpleNamespace(task_dialog=AsyncMock(), import_task_dialog=AsyncMock())
+
+            def button(title, callback, **kwargs):
+                callbacks[title] = callback
+                return ui.button(title, on_click=callback)
+
+            workbench.button = button
+            workbench.planning_page = PlanningPage(
+                workbench.controller, PlanningPageState(), button,
+                workbench.paint, workbench.navigate, AsyncMock(),
+                page_identity=lambda: (workbench.page, workbench.page_generation),
+            )
+            with ui.column() as home:
+                with ui.column() as callback_parent:
+                    await workbench.workbench_home()
+            with callback_parent:
+                await callbacks["新建规划"]()
+            self.assertEqual(created, [{"name": "新规划"}])
+            self.assertEqual(workbench.planning_page.state.plan_id, "created-plan")
+            self.assertEqual(workbench.page, "planning")
+            workbench.navigate.assert_awaited_once_with("planning")
+
+        client = Client(page("/home-create-plan-regression"))
+        try:
+            async def within_client():
+                with client:
+                    await scenario()
+            asyncio.run(within_client())
+        finally:
+            client.delete()
+
+    def test_home_create_plan_respects_cancelled_navigation(self):
+        workbench = Workbench.__new__(Workbench)
+        workbench.navigate = AsyncMock(return_value=False)
+        workbench.planning_page = SimpleNamespace(create=AsyncMock())
+        asyncio.run(workbench._open_new_plan())
+        workbench.planning_page.create.assert_not_awaited()
+
     def test_home_resume_uses_last_core_command_and_end_respects_can_end(self):
         async def scenario():
             controller = SimpleNamespace(call=AsyncMock())

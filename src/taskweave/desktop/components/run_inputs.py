@@ -3,49 +3,26 @@
 import json
 from nicegui import ui
 from taskweave.core.validation import TaskError
-from taskweave.desktop.controller import command_id
+from taskweave.presentation.inputs import RunInputs, InputSubmission, request_key, missing_required
 
 
 def raw_values(value_form):
-    values = {}
-    for name, (kind, control) in value_form.controls.items():
-        value = control.value
-        if value is None or value == "":
-            continue
-        if kind in {"object", "array"}:
-            try:
-                value = json.loads(value)
-            except (ValueError, TypeError):
-                pass
-        values[name] = value
-    return values
-
-
-def missing_required(schema, values):
-    if schema is None:
-        return []
-    return [key for key in schema.get("required", []) if key not in values or values[key] in (None, "")]
+    """Legacy adapter; live input dialogs submit their event-owned draft."""
+    from taskweave.presentation.inputs import decode_raw_values
+    return decode_raw_values({name: control.value for name, (_, control) in value_form.controls.items()},
+                             {name: kind for name, (kind, _) in value_form.controls.items()})
 
 
 def input_validation(form, scope, required_schema, editable_schema=None):
-    from taskweave.core.validation import validate
-    try:
-        values = form.task_values() if scope == "task" else form.step_values()
-        validate(values, required_schema)
-        if scope == "task" and editable_schema is not None:
-            validate(form.step_values(), {**editable_schema, "additionalProperties": True})
-        return []
-    except (TaskError, ValueError, TypeError) as exc:
-        value_form = form.task_form if scope == "task" else form.step_form
-        missing = missing_required(required_schema, raw_values(value_form))
-        if scope == "task" and editable_schema is not None:
-            missing.extend(missing_required(editable_schema, raw_values(form.step_form)))
-        return missing or [str(exc)]
-
-
-def request_key(run_id, waiting):
-    """Business request identity, independent of page renders and selection."""
-    return (run_id, waiting.get('id'), waiting['scope'], waiting.get('step_id'))
+    """Compatibility adapter for legacy form callers; live dialogs use their draft."""
+    from taskweave.presentation.debug import TrialInputDraft
+    draft = TrialInputDraft()
+    for target, value_form, schema in ((draft.task, form.task_form, required_schema if scope == 'task' else {}),
+                                      (draft.step, form.step_form, editable_schema or (required_schema if scope == 'step' else {}))):
+        target.configure(schema, {})
+        for name, (_, control) in value_form.controls.items():
+            target.change(name, control.value)
+    return InputSubmission({}, None, {'scope': scope, 'schema': required_schema, 'step_id': None}, draft, editable_schema).issues()
 
 
 class RunInputDialog:
@@ -55,46 +32,24 @@ class RunInputDialog:
         self.trial_variables, self.content = trial_variables, content
         self.identity, self.apply_inputs = identity, apply_inputs
         self.invalidate_signatures = invalidate_signatures
-        self._opening = False
-        self._submitting = set()
         if not hasattr(state, 'drafts'):
             state.drafts = {}
+        self.interaction = RunInputs(controller, state.drafts, identity)
 
     async def resume_inputs(self, run, values, step_inputs=None, *, expected_identity=None, expected_request=None):
-        """Validate and resume a paused run while its opening page identity remains current."""
-        run_id = run["run_id"]
+        run_id = run['run_id']
         identity = expected_identity if expected_identity is not None else self.identity(run_id)
-        if self.identity(run_id) != identity:
-            return False
-        request = await self.controller.run_request(run_id)
-        if self.identity(run_id) != identity:
-            return False
-        waiting = request.get("waiting_input")
-        if not waiting:
-            return False
-        if expected_request is not None and request_key(run_id, waiting) != expected_request:
-            return False
-        from taskweave.core.validation import validate
-        validate(values, waiting["schema"])
-        await self.controller.call(
-            "run.inputs", run_id=run_id, command_id=command_id(), inputs=values,
-            **({"step_inputs": step_inputs} if step_inputs is not None else {}),
-            **({"expected_input_id": waiting['id']} if expected_request is not None and waiting.get('id') else {}),
-        )
-        if self.identity(run_id) == identity:
-            applied = self.apply_inputs(waiting, values, identity)
-            if hasattr(applied, "__await__"):
-                await applied
-        command = request.get("last_command", {})
-        await self.controller.call(
-            "run.start", run_id=run_id, command_id=command_id(),
-            mode=command.get("mode", "ALL"), target_step_id=command.get("target"),
-        )
-        self.state.drafts.pop(request_key(run_id, waiting), None)
-        if self.identity(run_id) != identity:
+        result = None
+        async for result in self.interaction.resume_events(
+                run_id, values, step_inputs, expected_identity=identity, expected_request=expected_request):
+            if result.phase == 'accepted' and result.current:
+                applied = self.apply_inputs(result.waiting, values, identity)
+                if hasattr(applied, '__await__'):
+                    await applied
+        if result is None or not result.current or self.identity(run_id) != identity:
             return False
         invalidated = self.invalidate_signatures(identity)
-        if hasattr(invalidated, "__await__"):
+        if hasattr(invalidated, '__await__'):
             await invalidated
         return True
 
@@ -117,9 +72,8 @@ class RunInputDialog:
         if self.state.dialog_token and self.state.dialog_token[:-1] != key:
             self.dismiss()
         async def open_requested():
-            if self._opening or self.identity(run['run_id']) != identity:
+            if self.identity(run['run_id']) != identity or not self.interaction.begin_open():
                 return
-            self._opening = True
             try:
                 # Re-read at the explicit action: the waiting request may have changed.
                 latest = await self.controller.run_request(run['run_id'])
@@ -127,7 +81,7 @@ class RunInputDialog:
                     return
                 await self._open(run, latest['waiting_input'], identity)
             finally:
-                self._opening = False
+                self.interaction.end_open()
         self.button('补充必录参数', open_requested, primary=True)
 
     def dismiss(self):
@@ -166,11 +120,6 @@ class RunInputDialog:
             form.apply_task_values(draft.get('task', {}))
             form.apply_step_values(draft.get('step', {}))
 
-            def remember(_=None):
-                self.state.drafts[key] = {
-                    'task': {name: control.value for name, (_, control) in form.task_form.controls.items()},
-                    'step': {name: control.value for name, (_, control) in form.step_form.controls.items()},
-                }
             editable_schema = None
             if waiting['scope'] == 'task':
                 editable_schema = {
@@ -182,22 +131,20 @@ class RunInputDialog:
                     'required': [key for key in current['input_schema'].get('required', []) if key not in current['bindings']],
                 }
 
+            submission = self.interaction.bind(run['run_id'], waiting, form.input_draft, editable_schema)
+            def remember(_=None):
+                submission.remember()
+
             async def resume():
-                if key in self._submitting or self.identity(run['run_id']) != identity:
+                if self.identity(run['run_id']) != identity or not self.interaction.begin_submit(key):
                     return
-                self._submitting.add(key)
                 submit.disable()
                 remember()
                 failure = None
                 try:
-                    step_inputs = None
-                    if waiting['scope'] == 'task':
-                        from taskweave.core.validation import validate
-                        validate(form.step_values(), {**editable_schema, 'additionalProperties': True})
-                        step_inputs = {current['step_id']: form.step_values()}
+                    values, step_inputs = submission.submission()
                     completed = await self.resume_inputs(
-                        run, form.task_values() if waiting['scope'] == 'task' else form.step_values(),
-                        step_inputs=step_inputs, expected_identity=identity, expected_request=key,
+                        run, values, step_inputs=step_inputs, expected_identity=identity, expected_request=key,
                     )
                     if completed and self.identity(run['run_id']) == identity:
                         dialog.close()
@@ -206,7 +153,7 @@ class RunInputDialog:
                 except (TaskError, ValueError, TypeError) as exc:
                     failure = str(exc)
                 finally:
-                    self._submitting.discard(key)
+                    self.interaction.end_submit(key)
                     if not submit.is_deleted:
                         update_submit()
                         if failure:
@@ -216,8 +163,8 @@ class RunInputDialog:
                 ui.button('稍后填写', on_click=dialog.close).props('outline')
             validation_hint = ui.label().classes('text-sm text-red-700')
             def update_submit(_=None):
-                issues = input_validation(form, waiting['scope'], waiting['schema'], editable_schema)
-                if not issues and key not in self._submitting:
+                issues = submission.issues()
+                if not issues and key not in self.interaction.submitting:
                     submit.enable()
                     validation_hint.text = ''
                 else:

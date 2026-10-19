@@ -28,7 +28,7 @@ class TiDBExecution(unittest.TestCase):
                 result = app.repo.read_result(ref['result_id'], app.registry)
                 self.assertEqual(result['views'][0]['renderer'], 'tidb.verification')
             self.assertFalse(database.errors, database.errors)
-            self.assertIn('SET TRANSACTION READ ONLY', database.queries)
+            self.assertIn('START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_PARSE_TSO(TIDB_CURRENT_TSO())', database.queries)
             self.assertIn("SELECT order_no, status FROM orders WHERE order_no='001'", database.queries)
 
 

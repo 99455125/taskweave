@@ -2,12 +2,12 @@
 
 import json
 from taskweave.core.validation import TaskError
-from taskweave.infrastructure.storage import connect
+from taskweave.infrastructure.sqlite_storage import SQLiteStorage, connect
 from taskweave.infrastructure.repositories.collaboration import TaskLockGuard
 
 
 class ResultRepository:
-    def __init__(self, store, tasks: TaskLockGuard):
+    def __init__(self, store: SQLiteStorage, tasks: TaskLockGuard):
         self.store = store
         self.tasks = tasks
 
@@ -71,7 +71,7 @@ class ResultRepository:
         return json.loads(row[0])
 
     def read_result(self, result_id, registry):
-        from taskweave.infrastructure.storage import connect
+        from taskweave.infrastructure.sqlite_storage import connect
         ref = self.query('SELECT * FROM result_refs WHERE result_id=?', (result_id,), True)
         if ref['state'] != 'AVAILABLE':
             raise TaskError('RESULT_UNAVAILABLE')
@@ -111,7 +111,7 @@ class ResultRepository:
         return {'name': output_name, 'data': parsed, 'preview': handler.preview(parsed)}
 
     def delete_result(self, result_id):
-        from taskweave.infrastructure.storage import connect
+        from taskweave.infrastructure.sqlite_storage import connect
         ref = self.query('SELECT * FROM result_refs WHERE result_id=?', (result_id,), True)
         with self.transaction() as db:
             self.tasks.assert_unlocked(db, ref['task_id'])

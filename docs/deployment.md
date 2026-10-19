@@ -17,6 +17,16 @@ serve 是本地 HTTP 入口，workbench 启动桌面工作台；按需要选择 
 
 NiceGUI 承载本地 UI，pywebview 提供独立窗口；macOS 使用系统 WebKit，Windows 方案需要 WebView2。工作台服务监听回环地址，启动凭据保护页面和 Socket.IO；业务自动化 Chromium 由插件单独管理。
 
+### macOS 应用
+
+Apple Silicon 构建入口为 `uv run --no-sync python scripts/build_macos.py`。脚本使用独立 `build/macos/venv` 和现有锁文件同步全部 extras 与 build 组，不替换开发虚拟环境。产物位于 `dist/macos/TaskWeave.app`，同时生成 ZIP、SHA256 和发布清单。目标机器日常双击应用启动，无需 uv、Python 或源码目录。
+
+包内包含全部 11 个插件、GUI 资源、OCR 模型/运行库和匹配 Chromium。Chromium 的嵌套应用、Framework 和签名按原目录复制到 Resources，应用最后做本地 ad-hoc 签名。HBuilderX、微信开发者工具、外部 Node/SDK 和服务器按插件的显式配置准备；应用启动不联网补依赖。当前交付目标为本机 arm64，公开分发所需 Developer ID 签名、公证及 Intel 实机分别验收。
+
+工作空间沿用 `TASKWEAVE_HOME`、位置配置与平台默认规则，用户数据留在 `.app` 外。已有 `plugins.json` 保持原启用选择；缺失配置时在协调器锁保护下初始化全部插件。冻结窗口启动前同步初始化 Application，使实例锁/数据库/模型配置等前置错误进入原生告警；前置失败写入仅含公开错误信息的启动日志。原服务占用时不强占、不切换空库。
+
+`scripts/verify_macos_bundle.py` 在精简环境与临时当前目录执行冻结诊断，并生成隔离 UI 验收副本；该副本仅通过测试用 LSEnvironment 指向独立工作空间，正式包不带这个配置。Native GUI 的实际操作与插件动作证据见 [Mac 应用验收记录](design/macos-app-acceptance-2026-10-18.md)。
+
 Windows 目标是完整便携 ZIP：程序、Python 依赖、插件、匹配 Chromium 和必要 WebView 运行组件随包提供。目标机不调用安装器、不提权、不联网补依赖。构建配置存在不等于已经生成并验收可交付包。
 
 维护入口：[Windows 构建脚本](../scripts/build_windows.ps1)、[PyInstaller 配置](../packaging/windows/taskweave.spec)、[项目依赖](../pyproject.toml)。构建与验证必须在相应平台及目标权限环境进行；macOS 开发测试不能代替 Windows 断网实机验证。

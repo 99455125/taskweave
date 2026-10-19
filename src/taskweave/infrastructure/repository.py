@@ -1,4 +1,4 @@
-"""Task definitions, authoring evidence and durable command state."""
+"""Compatibility facade delegating to the explicitly assembled repositories."""
 
 import json
 from taskweave.core.validation import (
@@ -18,7 +18,20 @@ from taskweave.infrastructure.repositories import build_sqlite_repositories
 class Repository(Store):
     def __init__(self, home):
         super().__init__(home)
-        self._repository_set = build_sqlite_repositories(self)
+        self._bind_repositories(build_sqlite_repositories(self))
+
+    @classmethod
+    def from_storage(cls, storage, repositories):
+        """Expose the legacy API over an existing storage and repository set."""
+        facade = cls.__new__(cls)
+        facade.home = storage.home
+        facade.path = storage.path
+        facade.unit_of_work = storage.unit_of_work
+        facade._bind_repositories(repositories)
+        return facade
+
+    def _bind_repositories(self, repositories):
+        self._repository_set = repositories
         self.tasks = self._repository_set.tasks
         self.step_repository = self._repository_set.steps
         self.environment_repository = self._repository_set.environments

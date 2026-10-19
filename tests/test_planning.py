@@ -386,7 +386,7 @@ class PlanningTests(unittest.TestCase):
             button = MagicMock()
             page = PlanningPage(controller, PlanningPageState(plan_id="p1"), button, AsyncMock(), AsyncMock(), AsyncMock())
             page.editor = AsyncMock()
-            with patch("taskweave.desktop.planning.ui") as fake_ui:
+            with patch("taskweave.desktop.pages.planning.ui") as fake_ui:
                 fake_ui.input.return_value.props.return_value.classes.return_value.value = ""
                 fake_ui.select.return_value.value = ""
                 fake_ui.select.return_value.classes.return_value.value = ""

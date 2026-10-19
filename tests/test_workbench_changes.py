@@ -124,13 +124,13 @@ class WorkbenchChanges(unittest.TestCase):
             with Application(old) as app:
                 app.repo.create_task('migrated')
                 controller = DesktopController(app)
-                with patch('taskweave.infrastructure.storage.workspace_location_file', return_value=marker):
+                with patch('taskweave.infrastructure.sqlite_storage.workspace_location_file', return_value=marker):
                     result = asyncio.run(controller.migrate_workspace(new))
             self.assertEqual(result['workspace_home'], str(new.resolve()))
             self.assertTrue((new / 'taskweave.db').exists())
             self.assertTrue(old.exists())
             unrelated.mkdir()
-            with patch('taskweave.infrastructure.storage.workspace_location_file', return_value=marker):
+            with patch('taskweave.infrastructure.sqlite_storage.workspace_location_file', return_value=marker):
                 self.assertFalse(finish_workspace_migration(unrelated))
                 self.assertTrue(old.exists())
                 self.assertTrue(finish_workspace_migration(new))

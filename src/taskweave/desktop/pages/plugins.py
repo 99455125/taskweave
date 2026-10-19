@@ -20,22 +20,26 @@ def _schema_rows(schema):
     ]
 
 
-def filter_plugins(plugins, query="", status="all"):
-    query = (query or "").strip().casefold()
-    visible = [plugin for plugin in plugins if query in plugin["id"].casefold()]
-    if status == "enabled":
-        visible = [plugin for plugin in visible if plugin["enabled"]]
-    elif status == "disabled":
-        visible = [plugin for plugin in visible if not plugin["enabled"]]
-    return visible
+from taskweave.presentation.plugins import PluginSelection, filter_plugins
 
 
 class PluginsPage(Page):
     def __init__(self, controller, button, repaint):
         self.controller, self.button, self.repaint = controller, button, repaint
-        self.selected_plugin_id = None
-        self.search_query = ""
-        self.status_filter = "all"
+        self.selection = PluginSelection()
+
+    @property
+    def selected_plugin_id(self): return self.selection.selected_plugin_id
+    @selected_plugin_id.setter
+    def selected_plugin_id(self, value): self.selection.selected_plugin_id = value
+    @property
+    def search_query(self): return self.selection.search_query
+    @search_query.setter
+    def search_query(self, value): self.selection.search_query = value
+    @property
+    def status_filter(self): return self.selection.status_filter
+    @status_filter.setter
+    def status_filter(self, value): self.selection.status_filter = value
 
     async def render(self):
         catalog = await self.controller.call("capabilities")
@@ -44,9 +48,7 @@ class PluginsPage(Page):
             (plugin for plugin in installed if plugin["id"] not in {"demo", "sample", "text"}),
             key=lambda item: (not item["enabled"], item["id"]),
         )
-        plugin_ids = {plugin["id"] for plugin in installed}
-        if self.selected_plugin_id not in plugin_ids:
-            self.selected_plugin_id = installed[0]["id"] if installed else None
+        self.selection.load(installed)
 
         with ui.row().classes("tw-master-layout tw-secondary-layout"):
             with ui.column().classes("tw-panel tw-list-sidebar gap-3"):
@@ -63,9 +65,7 @@ class PluginsPage(Page):
             detail = ui.column().classes("tw-content tw-plugin-detail min-w-0 gap-3")
 
         def render_plugin_list():
-            self.search_query = search.value if isinstance(search.value, str) else self.search_query
-            self.status_filter = status.value if status.value in {"all", "enabled", "disabled"} else self.status_filter
-            visible = filter_plugins(installed, self.search_query, self.status_filter)
+            visible = self.selection.visible()
             plugin_list.clear()
             with plugin_list:
                 if not visible:
@@ -198,17 +198,18 @@ class PluginsPage(Page):
                         ui.label("插件契约已由当前本地运行时加载。").classes("text-sm text-gray-600")
 
         def render():
-            query = search.value if isinstance(search.value, str) else self.search_query
-            status_value = status.value if status.value in {"all", "enabled", "disabled"} else self.status_filter
-            visible = filter_plugins(installed, query, status_value)
-            if self.selected_plugin_id not in {item["id"] for item in visible}:
-                self.selected_plugin_id = visible[0]["id"] if visible else None
             render_plugin_list()
             render_selected_plugin()
 
         self._render = render
-        search.on_value_change(lambda _: render())
-        status.on_value_change(lambda _: render())
+        def search_changed(event):
+            self.search_query = event.value or ''
+            render()
+        def status_changed(event):
+            self.status_filter = event.value
+            render()
+        search.on_value_change(search_changed)
+        status.on_value_change(status_changed)
         render()
 
     async def select_plugin(self, plugin_id):

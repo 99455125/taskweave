@@ -141,12 +141,12 @@ window[ns].document_id=crypto.randomUUID?.()||Array.from(crypto.getRandomValues(
         return False
 
     def target_id(self, page):
-        from . import _live_context_targets
+        from .session import _live_context_targets
         return next((key for key, candidate in _live_context_targets(self.resource) if candidate is page), None)
 
     async def baseline(self, recording, page, document_id, *, timing="first_operation_observation",
                        frame=None, document_url=None):
-        from . import snapshot
+        from ._compat import snapshot
         identity = (page, document_id)
         if identity in recording.documents:
             return

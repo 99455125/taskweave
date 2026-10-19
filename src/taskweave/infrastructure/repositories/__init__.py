@@ -1,5 +1,7 @@
 """Domain-oriented SQLite repository adapters."""
 
+from taskweave.infrastructure.sqlite_storage import SQLiteStorage
+
 from taskweave.infrastructure.repositories.environments import EnvironmentRepository
 from taskweave.infrastructure.repositories.plan_contexts import PlanContextRepository
 from taskweave.infrastructure.repositories.plan_generations import PlanGenerationRepository
@@ -14,7 +16,7 @@ from taskweave.infrastructure.repositories.tasks import TaskRepository
 __all__ = ["EnvironmentRepository", "PlanContextRepository", "PlanGenerationRepository", "PlanMetadataRepository", "RepositorySet", "ResultRepository", "RunRepository", "StepContextRepository", "StepRepository", "TaskRepository"]
 
 
-def build_sqlite_repositories(store):
+def build_sqlite_repositories(store: SQLiteStorage):
     """Build the complete domain repository set over one existing storage/UoW."""
     environments = EnvironmentRepository(store)
     steps = StepRepository(store, environments)

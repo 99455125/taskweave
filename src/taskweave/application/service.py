@@ -1,28 +1,11 @@
 """Public application API shared by CLI, HTTP and future desktop UI."""
 
-import asyncio
-import json
 from pathlib import Path
-import time
-from taskweave.core.validation import TaskError, normalize_step
+from taskweave.core.validation import TaskError
 from taskweave.application.operations import dispatch_operation
-from taskweave.core.repositories import OrganizationRepository as OrganizationRepositoryPort
-from taskweave.application.tasks import TaskUseCases
-from taskweave.application.steps import StepUseCases
-from taskweave.application.environments import EnvironmentUseCases
-from taskweave.application.runs import RunUseCases
-from taskweave.application.contexts import ContextUseCases
+from taskweave.application.composition import compose_application
 from taskweave.infrastructure.locking import InstanceLock
-from taskweave.infrastructure.repository import Repository
-from taskweave.infrastructure.runtime import CoordinatorPool
-from taskweave.infrastructure.worker import load_registry
-from taskweave.infrastructure.storage import default_home
-from taskweave.infrastructure.privacy import PrivacySettings
-from taskweave.application.authoring import Authoring
-from taskweave.application.ai_requests import AISettings
-from taskweave.application.planning import PlanningService
-from taskweave.infrastructure.context_sessions import ContextSessions
-from taskweave.infrastructure.plan_repository import PlanRepository
+from taskweave.infrastructure.sqlite_storage import default_home
 
 
 class Application:
@@ -35,50 +18,7 @@ class Application:
         self.home = Path(home or default_home()).resolve()
         self.instance = InstanceLock(self.home / "coordinator.lock")
         try:
-            # An orphan worker watches the old parent every 200 ms.
-            time.sleep(0.25)
-            self.repo = Repository(self.home)
-            stores = self.repo.repositories
-            self.registry = load_registry(registry_factory, self.home)
-            self.registry_factory = registry_factory
-            workbench_path = self.home / 'workbench.json'
-            workbench_settings = json.loads(workbench_path.read_text()) if workbench_path.exists() else {}
-            max_concurrency = int(workbench_settings.get('executor_max_threads', 8))
-            if not 1 <= max_concurrency <= 8:
-                max_concurrency = 8
-            self.coordinator = CoordinatorPool(
-                stores.runs, stores.tasks, stores.steps, stores.environments,
-                stores.results, self.registry, registry_factory, self.home,
-                max_concurrency=max_concurrency,
-            )
-            self.repo.finish_pending_deletions()
-            self.ai_settings = AISettings(self.home)
-            self.privacy_settings = PrivacySettings(self.home)
-            self.authoring = Authoring(stores.tasks, stores.steps, stores.environments, stores.runs, stores.results, self.home, self.registry, model, lambda: self.ai_settings.get()["request_limit_bytes"], lambda: self.privacy_settings.get()["redact_for_ai"])
-            self.plan_repo = PlanRepository(self.repo)
-            self.organization: OrganizationRepositoryPort = stores.organization
-            self.context_sessions = ContextSessions(self.registry, stores.environments, stores.plans, self.home / "plans",
-                steps=stores.steps, tasks=stores.tasks)
-            self.tasks = TaskUseCases(stores.tasks, stores.steps, stores.step_contexts, self.repo.unit_of_work, self.registry, self.authoring, self.coordinator, self.context_sessions)
-            self.steps = StepUseCases(stores.steps, stores.tasks, stores.runs, self.registry, self.authoring, self.coordinator, self.context_sessions)
-            self.environments = EnvironmentUseCases(stores.environments, stores.runs, self.coordinator, self.context_sessions, stores.plans)
-            self.runs = RunUseCases(stores.runs, stores.tasks, stores.steps, stores.environments, stores.results, self.registry, self.authoring, self.coordinator, self.context_sessions)
-            self.contexts = ContextUseCases(stores.step_contexts, stores.steps, self.registry, self.authoring, self.coordinator, self.context_sessions)
-            self.planning = PlanningService(
-                plans=stores.plans,
-                contexts=stores.plan_contexts,
-                generations=stores.plan_generations,
-                sessions=self.context_sessions,
-                settings=self.ai_settings,
-                registry=self.registry,
-                authoring=self.authoring,
-                privacy_settings=self.privacy_settings,
-                tasks=self.tasks,
-                steps=stores.steps,
-                step_contexts=stores.step_contexts,
-                uow=self.repo.unit_of_work,
-                plan_files_root=self.home / "plans",
-            )
+            compose_application(self, model, registry_factory)
         except Exception:
             self.instance.close()
             raise
@@ -140,7 +80,7 @@ class Application:
 
         if self.registry_factory is not None:
             raise TaskError("PLUGIN_CONFIG_FIXED")
-        if self.repo.repositories.runs.has_runtime_lease() or (
+        if self.runtime_leases.has_runtime_lease() or (
             self.coordinator.thread and self.coordinator.thread.is_alive()
         ) or self.context_sessions.list():
             raise TaskError("PLUGIN_CONFIG_LOCKED")

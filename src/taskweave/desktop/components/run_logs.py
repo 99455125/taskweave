@@ -2,6 +2,7 @@
 import asyncio
 import json
 from nicegui import ui
+from taskweave.presentation.polling import LogStreamState
 from taskweave.desktop.display import readable_metadata
 
 
@@ -35,8 +36,7 @@ class LiveRunLogs:
     def __init__(self, controller, run_id, current, *, allowed=lambda: True, names=None, own_timer=None):
         self.controller, self.run_id = controller, run_id
         self.current, self.allowed, self.names = current, allowed, names or {}
-        self.cursor, self.enabled, self.loading = 0, False, False
-        self.text = ''
+        self.interaction = LogStreamState()
         self.button = ui.button('实时日志', on_click=self.toggle).props('flat')
         self.area = ui.column().classes('w-full min-w-0')
         with self.area:
@@ -48,13 +48,22 @@ class LiveRunLogs:
         if own_timer:
             own_timer(self.timer)
 
+    @property
+    def cursor(self): return self.interaction.cursor
+    @property
+    def enabled(self): return self.interaction.enabled
+    @property
+    def loading(self): return self.interaction.polling.loading
+    @property
+    def text(self): return self.interaction.text
+
     def valid(self):
         return not self.area.is_deleted and self.current()
 
     async def toggle(self):
         if not self.valid():
             return
-        self.enabled = not self.enabled
+        self.interaction.toggle()
         self.area.set_visibility(self.enabled)
         self.button.text = '收起实时日志' if self.enabled else '实时日志'
         if self.enabled:
@@ -69,7 +78,10 @@ class LiveRunLogs:
             return
         if not self.enabled or not self.allowed() or self.loading:
             return
-        self.loading = True
+        self.interaction.polling.observe(self.run_id, visible=True)
+        token = self.interaction.polling.begin(self.run_id, now=0)
+        if token is None:
+            return
         try:
             result = await self.controller.call('run.events.page', run_id=self.run_id, after=self.cursor, limit=100)
             def format_events():
@@ -80,18 +92,15 @@ class LiveRunLogs:
                     chunks.append(text[:12000] + ('\n[单条摘要已截短，请查看完整日志]' if len(text) > 12000 or event.get('payload_truncated') else ''))
                 return '\n'.join(chunks)
             addition = await asyncio.to_thread(format_events)
-            if not self.valid() or not self.enabled:
+            self.interaction.polling.observe(self.run_id if self.valid() else None,
+                                              visible=self.valid() and self.allowed() and self.enabled)
+            if not self.interaction.polling.accepts(token):
                 return
-            if result.get('reset'):
-                self.text = ''
-            self.cursor = result['cursor']
-            if addition:
-                updated = (self.text + '\n' + addition).strip()
-                self.text = updated[-24000:]
-                if self.output.value != self.text:
-                    self.output.value = self.text
+            self.interaction.apply_page(result, addition)
+            if self.output.value != self.text:
+                self.output.value = self.text
             status = '正在读取后续日志…' if result['has_more'] else '已更新至最新日志'
-            if not result['has_more'] and result['status'] != 'RUNNING':
+            if not self.interaction.following:
                 self.timer.deactivate()
                 # The panel remains open even when following has stopped.
                 # Keep the toggle tied to visibility so one click can close it.
@@ -100,12 +109,13 @@ class LiveRunLogs:
                 self.status.text = status
         except Exception as exc:
             if self.valid():
+                self.interaction.fail(getattr(exc, "code", type(exc).__name__))
                 self.timer.deactivate()
                 self.status.text = f"日志读取失败：{getattr(exc, 'code', type(exc).__name__)}；关闭后重新打开可重试"
         finally:
-            self.loading = False
+            self.interaction.polling.complete(token)
 
     def dispose(self):
-        self.enabled = False
+        self.interaction.dispose()
         if not self.timer.is_deleted:
             self.timer.delete()

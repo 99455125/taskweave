@@ -10,6 +10,39 @@ from taskweave.infrastructure.storage import uid
 
 
 class RuntimeInputs(unittest.TestCase):
+    def test_single_trial_explicit_inputs_override_step_defaults(self):
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            env = app.environments.save('local', {'refresh': False, 'number': 9})['environment_id']
+            task = app.tasks.create('single trial defaults', input_schema={
+                'type': 'object', 'properties': {'refresh': {'type': 'boolean', 'default': False}}})['task_id']
+            step = app.steps.save(task, {
+                'input_schema': {'type': 'object', 'additionalProperties': False,
+                    'properties': {'refresh': {'type': 'boolean', 'default': False},
+                                   'number': {'type': 'integer', 'default': 10},
+                                   'note': {'type': 'string', 'default': 'default'}}},
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)'})
+            for supplied, expected in [
+                ({'refresh': True, 'number': 0, 'note': ''}, {'refresh': True, 'number': 0, 'note': ''}),
+                ({}, {'refresh': False, 'number': 10, 'note': 'default'}),
+            ]:
+                with self.subTest(supplied=supplied):
+                    command = uid()
+                    run = app.trial_step(step['step_id'], supplied, command, env, continue_session=True)
+                    done = app.coordinator.wait(run['run_id'])
+                    self.assertEqual(done['status'], 'SUCCEEDED', done['attempts'])
+                    self.assertEqual(app.repo.read_output(run['run_id'], step['step_id']), expected)
+                    self.assertEqual(json.loads(done['attempts'][0]['input_summary_json']), expected)
+                    self.assertEqual(app.trial_step(step['step_id'], supplied, command, env)['run_id'], run['run_id'])
+
+    def test_single_trial_invalid_explicit_value_is_not_replaced_by_default(self):
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.tasks.create('invalid explicit input')['task_id']
+            step = app.steps.save(task, {
+                'input_schema': {'type': 'object', 'properties': {'refresh': {'type': 'boolean', 'default': False}}},
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)'})
+            with self.assertRaises(TaskError):
+                app.trial_step(step['step_id'], {'refresh': 'invalid'}, uid())
+
     def test_incremental_event_pages_are_isolated_bounded_and_compatible(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
             task, _, _ = self.setup_task(app)

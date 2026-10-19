@@ -5,6 +5,8 @@ import asyncio
 import json
 import time
 from nicegui import ui
+from taskweave.presentation.execution import ExecutionInteraction
+from taskweave.presentation.history import HistoryLoadState
 from taskweave.desktop.controller import command_id
 from taskweave.desktop.display import readable_metadata, step_names
 from taskweave.desktop.components.run_logs import LiveRunLogs, render_log_text
@@ -29,36 +31,43 @@ class ExecutionDetails:
         self.pending_inputs, self.choose_run_step, self.confirm_end = pending_inputs, choose_run_step, confirm_end
         self.step_error_dialog, self.step_result_dialog, self.reconcile_dialog = step_error_dialog, step_result_dialog, reconcile_dialog
         self.timers = []
-        self.render_sequence = 0
-        self.refresh_sequence = 0
-        self._detail_cache = {}
-        self._current_runs = {}
+        self.interaction = ExecutionInteraction(state.interaction)
         self._poll_lock = asyncio.Lock()
-        self._next_poll_at = 0
-        self.visible = True
+
         self._logs_host = None
         self._logs_key = None
         self._live_logs = None
         self._run_details_visible = True
 
+    @property
+    def visible(self): return self.interaction.polling.visible
+    @visible.setter
+    def visible(self, value):
+        self.interaction.polling.observe(self.interaction.polling.identity, visible=value)
+    @property
+    def _current_runs(self): return self.interaction.current_runs
+    @property
+    def _detail_cache(self): return self.interaction.detail_cache
+
     def set_visible(self, visible):
         self.visible = visible
         if visible:
-            self._next_poll_at = 0
+            self.interaction.polling.invalidate()
 
     async def poll(self):
-        if (not self.visible or self.page() not in {'run', 'executions'}
-                or self._poll_lock.locked() or time.monotonic() < self._next_poll_at):
+        if self.page() not in {'run', 'executions'}:
             return
-        async with self._poll_lock:
+        token = self.interaction.polling.begin((self.page_generation(), self.page()), now=time.monotonic())
+        if token is None:
+            return
+        try:
             await self.refresh(force=False)
+        finally:
             running = any(run['status'] == 'RUNNING' for run in self._current_runs.values())
-            # The lightweight list still discovers runs started elsewhere. Idle
-            # execution pages need no per-second detail or log queries.
-            self._next_poll_at = time.monotonic() + (1 if running else 5)
+            self.interaction.polling.finish(token, now=time.monotonic(), running=running)
 
     def invalidate_render(self):
-        self.render_sequence += 1
+        self.interaction.invalidate_render()
 
     def own_timer(self, timer):
         self.timers.append(timer)
@@ -66,7 +75,6 @@ class ExecutionDetails:
 
     def dispose(self):
         self.invalidate_render()
-        self.refresh_sequence += 1
         for timer in self.timers:
             if not getattr(timer, "is_deleted", True):
                 timer.delete()
@@ -76,8 +84,7 @@ class ExecutionDetails:
         if self._logs_host is not None and not self._logs_host.is_deleted:
             self._logs_host.delete()
         self._logs_host = self._logs_key = self._live_logs = None
-        self._detail_cache.clear()
-        self._current_runs.clear()
+        self.interaction.dispose()
 
     @property
     def run_id(self): return self.state.run_id
@@ -111,108 +118,28 @@ class ExecutionDetails:
     def countdown_label(self, value): self.state.countdown_label = value
 
     def default_step_id(self, run, steps):
-        step_ids = {step["step_id"] for step in steps}
-        latest_valid = next(
-            (attempt["step_id"] for attempt in reversed(run.get("attempts", []))
-             if attempt.get("valid") and attempt.get("step_id") in step_ids),
-            None,
-        )
-        return latest_valid or (steps[0]["step_id"] if steps else None)
+        return self.interaction.default_step_id(run, steps)
 
     def selected_step(self, run, steps):
-        run_id = run["run_id"]
-        step_ids = {step["step_id"] for step in steps}
-        if self.state.selected_step_run_id == run_id and self.state.selected_step_id in step_ids:
-            return self.state.selected_step_id
-        self.state.selected_step_run_id = run_id
-        self.state.selected_step_id = self.default_step_id(run, steps)
-        return self.state.selected_step_id
+        return self.interaction.selected_step(run, steps)
 
     async def select_step(self, run_id, step_id):
         self.invalidate_render()
-        self.run_id = run_id
-        self.state.selected_step_run_id = run_id
-        self.state.selected_step_id = step_id
-        self.run_signature = self.execution_signature = None
+        self.interaction.select_step(run_id, step_id)
         await self.refresh()
 
     async def select_run(self, run_id):
         self.invalidate_render()
-        if self.run_id != run_id:
-            self.state.selected_step_run_id = None
-            self.state.selected_step_id = None
-        self.run_id = run_id
-        self.run_signature = self.execution_signature = None
+        self.interaction.select_run(run_id)
         await self.refresh()
 
     async def render_rows(self, *, force=True):
-        self.invalidate_render()
-        request_sequence = self.render_sequence
-        identity = [
-            request_sequence, self.page_generation(), self.page(),
-            tuple(self.execution_task_ids), tuple(self.execution_statuses), self.run_id,
-            self.state.selected_step_run_id, self.state.selected_step_id, self.state.search_query,
-        ]
-        def current():
-            return identity == [
-                self.render_sequence, self.page_generation(), self.page(),
-                tuple(self.execution_task_ids), tuple(self.execution_statuses), self.run_id,
-                self.state.selected_step_run_id, self.state.selected_step_id, self.state.search_query,
-            ]
-        all_runs = await self.controller.call("run.list")
-        if not current():
+        result = await self.interaction.load_rows(
+            self.controller.call, lambda: (self.page_generation(), self.page()), force=force)
+        if result is None:
             return
-        runs = [r for r in all_runs if r["mode"] == "EXECUTION"]
-        if self.execution_task_ids:
-            runs = [run for run in runs if run["task_id"] in set(self.execution_task_ids)]
-        if self.execution_statuses:
-            runs = [run for run in runs if run["status"] in set(self.execution_statuses)]
-        details = []
-        for row in reversed(runs):
-            run_id = row['run_id']
-            summary = document_text(row)
-            cached = self._detail_cache.get(run_id)
-            if (cached and cached[0] == summary and not force
-                    and ('event_revision' in row or row['status'] != 'RUNNING')):
-                detail = cached[1]
-            else:
-                detail = await self.controller.call('run.get', run_id=run_id)
-                if not current():
-                    return
-                self._detail_cache[run_id] = (summary, detail)
-            details.append(detail)
-            if not current():
-                return
-        retained = {run['run_id'] for run in runs}
-        self._detail_cache = {key: value for key, value in self._detail_cache.items() if key in retained}
-        self._current_runs = {run['run_id']: run for run in details}
-        if self.run_id is None and self.execution_signature is None and details:
-            self.run_id = details[0]["run_id"]
-            identity[5] = self.run_id
-        signature = document_text([details, self.run_id, self.state.selected_step_run_id, self.state.selected_step_id])
-        if signature == self.execution_signature:
-            return
-        environments = {e["environment_id"]: e["name"] for e in await self.controller.call("environment.list")}
-        if not current():
-            return
-        tasks = {task["task_id"]: task for task in await self.controller.call("task.list")}
-        if not current():
-            return
-        query = (self.state.search_query or "").strip().casefold()
-        if query:
-            details = [run for run in details if query in tasks.get(run["task_id"], {}).get("name", "").casefold()
-                       or query in run["run_id"].casefold()]
-        active_run = next((run for run in details if run["run_id"] == self.run_id), None)
-        definition_steps = None
-        if active_run is not None:
-            definition_steps = (
-                json.loads(active_run["definition_json"])["steps"]
-                if active_run["definition_json"]
-                else await self.controller.call("step.list", task_id=active_run["task_id"])
-            )
-            if not current():
-                return
-        self.execution_signature = signature
+        details, environments, tasks = result.details, result.environments, result.tasks
+        active_run, definition_steps = result.active_run, result.definition_steps
         self.execution_rows.clear()
         if self.execution_list_area is not None:
             self.execution_list_area.clear()
@@ -355,43 +282,39 @@ class ExecutionDetails:
                                     ui.label("本次尝试日志").classes("font-medium mt-2")
                                     logs = ui.column().classes("w-full")
                                     history_identity = (self.page_generation(), self.page(), run["run_id"], self.state.selected_step_id)
-                                    async def load_attempt_logs(target=attempt, area=logs, expected=history_identity, source_run=run):
-                                        if area.is_deleted:
+                                    load_state = HistoryLoadState(history_identity)
+                                    async def load_attempt_logs(target=attempt, area=logs, source_run=run, request_state=load_state):
+                                        def identity():
+                                            return (self.page_generation(), self.page(), self.run_id, self.state.selected_step_id)
+                                        token = request_state.begin(identity(), visible=not area.is_deleted)
+                                        if token is None:
                                             return
-                                        area.clear()
-                                        with area:
-                                            ui.label("正在读取本次尝试日志…").classes("text-sm text-gray-500")
-                                        events = await self.controller.call("run.events", run_id=source_run["run_id"])
-                                        if (area.is_deleted or expected != (self.page_generation(), self.page(), self.run_id, self.state.selected_step_id)):
-                                            return
-                                        selected_events = [event for event in events if event.get("attempt_id") == target["attempt_id"]]
-                                        area.clear()
-                                        with area:
-                                            self.render_log_text(document_text(readable_metadata(selected_events, step_names(source_run, definition))))
+                                        try:
+                                            area.clear()
+                                            with area:
+                                                ui.label("正在读取本次尝试日志…").classes("text-sm text-gray-500")
+                                            events = await self.controller.call("run.events", run_id=source_run["run_id"])
+                                            if not request_state.accepts(token, identity(), visible=not area.is_deleted):
+                                                return
+                                            selected_events = [event for event in events if event.get("attempt_id") == target["attempt_id"]]
+                                            area.clear()
+                                            with area:
+                                                self.render_log_text(document_text(readable_metadata(selected_events, step_names(source_run, definition))))
+                                        finally:
+                                            request_state.finish(token)
                                     ui.button("加载尝试日志", on_click=load_attempt_logs).props("flat dense")
 
     async def refresh(self, *, force=True):
         if self.page() not in {"run", "executions"}:
             return
-        self.refresh_sequence += 1
-        request_sequence = self.refresh_sequence
-        page_identity = (self.page_generation(), self.page())
-        def current_page():
-            return page_identity == (self.page_generation(), self.page()) and self.page() in {'run', 'executions'}
-
+        page_identity = lambda: (self.page_generation(), self.page())
+        request = self.interaction.begin_refresh(page_identity())
         await self.render_rows(force=force)
-        if not current_page() or request_sequence != self.refresh_sequence:
+        if not self.interaction.accepts_refresh(request, page_identity()):
             return
-
-        identity = (
-            self.page_generation(), self.page(), self.run_id,
-            self.state.selected_step_run_id, self.state.selected_step_id,
-        )
+        identity = self.interaction.detail_token(request, page_identity())
         def current_run_page():
-            return request_sequence == self.refresh_sequence and identity == (
-                self.page_generation(), self.page(), self.run_id,
-                self.state.selected_step_run_id, self.state.selected_step_id,
-            ) and self.page() in {'run', 'executions'}
+            return self.interaction.accepts_detail(identity, page_identity())
         if not current_run_page():
             return
         if self.run_area is None:
@@ -556,17 +479,17 @@ class ExecutionDetails:
                 allowed=lambda: self.visible and self._run_details_visible,
                 names=names)
             log_area = ui.column().classes('w-full')
-            loading = False
+            load_state = HistoryLoadState(key)
             async def load_logs(*, full=False):
-                nonlocal loading
-                if loading or not current():
+                identity = lambda: (self.page_generation(), self.page(), self.run_id)
+                token = load_state.begin(identity(), visible=current())
+                if token is None:
                     return
-                loading = True
                 load_button.disable()
                 try:
                     events = await self.controller.call('run.events', run_id=run['run_id'])
                     text = await asyncio.to_thread(lambda: document_text(readable_metadata(events, names)))
-                    if not current() or logs_card.is_deleted:
+                    if not load_state.accepts(token, identity(), visible=current() and not logs_card.is_deleted):
                         return
                     if full:
                         with ui.context.client.layout, ui.dialog() as dialog, ui.card().classes('w-full max-w-5xl'):
@@ -579,7 +502,7 @@ class ExecutionDetails:
                         with log_area:
                             self.render_log_text(text)
                 finally:
-                    loading = False
+                    load_state.finish(token)
                     if not load_button.is_deleted:
                         load_button.enable()
             self.load_run_logs = load_logs

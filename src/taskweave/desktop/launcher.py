@@ -75,7 +75,7 @@ def select_local_port():
 
 def finish_workspace_migration(home):
     """Remove the old tree only when this launch uses the configured new tree."""
-    from taskweave.infrastructure.storage import workspace_location_file
+    from taskweave.infrastructure.sqlite_storage import workspace_location_file
     location = workspace_location_file()
     if not location.exists():
         return False
@@ -94,11 +94,10 @@ def finish_workspace_migration(home):
 
 def launch(home=None, port=None, browser=False):
     multiprocessing.freeze_support()
-    if getattr(sys, "frozen", False):
-        bundle_root = Path(sys.executable).resolve().parent
-        bundled_browsers = bundle_root / "browsers"
-        if bundled_browsers.is_dir():
-            os.environ.setdefault("PLAYWRIGHT_BROWSERS_PATH", str(bundled_browsers))
+    from taskweave.desktop.bundle import bundled_browser_path
+    bundled_browsers = bundled_browser_path()
+    if bundled_browsers is not None:
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(bundled_browsers)
     try:
         from nicegui import app, ui
 
@@ -116,7 +115,7 @@ def launch(home=None, port=None, browser=False):
     from taskweave.desktop.security import LocalAccess
     from taskweave.desktop.workbench import Workbench
     from taskweave.infrastructure.model import HttpModel, configured_model
-    from taskweave.infrastructure.storage import default_home
+    from taskweave.infrastructure.sqlite_storage import default_home
 
     home = Path(home or default_home()).resolve()
     if home is not None:
@@ -148,6 +147,17 @@ def launch(home=None, port=None, browser=False):
             viewer.start()
 
     async def startup():
+        if 'application' not in holder:
+            model = workbench_model()
+            logs.protect(getattr(model, 'api_key', None))
+            holder["application"] = await asyncio.to_thread(Application, home, model)
+        holder["controller"] = DesktopController(holder["application"])
+        holder["controller"].native = not browser
+        holder["controller"].open_logs = open_logs
+        holder["controller"].server_logs = logs
+        logging.getLogger(__name__).info('服务启动，监听 127.0.0.1:%s', port)
+
+    def workbench_model():
         model = configured_model()
         settings_path = home / "model.json"
         if settings_path.exists():
@@ -158,13 +168,7 @@ def launch(home=None, port=None, browser=False):
                     settings["model"],
                     settings.get("api_key") or os.getenv(settings.get("key_env", "")),
                 )
-        holder["application"] = await asyncio.to_thread(Application, home, model)
-        holder["controller"] = DesktopController(holder["application"])
-        holder["controller"].native = not browser
-        holder["controller"].open_logs = open_logs
-        holder["controller"].server_logs = logs
-        logs.protect(getattr(model, 'api_key', None))
-        logging.getLogger(__name__).info('服务启动，监听 127.0.0.1:%s', port)
+        return model
 
     async def shutdown():
         if viewer and viewer.is_alive():
@@ -176,6 +180,19 @@ def launch(home=None, port=None, browser=False):
         root_logger.setLevel(previous_level)
         logs.close()
 
+    # Frozen desktop failures must reach the outer native alert before opening
+    # a window; NiceGUI reports asynchronous startup failures in the background.
+    if getattr(sys, 'frozen', False):
+        try:
+            model = workbench_model()
+            logs.protect(getattr(model, 'api_key', None))
+            holder['application'] = Application(home, model)
+        except Exception:
+            root_logger.removeHandler(logs)
+            root_logger.setLevel(previous_level)
+            logs.close()
+            raise
+
     app.on_startup(startup)
     app.on_shutdown(shutdown)
     app.add_middleware(LocalAccess, token=token, port=port)
@@ -186,9 +203,10 @@ def launch(home=None, port=None, browser=False):
 
     @ui.page("/")
     async def index(view: str = "home", task_id: str | None = None, step_id: str | None = None, debug: bool = False):
+        client = ui.context.client
         def write_route(payload):
             import json
-            ui.run_javascript("""
+            client.run_javascript("""
                 const url = new URL(window.location.href);
                 for (const [key, value] of Object.entries(PAYLOAD)) {
                     if (value) url.searchParams.set(key, value); else url.searchParams.delete(key);
@@ -252,9 +270,10 @@ def launch(home=None, port=None, browser=False):
     from taskweave.desktop.dialogs import install_outside_click_guard
 
     install_outside_click_guard()
-    print(
-        json.dumps({"url": url, "home": str(home), "native": not browser}), flush=True
-    )
+    if not getattr(sys, 'frozen', False):
+        print(
+            json.dumps({"url": url, "home": str(home), "native": not browser}), flush=True
+        )
     ui.run(
         host="127.0.0.1",
         port=port,

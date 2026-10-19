@@ -3,9 +3,8 @@
 Browser/plugin commands never commit captures. The owning dialog explicitly
 persists the whole context group, then confirms the returned recording cursor.
 """
-import copy
-import json
 from taskweave.core.validation import TaskError
+from taskweave.presentation.context_collection import ContextCaptureDraft, CollectionSession, RecordingDraft
 
 
 def collection_workspace(owner, key, captures):
@@ -13,7 +12,6 @@ def collection_workspace(owner, key, captures):
     if cache is None:
         owner._collection_workspaces = cache = {}
     if key not in cache:
-        from taskweave.desktop.contexts import ContextCaptureDraft
         cache[key] = CollectionWorkspace(cache, key, ContextCaptureDraft(captures))
     return cache[key]
 
@@ -21,11 +19,24 @@ def collection_workspace(owner, key, captures):
 class CollectionWorkspace:
     """Client-owned draft survives ESC/hidden dialogs without consuming evidence."""
     def __init__(self, cache, key, draft):
-        self.cache, self.key, self.draft = cache, key, draft
-        self.fields = {}
-        self.recording = self.dialog = None
-        self.busy = False
+        self.cache, self.key = cache, key
+        self.interaction = CollectionSession(draft)
+        self.dialog = None
         self.capture_fields = None
+
+    @property
+    def draft(self): return self.interaction.draft
+
+    @property
+    def fields(self): return self.interaction.fields
+
+    @property
+    def recording(self): return self.interaction.recording
+
+    @property
+    def busy(self): return self.interaction.busy
+    @busy.setter
+    def busy(self, value): self.interaction.busy = value
 
     async def prepare_dialog(self, client):
         old = self.dialog
@@ -44,15 +55,10 @@ class CollectionWorkspace:
         return True
 
     def bind(self, invoke, *, source_page, source_session_id=None):
-        if self.recording is None:
-            self.recording = RecordingDraft(self.draft, invoke, source_page=source_page,
-                                            source_session_id=source_session_id)
-        else:
-            self.recording.invoke = invoke
+        self.interaction.bind(invoke, source_page=source_page, source_session_id=source_session_id)
 
     async def hide(self):
-        if self.recording and self.recording.pending and not self.recording.busy and self.recording.state == 'RECORDING':
-            await self.recording.set_paused(True)
+        await self.interaction.hide()
 
     def forget(self):
         self.cache.pop(self.key, None)
@@ -94,9 +100,8 @@ class RecordingControls:
 
     async def run(self, operation):
         from nicegui import ui
-        if self.workspace.busy:
+        if not self.workspace.interaction.begin_operation():
             return
-        self.workspace.busy = True
         self.sync()
         try:
             result = await operation()
@@ -104,7 +109,7 @@ class RecordingControls:
         except Exception as exc:
             ui.notify(f'操作失败，草稿和未确认录制仍保留：{exc}', type='negative')
         finally:
-            self.workspace.busy = False
+            self.workspace.interaction.finish_operation()
             if not self.dialog.value:
                 try:
                     await self.workspace.hide()
@@ -132,144 +137,3 @@ class RecordingControls:
                 ui.button('丢弃录制', on_click=lambda:confirm.submit(True)).props('color=negative')
         if await confirm:
             await self.run(self.workspace.recording.discard)
-
-
-class RecordingDraft:
-    def __init__(self, draft, invoke, *, source_page='planning', source_session_id=None):
-        self.draft, self.invoke = draft, invoke
-        self.source_page, self.source_session_id = source_page, source_session_id
-        self.options = {}
-        self.recording_id = self.session_id = None
-        self.state = None
-        self.entry = None
-        self.cursor = 0
-        self.busy = False
-        self.committed = False
-        self.saved_result = None
-
-    @property
-    def pending(self):
-        return self.recording_id is not None
-
-    async def _command(self, operation, **parameters):
-        options = {**self.options, **parameters}
-        if self.recording_id is not None:
-            options.update(recording_id=self.recording_id, expected_session_id=self.session_id)
-        result = await self.invoke(operation, **options)
-        if self.recording_id is not None and (
-                result['recording_id'] != self.recording_id or result['session_id'] != self.session_id):
-            raise TaskError('CONTEXT_SESSION_CHANGED', '录制返回了不同实例，未消费证据')
-        self.recording_id, self.session_id = result['recording_id'], result['session_id']
-        self.state = result['state']
-        return result
-
-    def _enter(self):
-        if self.busy:
-            raise TaskError('CONTEXT_SESSION_BUSY', '录制操作尚未完成')
-        self.busy = True
-
-    async def start(self, options, *, include_view):
-        self._enter()
-        try:
-            if self.pending:
-                raise TaskError('CONTEXT_RECORDING_PENDING', '请先处理已有录制')
-            self.options = copy.deepcopy(options)
-            self.source_session_id = self.options.get('run_id') or self.source_session_id
-            self.options['include_view'] = bool(include_view)
-            # The first selected instance is used for start; all subsequent
-            # commands freeze the identity returned by the provider.
-            selected_session = self.options.pop('expected_session_id', None)
-            await self._command('start', **({'expected_session_id': selected_session} if selected_session else {}))
-            self.committed = False
-            self.saved_result = self.entry = None
-        finally:
-            self.busy = False
-
-    async def set_paused(self, paused):
-        self._enter()
-        try:
-            if not self.pending or self.state not in {'RECORDING', 'PAUSED'}:
-                raise TaskError('CONTEXT_RECORDING_STATE_INVALID')
-            await self._command('pause' if paused else 'resume')
-        finally:
-            self.busy = False
-
-    async def stage(self):
-        self._enter()
-        try:
-            if self.entry is not None:
-                return self.entry
-            if not self.pending:
-                raise TaskError('CONTEXT_RECORDING_UNAVAILABLE')
-            await self._command('stop')
-            items, views, after = [], [], 0
-            dropped, available_after = 0, 0
-            # Provider/host limits guard each batch; an explicit upper bound
-            # also prevents an erroneous provider from an infinite read loop.
-            for _ in range(100):
-                last_after = after
-                batch = await self._command('read', after=after, limit=100, include_view=False)
-                cursor = batch['cursor']
-                if cursor < after or (batch.get('has_more') and cursor <= after):
-                    raise TaskError('CONTEXT_RECORDING_CURSOR_INVALID', '录制读取未推进，缓冲仍保留')
-                items.extend(batch['capture']['items'])
-                if batch['capture'].get('views'):
-                    views = batch['capture']['views']
-                dropped = max(dropped, batch.get('dropped_count', 0))
-                available_after = max(available_after, batch.get('available_after', 0))
-                after = cursor
-                if not batch.get('has_more'):
-                    if self.options['include_view']:
-                        preview = await self._command('read', after=last_after, limit=100, include_view=True)
-                        if preview['cursor'] != cursor or preview.get('has_more'):
-                            raise TaskError('CONTEXT_RECORDING_CURSOR_INVALID', '已停止录制在读取预览时变化，缓冲仍保留')
-                        views = preview['capture'].get('views', [])
-                    break
-            else:
-                raise TaskError('CONTEXT_RECORDING_RESULT_INVALID', '录制分批过多，缓冲仍保留')
-            metadata = {'recording_id': self.recording_id, 'session_id': self.session_id,
-                        'through': after, 'available_after': available_after,
-                        'dropped_count': dropped}
-            items.insert(0, {'kind': 'text', 'mime_type': 'application/json',
-                             'source': 'context.recording', 'content': json.dumps(metadata),
-                             'truncated': dropped > 0})
-            self.entry = self.draft.append({'items': items, 'views': views},
-                self.options.get('request', {}), self.options['include_view'],
-                self.source_session_id or self.session_id, self.source_page, '人工操作录制')
-            self.cursor = after
-            return self.entry
-        finally:
-            self.busy = False
-
-    async def persist(self, save):
-        self._enter()
-        try:
-            if self.pending and (self.state != 'STOPPED' or self.entry is None
-                                 or not any(entry is self.entry for entry in self.draft.entries)):
-                raise TaskError('CONTEXT_RECORDING_PENDING', '请先停止并暂存录制；移除的录制请明确丢弃')
-            if not self.committed:
-                result = await save()
-                if result is None:
-                    raise TaskError('CONTEXT_RECORDING_PENDING', '保存未提交，录制证据仍保留，请重新保存')
-                self.saved_result = result
-                self.committed = True
-            if self.pending:
-                await self._command('ack', through=self.cursor)
-                self.recording_id = None
-            return self.saved_result
-        finally:
-            self.busy = False
-
-    async def discard(self):
-        self._enter()
-        try:
-            if self.committed:
-                raise TaskError('CONTEXT_RECORDING_PENDING', '录制已保存，请重试确认；丢弃不会撤销已保存内容')
-            if self.pending:
-                await self._command('discard')
-                self.recording_id = None
-            if self.entry is not None:
-                self.draft.entries[:] = [entry for entry in self.draft.entries if entry is not self.entry]
-                self.entry = None
-        finally:
-            self.busy = False

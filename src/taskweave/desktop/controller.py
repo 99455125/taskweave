@@ -25,32 +25,21 @@ class DesktopController:
     def __init__(self, application):
         self.application = application
         self.native = False
-        self._authoring_requests = {}
+        from taskweave.application.authoring_sessions import bind_application_requests
+        self.authoring_requests = getattr(application, 'authoring_requests', None)
+        if self.authoring_requests is None:
+            # Minimal legacy adapters may omit composition; keep their request
+            # lifetime on the supplied application rather than this UI client.
+            self.authoring_requests = bind_application_requests(application)
+            if application is not None:
+                application.authoring_requests = self.authoring_requests
+        self._authoring_requests = self.authoring_requests.requests
 
     def authoring_request(self, step_id):
-        return self._authoring_requests.get(step_id)
+        return self.authoring_requests.get(step_id)
 
     async def author_step(self, operation, saved, **params):
-        """Keep one step authoring request alive across replacement UI clients."""
-        if operation not in {'step.generate', 'step.generate_goal'}:
-            raise ValueError('Unsupported step authoring operation')
-        step_id = saved['step_id']
-        pending = self.authoring_request(step_id)
-        if pending and not pending['task'].done():
-            raise TaskError('AUTHORING_BUSY', '当前步骤的 AI 请求仍在处理中，请查看上次 AI 结果。')
-        if step_id not in self._authoring_requests and len(self._authoring_requests) >= 16:
-            completed = next((key for key, value in self._authoring_requests.items()
-                              if value['task'].done()), None)
-            if completed is None:
-                raise TaskError('AUTHORING_BUSY', '在途 AI 请求过多，请等待已有请求完成。')
-            del self._authoring_requests[completed]
-        task = asyncio.create_task(self.call(operation, **params))
-        self._authoring_requests[step_id] = {
-            'operation': operation, 'saved': deepcopy(saved), 'params': deepcopy(params), 'task': task,
-        }
-        # A vanished UI waiter must not leave an unobserved task exception.
-        task.add_done_callback(lambda done: None if done.cancelled() else done.exception())
-        return await asyncio.shield(task)
+        return await self.authoring_requests.submit(operation, saved, **params)
 
     async def call(self, api_operation, **params):
         logger = logging.getLogger(__name__)
@@ -266,199 +255,63 @@ class DesktopController:
             )
         )
 
+    @property
+    def settings_adapter(self):
+        from taskweave.desktop.settings import DesktopSettings
+        return DesktopSettings(self.application.settings)
+
     async def default_environment(self):
-        return (await self.workbench_settings()).get('default_environment_id')
+        return await self.settings_adapter.default_environment()
 
     async def workbench_settings(self):
-        path = self.application.home / 'workbench.json'
-        settings = json.loads(path.read_text()) if path.exists() else {}
-        settings.setdefault('executor_max_threads', 8)
-        settings.update(self.application.privacy_settings.get())
-        return settings
+        return await self.settings_adapter.workbench_settings()
 
     def privacy_settings(self):
-        return self.application.privacy_settings.get()
+        return self.settings_adapter.privacy_settings()
 
     async def save_privacy_settings(self, *, redact_on_display, redact_for_ai):
-        return self.application.privacy_settings.update(
-            redact_on_display=redact_on_display, redact_for_ai=redact_for_ai,
-        )
+        return await self.settings_adapter.save_privacy_settings(redact_on_display=redact_on_display, redact_for_ai=redact_for_ai)
 
     async def save_executor_max_threads(self, value):
-        value = self.application.coordinator.set_max_concurrency(value)
-        path = self.application.home / 'workbench.json'
-        settings = await self.workbench_settings()
-        settings['executor_max_threads'] = value
-        temporary = path.with_suffix('.tmp')
-        temporary.write_text(json.dumps(settings, ensure_ascii=False), encoding='utf-8')
-        temporary.replace(path)
-        return value
+        return await self.settings_adapter.save_executor_max_threads(value)
 
     async def migrate_workspace(self, destination):
-        destination = Path(destination).expanduser().resolve()
-        source = self.application.home.resolve()
-        if destination == source or source in destination.parents:
-            raise TaskError('WORKSPACE_INVALID', '新目录不能是当前工作空间或其子目录')
-        if await self.call('run.instances'):
-            raise TaskError('WORKSPACE_BUSY', '请先结束全部执行实例')
-        if destination.exists() and any(destination.iterdir()):
-            raise TaskError('WORKSPACE_INVALID', '目标目录必须为空')
-        from taskweave.infrastructure.storage import workspace_location_file
-
-        def migrate():
-            destination.mkdir(parents=True, exist_ok=True)
-            for item in source.iterdir():
-                if item.name in {'coordinator.lock'}:
-                    continue
-                target = destination / item.name
-                if item.is_dir():
-                    shutil.copytree(item, target, dirs_exist_ok=True)
-                else:
-                    shutil.copy2(item, target)
-            marker = workspace_location_file()
-            marker.parent.mkdir(parents=True, exist_ok=True)
-            temporary = marker.with_suffix('.tmp')
-            temporary.write_text(json.dumps({'workspace_home': str(destination), 'remove_after_restart': str(source)}, ensure_ascii=False), encoding='utf-8')
-            temporary.replace(marker)
-        await asyncio.to_thread(migrate)
-        return {'workspace_home': str(destination), 'restart_required': True}
+        return await self.settings_adapter.migrate_workspace(destination)
 
     async def set_default_environment(self, environment_id):
-        environments = await self.call('environment.list')
-        if environment_id is not None and environment_id not in {e['environment_id'] for e in environments}:
-            raise TaskError('FORM_INVALID', '请选择已有环境')
-        path = self.application.home / 'workbench.json'
-        settings = await self.workbench_settings()
-        settings['default_environment_id'] = environment_id
-        temporary = path.with_suffix('.tmp')
-        temporary.write_text(json.dumps(settings, ensure_ascii=False))
-        temporary.replace(path)
+        return await self.settings_adapter.set_default_environment(environment_id)
 
     async def model_settings(self):
-        path = self.application.home / "model.json"
-        return (
-            json.loads(path.read_text())
-            if path.exists()
-            else {
-                "url": os.getenv("TASKWEAVE_MODEL_URL", ""),
-                "model": os.getenv("TASKWEAVE_MODEL_NAME", ""),
-                "key_env": "TASKWEAVE_MODEL_API_KEY",
-            }
-        )
+        return await self.settings_adapter.model_settings()
 
     async def save_model(self, url, model, key_env, api_key=None):
-        if key_env and not key_env.replace("_", "a").isalnum():
-            raise TaskError("MODEL_KEY_REFERENCE_INVALID")
-        previous = self.application.authoring.model
-        key = api_key or (os.getenv(key_env) if key_env else None)
-        if not key and getattr(previous, "url", None) == url:
-            key = getattr(previous, "api_key", None)
-        if not key:
-            stored = await self.model_settings()
-            if stored.get("url") == url:
-                key = stored.get("api_key")
-        adapter = HttpModel(url, model, key) if url and model else None
+        settings = await self.settings_adapter.save_model(url, model, key_env, api_key)
         if hasattr(self, 'server_logs'):
-            self.server_logs.protect(key)
-        settings = {"url": url, "model": model, "key_env": key_env, "api_key": key}
-        path = self.application.home / "model.json"
-        temporary = path.with_suffix(".tmp")
-        temporary.write_text(json.dumps(settings, ensure_ascii=False), encoding="utf-8")
-        temporary.replace(path)
-        self.application.authoring.model = adapter
+            self.server_logs.protect(settings['api_key'])
         return settings
 
     async def test_model(self):
-        adapter = self.application.authoring.model
-        if adapter is None:
-            raise TaskError("MODEL_NOT_CONFIGURED")
-        reply = await adapter.complete(
-            [
-                {
-                    "role": "system",
-                    "content": "只返回 JSON 对象，包含完整的 step_content 和简短 explanation，不要 Markdown。",
-                },
-                {
-                    "role": "user",
-                    "content": 'Write async def run(ctx, inputs) returning ctx.result(data={"connected": True}).',
-                },
-            ],
-            [],
-            {
-                "type": "object",
-                "properties": {
-                    "step_content": {"type": "string"},
-                    "explanation": {"type": "string"},
-                },
-                "required": ["step_content"],
-            },
-        )
-        try:
-            tree = ast.parse(reply.proposed_content or "")
-            if not any(isinstance(node, ast.AsyncFunctionDef) and node.name == "run" for node in tree.body):
-                raise ValueError("missing run")
-        except (SyntaxError, ValueError) as exc:
-            raise TaskError("MODEL_CONTENT_INVALID", "连接已建立，但模型未生成有效的 async run 步骤内容") from exc
-        return {
-            "connected": bool(reply.proposed_content),
-            "explanation": reply.explanation,
-        }
-
-    async def copy_text(self, text):
-        if self.native and sys.platform == 'darwin':
-            try:
-                await asyncio.to_thread(subprocess.run, ['pbcopy'], input=text.encode('utf-8'), check=True, timeout=10)
-            except (OSError, subprocess.SubprocessError) as exc:
-                raise TaskError('CLIPBOARD_FAILED', '复制失败，请在文本框中全选复制') from exc
-            return
-        from nicegui import ui
-        success = await ui.run_javascript("""return await (async () => {
-            const text = TEXT;
-            try { await navigator.clipboard.writeText(text); return true; } catch (_) {}
-            const input = document.createElement('textarea');
-            input.value = text; input.style.position = 'fixed'; input.style.opacity = '0';
-            document.body.appendChild(input); input.focus(); input.select();
-            try { return document.execCommand('copy'); } finally { input.remove(); }
-        })();""".replace('TEXT', json.dumps(text)), timeout=10)
-        if not success:
-            raise TaskError('CLIPBOARD_FAILED', '复制失败，请在文本框中全选复制')
+        return await self.settings_adapter.test_model()
 
     async def save_task_export(self, text):
-        # Unique files prevent silently overwriting an earlier task export.
-        directory = self.application.home / 'exports'
-        def save():
-            directory.mkdir(parents=True, exist_ok=True)
-            path = directory / ('taskweave-task-' + uuid4().hex[:12] + '.json')
-            with path.open('x', encoding='utf-8') as output:
-                output.write(text)
-            return path
-        path = await asyncio.to_thread(save)
-        await self.open_path(directory)
-        return path
+        return await self._save_export(text, 'save_task_export')
 
     async def save_plan_prompt(self, text):
-        directory = self.application.home / 'exports'
-        def save():
-            directory.mkdir(parents=True, exist_ok=True)
-            path = directory / ('taskweave-plan-' + uuid4().hex[:12] + '.txt')
-            with path.open('x', encoding='utf-8') as output:
-                output.write(text)
-            return path
-        path = await asyncio.to_thread(save)
-        await self.open_path(directory)
+        return await self._save_export(text, 'save_plan_prompt')
+
+    async def _save_export(self, text, operation):
+        from taskweave.application.settings import WorkspaceExports
+        service = getattr(self.application, 'settings', None)
+        if service is None:
+            service = WorkspaceExports(self.application.home)
+        path = await asyncio.to_thread(getattr(service, operation), text)
+        await self.open_path(path.parent)
         return path
 
+    async def copy_text(self, text):
+        from taskweave.desktop.platform import copy_text
+        return await copy_text(text, native=self.native)
+
     async def open_path(self, path):
-        path = Path(path).resolve()
-        if not path.is_relative_to(self.application.home) or not path.exists():
-            raise TaskError("LOCAL_PATH_INVALID")
-
-        def launch():
-            if sys.platform == "win32":
-                os.startfile(str(path))
-            else:
-                subprocess.Popen(
-                    ["open" if sys.platform == "darwin" else "xdg-open", str(path)]
-                )
-
-        await asyncio.to_thread(launch)
+        from taskweave.desktop.platform import open_path
+        return await open_path(path, workspace_home=self.application.home)

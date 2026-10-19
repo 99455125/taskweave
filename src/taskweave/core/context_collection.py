@@ -3,7 +3,7 @@
 from dataclasses import asdict
 import json
 
-from taskweave.core.ports import ContextCollection, ContextItem, ContextView
+from taskweave.core.context_contracts import ContextCollection, ContextItem, ContextView
 from taskweave.core.validation import TaskError
 
 

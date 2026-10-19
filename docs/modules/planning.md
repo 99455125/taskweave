@@ -30,6 +30,10 @@
 - 规划列表卡片整块可鼠标或键盘打开；收藏切换位于详情分类旁。网页 chat 调用弹窗使用内部可滚动的提示词/回复框与受限高度，弹窗主体可滚动，操作按钮保持可达。
 - 规划资源与调试/正式运行资源分别归属；变更环境或插件配置遵守采集会话控制，忙碌资源不能悄悄丢弃。
 
+规划UI位于desktop/pages/planning.py，采集和生成控件拆到components/planning_collection.py、planning_generations.py；旧desktop/planning.py保持兼容导出。presentation/planning.py持有编辑会话、选择、候选和页签/历史加载状态，presentation/context_collection.py持有采集暂存及保存决策；界面控件只适配同一状态。
+
+规划目录筛选消费普通CategoryFilter及PlanningPageState.search；控件事件先更新状态再重绘，分类刷新按原规则保留有效选择。采集表单和目标选择复用presentation/collection_form.py，生成/采纳及采集应用协议明确每个操作的参数与返回；UI只负责呈现与事件适配。
+
 ## 代码入口
 
 - [PlanningService](../../src/taskweave/application/planning.py)：配置、采集、生成、解析与导入协调。

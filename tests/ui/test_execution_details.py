@@ -11,6 +11,24 @@ from taskweave.desktop.state import ExecutionPageState
 
 
 class ExecutionDetailsTests(unittest.TestCase):
+    def test_reused_page_polling_survives_dispose_and_preserves_hidden_document(self):
+        async def scenario():
+            details = ExecutionDetails(MagicMock(), ExecutionPageState(), MagicMock(),
+                lambda: 'executions', lambda: 1, *[AsyncMock() for _ in range(6)])
+            details.refresh = AsyncMock()
+            # Workbench.paint disposes the reusable page before rendering it.
+            details.dispose()
+            await details.poll()
+            details.refresh.assert_awaited_once_with(force=False)
+            details.set_visible(False)
+            details.dispose()
+            await details.poll()
+            self.assertEqual(details.refresh.await_count, 1)
+            details.set_visible(True)
+            await details.poll()
+            self.assertEqual(details.refresh.await_count, 2)
+        asyncio.run(scenario())
+
     def test_poll_reuses_unchanged_run_details_and_invalidates_on_new_event(self):
         from nicegui import ui
         from nicegui.client import Client

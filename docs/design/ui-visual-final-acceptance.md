@@ -15,9 +15,9 @@ R1–R9 中发现的草稿丢失、组织缓存、迟到回调、日志弹窗、
 ## 主树整合及本次实际验证
 
 - 整合 15 个桌面源码与 7 个定向测试文件，另同步 desktop/planning/execution 三份模块事实文档。没有改核心、存储协议或任务包，没有提交或清理混合树。
-- 替换前逐项比对主树原哈希及冻结来源哈希，原文件备份；替换后 22 项哈希全部与审核对象一致。清单见 [整合记录](../../output/playwright/ui-visual-owner/integration-candidate.json)。
+- 替换前逐项比对主树原哈希及冻结来源哈希，原文件备份；替换后 22 项哈希全部与审核对象一致。原始整合清单未随仓库保存，当前无法复核。
 - 主树运行 `uv run python -m unittest tests.ui.test_navigation tests.ui.test_tasks_page tests.ui.test_workbench_home tests.ui.test_planning_page tests.ui.test_planning_editor_late_candidate tests.ui.test_planning_end_collection tests.ui.test_plugins_page tests.ui.test_marketplace_page -q`：55 项通过，3.355 秒。没有运行全量或拼组全量。
-- 主树实际启动隔离临时工作区，以 Playwright 在1440/768验证插件头、真实停用/启用往返及日志完整查看、复制入口、关闭；日志全文一致、270px内滚动、深蓝浅字、无浏览器错误。负责人已查看主树新截图。见 [浏览器记录](../../output/playwright/ui-visual-owner/integration-browser/r9-plugins-logs-result.json)。复制回调成功不扩称原生系统剪贴板验收。
+- 主树实际启动隔离临时工作区，以 Playwright 在1440/768验证插件头、真实停用/启用往返及日志完整查看、复制入口、关闭；日志全文一致、270px内滚动、深蓝浅字、无浏览器错误。负责人已查看主树新截图。原始浏览器记录未随仓库保存，当前无法复核。复制回调成功不扩称原生系统剪贴板验收。
 - 工程结构/语法/依赖/文档检查与 `git diff --check` 通过；最终文档落盘后再次执行检查。
 - 逐页基础图与历次修正证据已保存在 `output/playwright/ui-visual-owner/reviewed-evidence/`，主树新截图在同级 `integration-browser/`；旧图按设计覆盖表解释，不把旧版本当最终截图。
 
