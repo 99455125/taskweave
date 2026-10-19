@@ -690,7 +690,7 @@ class PlanningPageTests(unittest.TestCase):
             state = PlanningPageState()
             page = PlanningPage(controller, state, MagicMock(), AsyncMock(), AsyncMock(), AsyncMock())
             page.editor = AsyncMock()
-            with patch("taskweave.desktop.planning.ui") as fake_ui:
+            with patch("taskweave.desktop.pages.planning.ui") as fake_ui:
                 fake_ui.input.return_value.props.return_value.classes.return_value.value = ""
                 await page.render()
             self.assertEqual(state.plan_id, "p1")

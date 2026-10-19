@@ -3,6 +3,7 @@
 import asyncio
 import json
 from nicegui import ui
+from taskweave.presentation.history import HistoryLoadState
 from taskweave.desktop.pages.base import Page
 from taskweave.desktop.display import execution_title, readable_metadata, step_names
 from taskweave.desktop.components.run_logs import render_log_text
@@ -71,29 +72,31 @@ class HistoryPage(Page):
                                 ui.code(_document_text(readable_metadata(attempt, names)), language="json").classes("w-full")
                         log_area = ui.column().classes("w-full min-w-0")
                         log_status = ui.label("运行日志按需加载，不自动刷新。").classes("text-xs text-gray-500")
-                        loading = False
+                        load_state = HistoryLoadState((task_id, identity))
 
                         async def load_logs():
-                            nonlocal loading
-                            if loading or dialog.is_deleted or not dialog.value or not current():
+                            token = load_state.begin((self.task_id, self.identity()),
+                                visible=not dialog.is_deleted and bool(dialog.value))
+                            if token is None:
                                 return
-                            loading = True
                             load_button.disable()
                             log_status.text = "正在读取运行日志…"
                             try:
                                 events = await self.controller.call("run.events", run_id=r["run_id"])
                                 text = await asyncio.to_thread(lambda: _document_text(readable_metadata(events, names)))
-                                if dialog.is_deleted or not dialog.value or not current():
+                                if not load_state.accepts(token, (self.task_id, self.identity()),
+                                        visible=not dialog.is_deleted and bool(dialog.value)):
                                     return
                                 log_area.clear()
                                 with log_area:
                                     render_log_text(self.controller, self.button, text)
                                 log_status.text = "日志已加载；翻页与复制保留完整内容。"
                             except Exception as exc:
-                                if not dialog.is_deleted and dialog.value and current():
+                                if load_state.accepts(token, (self.task_id, self.identity()),
+                                        visible=not dialog.is_deleted and bool(dialog.value)):
                                     log_status.text = f"日志读取失败：{getattr(exc, 'code', type(exc).__name__)}；可重新加载。"
                             finally:
-                                loading = False
+                                load_state.finish(token)
                                 if not load_button.is_deleted:
                                     load_button.enable()
 

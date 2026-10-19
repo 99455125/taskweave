@@ -8,6 +8,21 @@ from taskweave_playwright import PlaywrightPlugin, locate, _live_context_targets
 
 
 class PlaywrightScopeTests(unittest.IsolatedAsyncioTestCase):
+    async def test_disabled_input_value_is_readable_without_enabling_writes(self):
+        await self.page.set_content('<input id="summary" disabled value="100.000000"><input id="readonly" readonly value="fixed"><input id="hidden" hidden value="hidden">')
+        for selector,expected in [('#summary','100.000000'),('#readonly','fixed')]:
+            result=await self.actions['playwright.page_input_value'].execute(self.ctx,{'selector':selector})
+            self.assertEqual(result,{'value':expected})
+        for action in ['playwright.page_fill','playwright.page_click']:
+            inputs={'selector':'#summary'}
+            if action.endswith('page_fill'):inputs['value']='200'
+            with self.assertRaises(TaskError) as error:
+                await self.actions[action].execute(self.ctx,inputs)
+            self.assertEqual(error.exception.code,'LOCATOR_DISABLED')
+        with self.assertRaises(TaskError) as error:
+            await self.actions['playwright.page_input_value'].execute(self.ctx,{'selector':'#hidden'})
+        self.assertEqual(error.exception.code,'LOCATOR_HIDDEN')
+
     async def test_frame_path_releases_temporary_element_handles(self):
         from taskweave_playwright.observation import frame_path
         frame = self.page.frames[1]

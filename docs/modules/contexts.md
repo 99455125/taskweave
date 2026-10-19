@@ -29,6 +29,10 @@ Playwright 提供器已接入真实浏览器事件：记录可信 click/input/ch
 
 步骤独立观察通过同一 ContextSessions 管理资源，context.read 不再每次关闭浏览器，返回形状仍为 items/views；context.targets 可选择该步骤保留的页面。context.record 未指定 run_id 时使用独立步骤会话，指定时仍使用原运行 worker，两者不混用，不新建执行记录。独立会话的 Scope 保留真实 task_id/step_id，并使用任务输入默认值；插件、能力或环境变化要求核对会话身份，未处理录制的收尾仍使用原能力范围。实例列表以 step 类型展示，instance.end 可显式结束；未保存录制或在途采集阻止删除所属步骤/任务，所用环境在实例结束前不可删除。退出释放资源并取消该会话事件循环的残留任务；内存缓冲不跨进程重启保存。
 
+采集暂存与取消/提交决策位于presentation/context_collection.py；步骤素材的保存、重排、删除和过期结果保护位于presentation/step_contexts.py。desktop/contexts.py与context_recording.py保留控件、预览和旧导出，CollectionWorkspace通过session引用普通状态，控件不进入交互快照。
+
+采集表单的名称、说明、提供器、运行选择、高级参数及动态schema原值归presentation/collection_form.py的CollectionForm；TargetSelection负责目标列表、原会话恢复和过期列表接纳。步骤及规划实际共用，快照采集和录制提交读取普通草稿，ValueForm仅负责控件适配。采集数据类位于core/context_contracts.py，core/ports.py及插件SDK保留同一类的公开导出。
+
 ## 代码入口
 
 [数据契约](../../src/taskweave/core/context_collection.py)、[步骤上下文用例](../../src/taskweave/application/contexts.py)、[会话协调](../../src/taskweave/infrastructure/context_sessions.py)、[步骤上下文仓储](../../src/taskweave/infrastructure/repositories/step_contexts.py)、[规划上下文仓储](../../src/taskweave/infrastructure/repositories/plan_contexts.py)、[共享采集 UI](../../src/taskweave/desktop/contexts.py)、[步骤上下文组件](../../src/taskweave/desktop/components/step_contexts.py)。

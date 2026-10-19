@@ -1,21 +1,23 @@
 """Step editing, trial and validation application use cases."""
 
+from taskweave.core.data_contracts import StepRecord
+from taskweave.core.run_ports import StepRunStore
 import asyncio
 import json
 
 from taskweave.core.validation import TaskError, normalize_step
-from taskweave.core.repositories import RunRepository, StepRepository, TaskRepository
+from taskweave.core.repositories import StepRepository, TaskRepository
 
 
 class StepUseCases:
-    def __init__(self, steps: StepRepository, tasks: TaskRepository, runs: RunRepository, registry, authoring, coordinator, context_sessions=None):
+    def __init__(self, steps: StepRepository, tasks: TaskRepository, runs: StepRunStore, registry, authoring, coordinator, context_sessions=None):
         self.context_sessions = context_sessions
         self.steps, self.tasks, self.runs = steps, tasks, runs
         self.registry, self.authoring, self.coordinator = registry, authoring, coordinator
 
     def save(self, task_id, document, step_id=None, expected_hash=None):
         return self.steps.save_step(task_id, document, step_id, expected_hash)
-    def get(self, step_id): return self.steps.step(step_id)
+    def get(self, step_id) -> StepRecord: return self.steps.step(step_id)
     def list(self, task_id): return self.steps.steps(task_id)
     def reorder(self, task_id, step_ids): return self.steps.reorder(task_id, step_ids)
     def delete(self, step_id):

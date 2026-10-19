@@ -151,45 +151,8 @@ class SchemaEditor:
             self.on_change()
 
     def schema(self):
-        properties, required = {}, []
-        for name, kind, default, description, req, original in self.rows:
-            key = name.value.strip()
-            if not key and not default.value and not req.value:
-                continue
-            if not key:
-                raise TaskError("FORM_INVALID", "填写了默认值的参数需要名称")
-            if key in properties:
-                raise TaskError("FORM_INVALID", "参数名称重复：" + key)
-            spec = {**original, "type": kind.value}
-            spec.pop("default", None)
-            spec.pop("description", None)
-            if description.value and description.value.strip():
-                spec["description"] = description.value.strip()
-            if default.value != "":
-                try:
-                    spec["default"] = (
-                        default.value
-                        if kind.value == "string"
-                        else json.loads(default.value)
-                    )
-                except ValueError as exc:
-                    raise TaskError(
-                        "FORM_INVALID", "非文本默认值需要有效 JSON 值"
-                    ) from exc
-            properties[key] = spec
-            if req.value:
-                required.append(key)
-        result = {
-            **self.original,
-            "type": "object",
-            "properties": properties,
-            "required": required,
-        }
-        if properties == self.original.get("properties", {}) and set(required) == set(
-            self.original.get("required", [])
-        ):
-            return self.original.copy()
-        return result
+        from taskweave.presentation.forms import schema_from_rows
+        return schema_from_rows(self.original, self.raw_rows())
 
     def raw_rows(self):
         """Keep even incomplete/invalid parameter edits for connection recovery."""

@@ -1,5 +1,6 @@
 """Task definition and task-package application use cases."""
 
+from taskweave.core.data_contracts import TaskRecord
 from taskweave.application.task_transfer import export_task, import_task, validate_task_package
 from taskweave.core.repositories import StepContextRepository, StepRepository, TaskRepository, UnitOfWork
 
@@ -15,11 +16,11 @@ class TaskUseCases:
         self.authoring = authoring
         self.coordinator = coordinator
 
-    def create(self, name, input_schema=None, description=""):
+    def create(self, name, input_schema=None, description="") -> TaskRecord:
         return self.tasks.create_task(name, input_schema, description)
 
-    def get(self, task_id): return self.tasks.task(task_id)
-    def list(self): return self.tasks.list_tasks()
+    def get(self, task_id) -> TaskRecord: return self.tasks.task(task_id)
+    def list(self) -> list[TaskRecord]: return self.tasks.list_tasks()
     def update(self, task_id, name, input_schema, description=""):
         return self.tasks.update_task(task_id, name, input_schema, description)
     def delete(self, task_id):

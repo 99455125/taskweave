@@ -20,6 +20,19 @@ def _attribute_chain(node):
     return list(reversed(parts))
 
 
+def presentation_boundary_violations(tree):
+    """Interaction code cannot import framework adapters or concrete infrastructure."""
+    forbidden = ('nicegui', 'webview', 'taskweave.desktop', 'taskweave.infrastructure')
+    result = []
+    for node in ast.walk(tree):
+        names = ([alias.name for alias in node.names] if isinstance(node, ast.Import)
+                 else [node.module or ''] if isinstance(node, ast.ImportFrom) else [])
+        for name in names:
+            if any(name == prefix or name.startswith(prefix + '.') for prefix in forbidden):
+                result.append(f'line {node.lineno}: {name}')
+    return result
+
+
 def runtime_boundary_violations(tree):
     return [
         f"line {node.lineno}: {'.'.join(_attribute_chain(node.func))}"
@@ -131,10 +144,19 @@ def main():
             for violation in application_boundary_violations(tree):
                 errors.append(f"Application persistence bypass must use a repository: {path}:{violation}")
         runtime_path = ROOT / "src/taskweave/infrastructure/runtime.py"
-        if path == runtime_path:
+        if path.parent == runtime_path.parent and path.name in {"runtime.py", "run_coordinator.py", "coordinator_pool.py", "worker_transport.py"}:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
             for violation in runtime_boundary_violations(tree):
                 errors.append(f"Coordinator persistence SQL must use RunRepository: {path}:{violation}")
+        if relative.parts and relative.parts[0] == "presentation":
+            for violation in presentation_boundary_violations(tree):
+                errors.append(f"Presentation must remain framework independent: {path}:{violation}")
+        if relative.parts and relative.parts[0] in {"core", "application"}:
+            for node in ast.walk(tree):
+                names = ([a.name for a in node.names] if isinstance(node, ast.Import)
+                         else [node.module or ''] if isinstance(node, ast.ImportFrom) else [])
+                if any(n.startswith(("taskweave.presentation", "taskweave.desktop")) for n in names):
+                    errors.append(f"Reverse interaction dependency: {path}:{node.lineno}")
         controller_path = ROOT / "src/taskweave/desktop/controller.py"
         if path == controller_path:
             tree = ast.parse(path.read_text(encoding="utf-8"), filename=str(path))

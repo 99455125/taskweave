@@ -8,7 +8,7 @@ from unittest.mock import Mock
 from taskweave.infrastructure.repositories import build_sqlite_repositories
 from taskweave.infrastructure.repositories.tasks import TaskRepository
 from taskweave.infrastructure.repositories.plans import PlanMetadataRepository
-from taskweave.infrastructure.storage import Store
+from taskweave.infrastructure.sqlite_storage import SQLiteStorage
 
 
 STEP = "async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n"
@@ -17,7 +17,7 @@ STEP = "async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n"
 class RepositoryWiringTests(unittest.TestCase):
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
-        self.store = Store(Path(self.temp.name))
+        self.store = SQLiteStorage(Path(self.temp.name))
 
     def tearDown(self):
         self.temp.cleanup()

@@ -2,11 +2,11 @@
 
 import sqlite3
 from taskweave.core.validation import TaskError
-from taskweave.infrastructure.storage import now, uid
+from taskweave.infrastructure.sqlite_storage import SQLiteStorage, now, uid
 
 
 class OrganizationRepository:
-    def __init__(self, store):
+    def __init__(self, store: SQLiteStorage):
         self.store = store
 
     def categories(self):

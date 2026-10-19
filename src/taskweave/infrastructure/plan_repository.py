@@ -6,9 +6,10 @@ from taskweave.infrastructure.repositories.plans import PlanMetadataRepository
 
 
 class PlanRepository:
-    def __init__(self, store):
+    def __init__(self, store, *, repositories=None):
         self.store = store
-        repositories = getattr(store, "_repository_set", None)
+        if repositories is None:
+            repositories = getattr(store, "_repository_set", None)
         if repositories is None:
             self.plan_contexts = PlanContextRepository(store)
             self.plans = PlanMetadataRepository(store, self.plan_contexts)

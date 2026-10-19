@@ -6,7 +6,7 @@ from pathlib import Path
 from taskweave.core.validation import TaskError
 
 DEFAULT_AI_REQUEST_LIMIT_KIB = 2048
-MAX_AI_REQUEST_LIMIT_KIB = 4096
+MAX_AI_REQUEST_LIMIT_KIB = 16384
 
 
 class AISettings:
@@ -28,7 +28,7 @@ class AISettings:
 
     def update(self, ai_request_limit_kib):
         if isinstance(ai_request_limit_kib, bool) or not isinstance(ai_request_limit_kib, int) or not 1 <= ai_request_limit_kib <= MAX_AI_REQUEST_LIMIT_KIB:
-            raise TaskError("FORM_INVALID", "AI 请求大小上限必须是 1–4096 的整数 KB")
+            raise TaskError("FORM_INVALID", f"AI 请求大小上限必须是 1–{MAX_AI_REQUEST_LIMIT_KIB} 的整数 KiB")
         value = self._all(); value["ai_request_limit_kib"] = ai_request_limit_kib
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.path.write_text(json.dumps(value, ensure_ascii=False, indent=2), encoding="utf-8")

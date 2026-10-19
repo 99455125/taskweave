@@ -111,147 +111,11 @@ def context_capture_time(value):
         return ""
 
 
-class ContextCaptureDraft:
-    """Mutable modal-only ordering and tombstones for one context group."""
-
-    def __init__(self, captures=()):
-        self.entries = [{"capture_id": item["capture_id"], "label": item.get("label", ""), "original_label": item.get("label", ""),
-                         "captured_at": item.get("captured_at"), "source_page": item.get("source_page"),
-                         "operation_notes": item.get("operation_notes", ""), "send_preview": bool(item.get("send_preview")),
-                         "original_notes": item.get("operation_notes", ""), "original_send": bool(item.get("send_preview")),
-                         "has_preview": bool(item.get("has_preview") or item.get("views")),
-                         "is_new": False} for item in captures]
-        self.original_order = tuple(item['capture_id'] for item in self.entries)
-        self.deleted = []
-
-    @property
-    def dirty(self):
-        order = tuple(item['capture_id'] for item in self.entries if not item.get('is_new'))
-        return bool(self.deleted or order != self.original_order or any(item.get("operation_notes", "") != item.get("original_notes", "") or bool(item.get("send_preview")) != bool(item.get("original_send")) or item.get("is_new") or item.get("label") != item.get("original_label", item.get("label")) for item in self.entries))
-
-    def append(self, capture, request, include_view, source_session_id=None, source_page="planning", label=""):
-        if not capture.get("items") and not capture.get("views"):
-            raise TaskError("CONTEXT_EMPTY", "插件没有返回上下文内容或预览")
-        item = {"capture": capture, "request": request or {}, "include_view": include_view,
-                "source_session_id": source_session_id, "source_page": source_page,
-                "captured_at": datetime.now().astimezone().isoformat(timespec='seconds'),
-                "label": label, "operation_notes": "", "send_preview": False, "is_new": True}
-        self.entries.append(item)
-        return item
-
-    def remove(self, item):
-        index = self.entries.index(item)
-        if not item.get('is_new'):
-            item['_before_item'] = self.entries[index - 1] if index else None
-            item['_after_item'] = self.entries[index + 1] if index + 1 < len(self.entries) else None
-            item['_delete_index'] = index
-        self.entries.remove(item)
-        if not item.get("is_new"):
-            self.deleted.append(item)
-
-    def undo_delete(self, item):
-        self.deleted.remove(item)
-        after_item, before_item = item.pop('_after_item', None), item.pop('_before_item', None)
-        delete_index = item.pop('_delete_index', len(self.entries))
-        after_index = next((index for index, entry in enumerate(self.entries) if entry is after_item), None)
-        before_index = next((index for index, entry in enumerate(self.entries) if entry is before_item), None)
-        if after_index is not None:
-            index = after_index
-        elif before_index is not None:
-            index = before_index + 1
-        else:
-            index = min(delete_index, len(self.entries))
-        self.entries.insert(index, item)
-
-    def move(self, item, direction):
-        index = self.entries.index(item)
-        other = index + (-1 if direction == "up" else 1)
-        if 0 <= other < len(self.entries):
-            self.entries[index], self.entries[other] = self.entries[other], self.entries[index]
-
-    def payload(self):
-        return [{key: item[key] for key in ("capture_id", "label", "operation_notes", "send_preview")} if not item.get("is_new") else
-                {key: item[key] for key in ("capture", "request", "include_view", "source_session_id", "source_page", "captured_at", "label", "operation_notes", "send_preview")}
-                for item in self.entries]
-
-
-def context_target_options(request_schema):
-    """Return plugin-owned target picker behavior, or None for plain forms."""
-    options = request_schema.get("x-taskweave-context-targets")
-    if not isinstance(options, dict):
-        return None
-    return {
-        "selector_label": options.get("selector_label", "上下文实例"),
-        "parameter_mode_label": options.get("parameter_mode_label", "使用插件参数"),
-        "auto_select_single": bool(options.get("auto_select_single", False)),
-        "hide_parameters_when_selected": bool(
-            options.get("hide_parameters_when_selected", False)
-        ),
-        "keep_parameters_when_selected": tuple(options.get("keep_parameters_when_selected", ())),
-    }
-
-
-def context_hidden_parameters(request_schema, target_selected):
-    """Return form fields supplied by a selected target rather than by the user."""
-    if not target_selected:
-        return set()
-    options = context_target_options(request_schema)
-    if not options or not options["hide_parameters_when_selected"]:
-        return set()
-    properties = request_schema.get("properties", {})
-    return set(properties) - set(options["keep_parameters_when_selected"])
-
-
-def context_view_default(request_schema):
-    options = request_schema.get("x-taskweave-context-view")
-    return bool(options.get("default", True)) if isinstance(options, dict) else None
-
-
-def context_surface_defaults(request_schema, surface):
-    """Plugin-provided form defaults for a specific authoring surface."""
-    surfaces = request_schema.get("x-taskweave-context-surface-defaults", {})
-    values = surfaces.get(surface, {}) if isinstance(surfaces, dict) else {}
-    properties = request_schema.get("properties", {})
-    return {key: value for key, value in values.items() if key in properties} if isinstance(values, dict) else {}
-
-
-def context_advanced_overrides(request_schema, request):
-    """Return persisted plugin parameters that have no generated form control."""
-    properties = request_schema.get("properties", {})
-    known = set(properties) if isinstance(properties, dict) else set()
-    return {
-        key: value for key, value in (request or {}).items()
-        if key not in known and key != "target_id"
-    }
-
-
-def merge_context_request(form_values, advanced_overrides, target_request=None):
-    """Merge plugin form, advanced and selected-target values in UI precedence order."""
-    from taskweave.core.validation import TaskError
-
-    if not isinstance(advanced_overrides, dict):
-        raise TaskError("FORM_INVALID", "高级参数需要 JSON 对象")
-    request = dict(form_values)
-    request.update(advanced_overrides)
-    request.update(target_request or {})
-    return request
-
-
-def context_ai_items(entries, renderers=None):
-    """Preserve group and capture order while keeping plugin items intact."""
-    groups=[{
-        "context_id": group["context_id"], "provider_id": group["provider_id"],
-        "name": group["name"], "context_notes": group.get("context_notes", ""),
-        "order_index": group.get("order_index", order),
-        "captures": [capture_ai_payload(capture, index, renderers or {})
-                     for index, capture in enumerate(group.get("captures", []))
-                     if capture.get("items") or (capture.get("send_preview") and capture.get("views"))],
-    } for order, group in enumerate(entries) if any(c.get("items") or (c.get("send_preview") and c.get("views")) for c in group.get("captures", []))]
-
-    if groups or not entries:
-        return groups
-    # In-memory callers may pass a newly collected response before refreshing summaries.
-    return [{**item,"context_name":group['name'],"context_notes":group.get('context_notes',''),"order_index":group.get('order_index',index)} for index,group in enumerate(entries) for item in (group.get('item') if isinstance(group.get('item'),list) else [group.get('item')]) if item]
+from taskweave.presentation.context_collection import (
+    ContextCaptureDraft, context_target_options, context_hidden_parameters,
+    context_view_default, context_surface_defaults, context_advanced_overrides,
+    merge_context_request, context_ai_items,
+)
 
 
 class ContextCards:
@@ -447,90 +311,56 @@ class ContextCards:
 
 
 class ContextTargetPicker:
-    """The host only renders labels and forwards opaque plugin request fields."""
+    """NiceGUI controls bound to plain target/session selection."""
 
     def __init__(self, load, options=None):
-        self.load, self.targets, self.session_id = load, {}, None
-        self.options = options or {
-            "selector_label": "上下文实例",
-            "parameter_mode_label": "使用插件参数",
-            "auto_select_single": False,
-            "hide_parameters_when_selected": False,
-        }
-        self.auto_selected_id = None
+        from taskweave.presentation.collection_form import TargetSelection
+        self.load = load
+        self.interaction = TargetSelection(options)
+        self.options = self.interaction.options
         self.updating_selection = False
-        self.revision = 0
-        self.loading, self.error = False, False
         with ui.row().classes("w-full items-center flex-nowrap gap-2"):
-            self.select = ui.select(
-                {"": self.options["parameter_mode_label"]},
-                value="",
-                label=self.options["selector_label"],
-                with_input=True,
-            ).classes("grow min-w-0")
+            self.select = ui.select({"": self.options["parameter_mode_label"]}, value="",
+                label=self.options["selector_label"], with_input=True).classes("grow min-w-0")
             self.refresh_button = ui.button(icon="refresh", on_click=self.refresh).props(
-                "outline dense aria-label=刷新上下文实例"
-            ).classes("shrink-0").tooltip("刷新上下文实例")
+                "outline dense aria-label=刷新上下文实例").classes("shrink-0").tooltip("刷新上下文实例")
         self.select.on_value_change(self.selection_changed)
         self.note = ui.label().classes("text-xs text-gray-500")
         self.note.set_visibility(False)
 
-    def show_note(self, message):
-        self.note.text = message
-        self.note.set_visibility(bool(message))
-
-    def selection_changed(self):
-        if not self.updating_selection:
-            self.auto_selected_id = None
-
     @property
-    def uses_parameters(self):
-        return self.select.value not in self.targets
+    def targets(self): return self.interaction.targets
+    @property
+    def uses_parameters(self): return self.interaction.uses_parameters
+
+    def selection_changed(self, event):
+        if not self.updating_selection:
+            self.interaction.select(event.value)
+
+    def render_selection(self):
+        self.updating_selection = True
+        try:
+            self.select.set_options({"": self.options['parameter_mode_label'],
+                **{key: item['label'] for key, item in self.targets.items()}}, value=self.interaction.selected)
+        finally:
+            self.updating_selection = False
+        self.note.text = self.interaction.note
+        self.note.set_visibility(bool(self.interaction.note))
+        self.select.set_enabled(not self.interaction.loading)
 
     async def refresh(self):
-        self.revision += 1
-        revision = self.revision
-        previous = self.select.value
-        if previous == self.auto_selected_id:
-            previous = ""
-        self.auto_selected_id = None
-        self.loading, self.error = True, False
-        self.select.disable()
-        self.targets, self.session_id = {}, None
-        manual_label = self.options["parameter_mode_label"]
-        self.updating_selection = True
-        self.select.set_options({"": manual_label}, value="")
-        self.updating_selection = False
-        self.show_note("正在读取实例…")
+        revision, previous = self.interaction.begin()
+        self.render_selection()
         try:
             result = await self.load()
-            if revision != self.revision or self.select.is_deleted:
+            if self.select.is_deleted:
+                self.interaction.invalidate()
                 return
-            self.targets = {target["target_id"]: target for target in result["targets"]}
-            self.session_id = result["session_id"]
-            options = {"": manual_label, **{key: item["label"] for key, item in self.targets.items()}}
-            selected = previous if previous in self.targets else ""
-            if not selected and self.options["auto_select_single"] and len(self.targets) == 1:
-                selected = next(iter(self.targets))
-                self.auto_selected_id = selected
-            self.updating_selection = True
-            self.select.set_options(options, value=selected)
-            self.updating_selection = False
-            if previous and previous not in self.targets:
-                self.show_note("原实例已不可用，请重新选择。")
-            else:
-                self.show_note("")
+            if self.interaction.apply(revision, previous, result):
+                self.render_selection()
         except Exception as exc:
-            if revision == self.revision:
-                self.error = True
-                self.show_note(f"实例读取失败，请刷新重试：{exc}")
-        finally:
-            if revision == self.revision and not self.select.is_deleted:
-                self.loading = False
-                self.select.enable()
+            if not self.select.is_deleted and self.interaction.fail(revision, exc):
+                self.render_selection()
 
     def selection(self):
-        if self.loading or self.error:
-            raise TaskError("FORM_INVALID", "请等待实例列表加载完成，或刷新重试")
-        target = self.targets.get(self.select.value)
-        return (dict(target["request"]), self.session_id) if target else ({}, None)
+        return self.interaction.selection()

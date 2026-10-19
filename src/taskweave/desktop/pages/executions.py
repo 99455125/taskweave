@@ -2,8 +2,7 @@
 
 from nicegui import ui
 from taskweave.desktop.pages.base import Page
-from taskweave.core.validation import TaskError
-from taskweave.desktop.controller import command_id
+from taskweave.presentation.run_creation import RunCreation
 
 STATUS = {
     "READY": "就绪", "RUNNING": "执行中", "PAUSED": "已暂停", "FAILED": "失败",
@@ -44,22 +43,34 @@ class ExecutionsPage(Page):
                 ).props("use-chips").classes("w-full")
 
                 async def apply_filters():
-                    self.state.search_query = search.value or ""
-                    self.state.task_ids = list(task_filter.value or [])
-                    self.state.statuses = list(status_filter.value or [])
                     self.state.signature = None
                     await self.render_runs()
 
+                async def search_changed(event):
+                    self.state.search_query = event.value or ""
+                    await apply_filters()
+
+                async def tasks_changed(event):
+                    self.state.task_ids = list(event.value or [])
+                    await apply_filters()
+
+                async def statuses_changed(event):
+                    self.state.statuses = list(event.value or [])
+                    await apply_filters()
+
                 async def clear_filters():
-                    task_filter.value = []
-                    status_filter.value = []
-                    search.value = ""
+                    self.state.task_ids = []
+                    self.state.statuses = []
+                    self.state.search_query = ""
+                    task_filter.value = self.state.task_ids
+                    status_filter.value = self.state.statuses
+                    search.value = self.state.search_query
                     task_filter.update(); status_filter.update(); search.update()
                     await apply_filters()
 
-                search.on_value_change(lambda _: apply_filters())
-                task_filter.on_value_change(lambda _: apply_filters())
-                status_filter.on_value_change(lambda _: apply_filters())
+                search.on_value_change(search_changed)
+                task_filter.on_value_change(tasks_changed)
+                status_filter.on_value_change(statuses_changed)
                 with ui.row().classes("w-full justify-between items-center"):
                     self.button("清除筛选", clear_filters, flat=True)
                     ui.label("任务与状态").classes("text-xs text-gray-500")
@@ -77,8 +88,16 @@ class RunPage(Page):
         self.controller, self.state, self.button = controller, state, button
         self.paint, self.environment_select, self.trial_variables = paint, environment_select, trial_variables
         self.execution_details, self.page, self.page_generation = execution_details, page, page_generation
-        self.pending_task_id = None
-        self.pending_open_create = False
+        self.creation = RunCreation(controller, state)
+
+    @property
+    def pending_task_id(self): return self.creation.pending_task_id
+    @pending_task_id.setter
+    def pending_task_id(self, value): self.creation.pending_task_id = value
+    @property
+    def pending_open_create(self): return self.creation.pending_open_create
+    @pending_open_create.setter
+    def pending_open_create(self, value): self.creation.pending_open_create = value
 
     def dispose(self):
         self.execution_details.dispose()
@@ -103,58 +122,48 @@ class RunPage(Page):
     def run_area(self, value): self.state.run_area = value
 
     async def render(self):
-        tasks = await self.controller.call("task.list")
-        task_steps = {}
-        eligible = []
-        for task in tasks:
-            steps = await self.controller.call("step.list", task_id=task["task_id"])
-            task_steps[task["task_id"]] = steps
-            if steps and all(step["validation_state"] == "VALIDATED" for step in steps):
-                eligible.append(task)
+        flow = self.creation
+        await flow.load()
         with ui.row().classes("tw-executions-toolbar w-full justify-between items-center"):
             ui.label("执行列表").classes("text-xl font-medium")
             async def create(initial_task_id=None):
-                if not eligible:
-                    ui.notify("尚无步骤全部确认的任务。请先创建任务并确认全部步骤。", type="warning")
-                    return
-                if initial_task_id is not None and initial_task_id not in {task["task_id"] for task in eligible}:
-                    ui.notify("该任务的步骤尚未全部确认，不能创建执行。", type="warning")
+                warning = flow.open(initial_task_id)
+                if warning:
+                    ui.notify(warning, type="warning")
                     return
                 with ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
                     ui.label("新建执行").classes("text-lg")
                     task_select = ui.select(
-                        {task["task_id"]: task["name"] for task in eligible},
-                        value=initial_task_id or eligible[0]["task_id"],
+                        {task["task_id"]: task["name"] for task in flow.eligible},
+                        value=flow.task_id,
                         label="选择任务",
                     ).props("use-input input-debounce=0").classes("w-full")
                     environment = await self.environment_select()
-                    steps = task_steps[task_select.value]
-                    start = ui.select({step['step_id']: f"{i + 1}. {step['name']}" for i, step in enumerate(steps)}, value=steps[0]['step_id'] if steps else None, label='开始步骤').classes('w-full')
+                    steps = flow.steps
+                    start = ui.select({step['step_id']: f"{i + 1}. {step['name']}" for i, step in enumerate(steps)}, value=flow.start_step_id, label='开始步骤').classes('w-full')
                     input_area = ui.column().classes('w-full')
-                    selected_form = [None]
-
                     async def render_inputs():
                         input_area.clear()
-                        current_steps = task_steps[task_select.value]
-                        if start.value not in {step['step_id'] for step in current_steps}:
-                            start.options = {step['step_id']: f"{i + 1}. {step['name']}" for i, step in enumerate(current_steps)}
-                            start.value = current_steps[0]['step_id']
-                            start.update()
-                        selected = next(step for step in current_steps if step['step_id'] == start.value)
+                        start.options = {step['step_id']: f"{i + 1}. {step['name']}" for i, step in enumerate(flow.steps)}
+                        start.value = flow.start_step_id
+                        start.update()
                         with input_area:
-                            selected_form[0] = await self.trial_variables(selected, environment, task_id=task_select.value)
+                            form = await self.trial_variables(flow.selected_step, environment, task_id=flow.task_id)
+                            flow.input_draft = form.input_draft
 
-                    start.on_value_change(lambda _: render_inputs())
-                    task_select.on_value_change(lambda _: render_inputs())
+                    async def select_start(event):
+                        flow.select_start(event.value)
+                        await render_inputs()
+
+                    async def select_task(event):
+                        flow.select_task(event.value)
+                        await render_inputs()
+
+                    start.on_value_change(select_start)
+                    task_select.on_value_change(select_task)
                     await render_inputs()
                     async def save():
-                        form = selected_form[0]
-                        selected_task_id = task_select.value
-                        response = await self.controller.call("run.create", task_id=selected_task_id, inputs=form.task_draft_values(), step_inputs={start.value: form.step_draft_values()}, environment_id=environment.value or None, defer_inputs=True)
-                        self.run_id = response["run_id"]
-                        if self.execution_task_ids and selected_task_id not in self.execution_task_ids:
-                            self.execution_task_ids.append(selected_task_id)
-                        await self.controller.call('run.start', run_id=self.run_id, command_id=command_id(), mode='ALL', start_step_id=start.value)
+                        await flow.submit()
                         dialog.close()
                         await self.paint()
                     with ui.row().classes("w-full items-center gap-2 flex-wrap"):
@@ -171,9 +180,6 @@ class RunPage(Page):
                 await self.execution_details.poll()
         self.execution_details.own_timer(ui.timer(1, refresh_current_runs))
         await self.execution_details.refresh()
-        if self.pending_task_id is not None:
-            task_id, self.pending_task_id = self.pending_task_id, None
+        requested, task_id = flow.consume_pending()
+        if requested:
             await create(task_id)
-        elif self.pending_open_create:
-            self.pending_open_create = False
-            await create()

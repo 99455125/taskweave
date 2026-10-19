@@ -3,11 +3,11 @@
 import json
 from taskweave.core.validation import TaskError, fingerprint, dumps, validate
 from taskweave.infrastructure.privacy import redact
-from taskweave.infrastructure.storage import uid, now
+from taskweave.infrastructure.sqlite_storage import SQLiteStorage, uid, now
 
 
 class RunRepository:
-    def __init__(self, store, tasks, steps, environments, results):
+    def __init__(self, store: SQLiteStorage, tasks, steps, environments, results):
         self.store = store
         self.tasks = tasks
         self.step_repository = steps
@@ -334,9 +334,9 @@ class RunRepository:
                 from taskweave.core.validation import automatic_inputs
                 environment, _ = self.environment(environment_id)
                 task_inputs = {key: value for key, value in inputs.items() if key in task_properties}
-                inputs = {**task_inputs, **automatic_inputs(step['input_schema'], environment, inputs)}
+                inputs = {**task_inputs, **automatic_inputs(step['input_schema'], environment, inputs, original_inputs)}
             input_schema = json.loads(task['input_schema_json']) if flow_trial else step['input_schema']
-            validation_inputs = inputs if flow_trial else automatic_inputs(input_schema, environment, inputs)
+            validation_inputs = inputs if flow_trial else automatic_inputs(input_schema, environment, inputs, inputs)
             validate({key: value for key, value in validation_inputs.items() if key not in input_schema.get('required', []) or (value is not None and value != '')} if defer_inputs else validation_inputs, {**input_schema, 'required': []} if defer_inputs else input_schema)
         else:
             task_schema = json.loads(task['input_schema_json'])
@@ -419,7 +419,7 @@ class RunRepository:
                 aid = attempt['attempt_id']
                 for ref in self.query('SELECT result_id FROM result_refs WHERE attempt_id=?', (aid,)):
                     self.delete_result(ref['result_id'])
-                from taskweave.infrastructure.storage import connect
+                from taskweave.infrastructure.sqlite_storage import connect
                 import re
                 path = self.task_path(run['task_id'])
                 if path.exists():
@@ -437,7 +437,7 @@ class RunRepository:
             request['step_inputs'] = {sid: values for sid, values in request.get('step_inputs', {}).items() if sid not in suffix}
             self.execute("UPDATE task_runs SET status='READY',finished_at=NULL,waiting_step_id=NULL,wait_until=NULL,request_json=? WHERE run_id=?", (dumps(request), run_id))
             return
-        from taskweave.infrastructure.storage import connect
+        from taskweave.infrastructure.sqlite_storage import connect
         import shutil
         run = self.run(run_id)
         attempts = self.query('SELECT attempt_id FROM step_attempts WHERE run_id=?', (run_id,))

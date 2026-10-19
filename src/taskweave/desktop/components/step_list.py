@@ -2,15 +2,7 @@
 
 from nicegui import ui
 from taskweave.core.validation import TaskError
-
-
-def reordered_ids(values, index, delta):
-    target = index + delta
-    if not 0 <= index < len(values) or not 0 <= target < len(values):
-        return None
-    result = list(values)
-    result[index], result[target] = result[target], result[index]
-    return result
+from taskweave.presentation.step_actions import StepActions, reordered_ids
 
 
 def move_controls(steps, controls, index, target, container):
@@ -48,6 +40,7 @@ class StepList:
         controls = []
         selected_id = self.selected_step_id()
         identity = self.identity()
+        interaction = StepActions(self.controller.call, self.task_id(), selected_id, self.identity)
         with list_area:
             for index, step in enumerate(steps):
                 control = self.button(
@@ -66,22 +59,9 @@ class StepList:
 
         async def add():
             await self.save_editor()
-            if self.identity() != identity:
-                return
-            current = await self.controller.call("step.list", task_id=self.task_id())
-            if self.identity() != identity:
-                return
-            previous = current[-1]["capabilities"] if current else []
-            selected_plugins = {cap.split(".", 1)[0] for cap in previous}
-            available = ([item["id"] for item in catalog["actions"] + catalog["tools"]]
-                         + catalog["result_handlers"] + catalog["resource_providers"])
-            inherited = sorted(set(previous) | {cap for cap in available if cap.split(".", 1)[0] in selected_plugins})
-            saved = await self.controller.call(
-                "step.save", task_id=self.task_id(),
-                document={"name": "新步骤", "step_content": "async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n", "capabilities": inherited},
-            )
-            if self.identity() == identity:
-                self.select_step(saved["step_id"])
+            result = await interaction.add(catalog)
+            if result is not None:
+                self.select_step(result.selected_step_id)
                 await self.paint()
 
         with toolbar:
@@ -89,27 +69,17 @@ class StepList:
 
         async def reorder(delta):
             await self.save_editor()
-            if self.identity() != identity:
+            result = await interaction.reorder(delta)
+            if result is None:
                 return
-            current = await self.controller.call("step.list", task_id=self.task_id())
-            if self.identity() != identity:
-                return
-            ids = [step["step_id"] for step in current]
-            index = ids.index(selected_id)
-            updated_ids = reordered_ids(ids, index, delta)
-            if updated_ids is None:
-                return
-            target = index + delta
+            index, target = result.index, result.target
             moving, adjacent = controls[index], controls[target]
-            await self.controller.call("step.reorder", task_id=self.task_id(), step_ids=updated_ids)
-            if self.identity() != identity:
-                return
             await self.animate(moving, adjacent)
-            if self.identity() != identity:
+            if not interaction.is_current():
                 return
-            moving, adjacent = move_controls(current, controls, index, target, list_area)
-            steps[:] = current
-            self._sync_move_menu(target, len(current))
+            moving, adjacent = move_controls(result.steps, controls, index, target, list_area)
+            steps[:] = result.steps
+            self._sync_move_menu(target, len(steps))
             await self.finish_animation(moving, adjacent)
             return True
 
@@ -119,16 +89,10 @@ class StepList:
                 with ui.row().classes("w-full items-center gap-2 flex-wrap"):
                     ui.button("取消", on_click=lambda: dialog.submit(False))
                     ui.button("移除", on_click=lambda: dialog.submit(True))
-            if not await dialog or self.identity() != identity:
-                return
-            ids = [step["step_id"] for step in steps]
-            index = ids.index(selected_id)
-            await self.controller.call("step.delete", step_id=selected_id)
-            if self.identity() != identity:
-                return
-            remaining = [step_id for step_id in ids if step_id != selected_id]
-            self.select_step(remaining[index - 1] if index > 0 else (remaining[0] if remaining else None))
-            await self.paint()
+            result = await interaction.delete(steps, confirmed=bool(await dialog))
+            if result is not None:
+                self.select_step(result.selected_step_id)
+                await self.paint()
 
         async def confirm_all():
             feedback_client = ui.context.client
@@ -137,14 +101,7 @@ class StepList:
                 if self.identity() != expected_identity:
                     return False
                 await self.paint()
-                current_identity = self.identity()
-                accepted = (
-                    len(expected_identity) >= 4
-                    and current_identity[:3] == expected_identity[:3]
-                    and isinstance(expected_identity[-1], int)
-                    and current_identity[-1] == expected_identity[-1] + 1
-                )
-                return accepted
+                return interaction.accepts_repaint(expected_identity)
 
             try:
                 await self.save_editor()
@@ -153,33 +110,12 @@ class StepList:
                     return
                 ui.notify(f"批量确认未执行：当前步骤保存失败，草稿已保留：{exc}", type="negative")
                 raise
-            if self.identity() != identity:
+            result = await interaction.confirm_all()
+            if result is None:
                 return
-            current = await self.controller.call("step.list", task_id=self.task_id())
-            if self.identity() != identity:
-                return
-            invalid = []
-
-            def append_failure(index, candidate, reason):
-                invalid.append({"index": index, "step": candidate, "reason": reason})
-
-            for index, candidate in enumerate(current, 1):
-                try:
-                    validation = await self.controller.call("step.validate", step_id=candidate["step_id"])
-                except TaskError as exc:
-                    if self.identity() != identity:
-                        return
-                    append_failure(index, candidate, str(exc))
-                    continue
-                if self.identity() != identity:
-                    return
-                if not validation["valid"]:
-                    diagnostics = [item for item in validation.get("diagnostics", []) if item.get("severity") == "error"]
-                    reason = "；".join(item.get("message") or item.get("code", "") for item in diagnostics)
-                    append_failure(index, candidate, reason or "校验未通过")
-            if invalid:
-                first = invalid[0]
-                self.select_step(first["step"]["step_id"])
+            if result.status == "invalid":
+                invalid = result.failures
+                self.select_step(result.selected_step_id)
                 selected_identity = self.identity()
                 if not await repaint_if_current(selected_identity):
                     return
@@ -197,34 +133,19 @@ class StepList:
                     ui.notify(f"批量确认未执行：{len(invalid)} 步校验失败。", type="negative")
                 return
 
-            for index, candidate in enumerate(current, 1):
-                if candidate["validation_state"] != "VALIDATED":
-                    try:
-                        await self.controller.call("step.confirm.manual", step_id=candidate["step_id"], expected_hash=candidate["content_hash"], environment_id=None)
-                    except TaskError as exc:
-                        if self.identity() != identity:
-                            return
-                        refreshed = await self.controller.call("step.list", task_id=self.task_id())
-                        if self.identity() != identity:
-                            return
-                        confirmed_ids = {item["step_id"] for item in current}
-                        confirmed_count = sum(
-                            item["validation_state"] == "VALIDATED"
-                            for item in refreshed if item["step_id"] in confirmed_ids
-                        )
-                        self.select_step(candidate["step_id"])
-                        selected_identity = self.identity()
-                        if not await repaint_if_current(selected_identity):
-                            return
-                        with feedback_client:
-                            ui.notify(
-                                f"批量确认已中止：已确认 {confirmed_count}/{len(current)} 步。"
-                                f"第 {index} 步「{candidate['name']}」确认失败：{exc}",
-                                type="negative",
-                            )
-                        return
-                    if self.identity() != identity:
-                        return
+            if result.status == "partial":
+                failure = result.failures[0]
+                self.select_step(result.selected_step_id)
+                selected_identity = self.identity()
+                if not await repaint_if_current(selected_identity):
+                    return
+                with feedback_client:
+                    ui.notify(
+                        f"批量确认已中止：已确认 {result.confirmed_count}/{result.total} 步。"
+                        f"第 {failure['index']} 步「{failure['step']['name']}」确认失败：{failure['reason']}",
+                        type="negative",
+                    )
+                return
             if not await repaint_if_current(identity):
                 return
             with feedback_client:

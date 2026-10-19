@@ -4,8 +4,9 @@ import asyncio
 import json
 
 from nicegui import ui
-from taskweave.core.validation import TaskError, normalize_step
-from taskweave.desktop.contexts import context_ai_items, render_preview_attachments
+from taskweave.core.validation import TaskError
+from taskweave.desktop.contexts import render_preview_attachments
+from taskweave.presentation.authoring import AIInteraction, AIChoiceDraft, AuthoringFlow, Notice
 
 
 def exclusive_ai_flow(method):
@@ -13,33 +14,31 @@ def exclusive_ai_flow(method):
     from functools import wraps
     @wraps(method)
     async def run(self, *args, **kwargs):
-        if getattr(self, "_ai_flow_active", False):
-            ui.notify("AI 操作正在处理中，请勿重复发起。", type="info")
-            return
         lookup = getattr(self, 'retained_request', None)
         retained = lookup() if lookup else None
-        if method.__name__ != 'recover_generation' and retained and not retained['task'].done():
-            ui.notify("当前步骤的 AI 请求仍在处理中，请查看上次 AI 结果。", type="info")
+        reason = self.interaction.begin(
+            retained_pending=bool(retained and not retained['task'].done()),
+            recovering=method.__name__ == 'recover_generation')
+        if reason:
+            ui.notify('AI 操作正在处理中，请勿重复发起。' if reason == 'flow_active'
+                      else '当前步骤的 AI 请求仍在处理中，请查看上次 AI 结果。', type='info')
             return
-        self._ai_flow_active = True
         try:
             # Trial refreshes can clear their slot while an awaited dialog is open.
             with ui.context.client.layout:
                 return await method(self, *args, **kwargs)
         finally:
-            self._ai_flow_active = False
+            self.interaction.finish()
     return run
 
 
 def submit_ai_choice(dialog, values):
     """Lock both channels immediately after the first accepted selection."""
-    submitted = False
+    selection = AIChoiceDraft((None, None, 0, 0))
     buttons = []
     def submit(factory):
-        nonlocal submitted
-        if submitted:
+        if selection.submit('select', selection.identity) is None:
             return
-        submitted = True
         for button in buttons:
             button.disable()
         dialog.submit(factory())
@@ -51,15 +50,38 @@ def submit_ai_choice(dialog, values):
 class StepAIEditor:
     def __init__(self, controller, button, save_editor, environment_id, controls, identity,
                  *, debug_state=None, trials=None, reset_conversation=None, confirmation_step=None,
-                 author_step=None, authoring_request=None):
+                 author_step=None, authoring_request=None, draft_values=None):
         self.controller, self.button, self.save_editor = controller, button, save_editor
         self.environment_id, self.controls = environment_id, controls
         self.identity = identity
         self.debug_state, self.trials = debug_state, trials if trials is not None else {}
         self.reset_conversation = reset_conversation
         self.confirmation_step = confirmation_step or save_editor
-        self.pending_identity = None
+        self.interaction = AIInteraction()
         self.author_step, self.authoring_request = author_step, authoring_request
+        self.draft_values = draft_values
+
+    @property
+    def pending_identity(self): return self.interaction.pending_identity
+    @pending_identity.setter
+    def pending_identity(self, value): self.interaction.pending_identity = value
+
+    def _flow(self):
+        return AuthoringFlow(
+            call=getattr(self.controller, 'call', None), request=self._request,
+            identity=self.identity, trials=self.trials,
+            trial_feedback=getattr(self.controller, 'trial_feedback', None),
+            repair_contexts=getattr(self.controller, 'repair_contexts', None),
+            confirm=getattr(self.controller, 'confirm', None),
+            validate_step=getattr(self.controller, 'validate_step_candidate', None),
+        )
+
+    def _current_code(self):
+        if self.draft_values is not None:
+            draft = self.draft_values()
+            return draft.get('fields', {}).get('code') if draft else None
+        controls = self.controls()
+        return controls['code'].value if controls else None
 
     def retained_request(self):
         lookup = getattr(self, 'authoring_request', None)
@@ -90,38 +112,23 @@ class StepAIEditor:
                                                   web_chat=params.get('export_only', False))
 
     async def _validate_retained_request(self, request, identity):
-        if request is None:
-            return
-        if self.identity() != identity or self.retained_request() is not request:
-            raise TaskError('EDIT_CONFLICT', 'AI 请求或当前步骤已变化，请重新查看结果。')
-        saved, params = request['saved'], request['params']
-        latest = await self.controller.call('step.get', step_id=saved['step_id'])
-        if self.identity() != identity or self.retained_request() is not request:
-            raise TaskError('EDIT_CONFLICT')
-        controls = self.controls()
-        if (latest['content_hash'] != saved['content_hash'] or not controls
-                or controls['code'].value != saved['step_content']):
-            raise TaskError('EDIT_CONFLICT', '步骤已修改，上次 AI 结果不能采纳，请重新生成。')
-        feedback = params.get('feedback') or {}
-        if feedback.get('run_id'):
-            run_id = feedback['run_id']
-            run = await self.controller.call('run.get', run_id=run_id)
-            if self.identity() != identity or self.retained_request() is not request:
-                raise TaskError('EDIT_CONFLICT')
-            failure = next((attempt for attempt in reversed(run.get('attempts', []))
-                            if attempt.get('valid') and attempt.get('status') in {'FAILED', 'UNKNOWN'}), None)
-            if (self.trials.get(saved['step_id']) != run_id or failure is None
-                    or failure.get('step_id') != saved['step_id']
-                    or failure.get('attempt_id') != feedback.get('attempt_id')):
-                raise TaskError('VALIDATION_EVIDENCE_INVALID', '调试尝试已变化，请重新生成修复建议。')
+        from taskweave.presentation.requests import validate_candidate
+        return await validate_candidate(
+            self.controller.call, request,
+            lambda: self.identity() == identity and self.retained_request() is request,
+            self._current_code, self.trials)
 
     @exclusive_ai_flow
     async def choose_generation_mode(self, *, repaint):
         identity = self.identity()
+        draft = self.interaction.choice(identity)
+        def choose(channel):
+            choice = draft.submit(channel, self.identity())
+            return choice[0] if choice else None
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-md"):
             ui.label("AI 生成内容").classes("text-lg font-medium")
             with ui.row().classes("w-full items-center gap-2 flex-wrap"):
-                submit_ai_choice(dialog, [("使用 API", lambda: "api"), ("使用 Chat 网页", lambda: "chat")])
+                submit_ai_choice(dialog, [("使用 API", lambda: choose("api")), ("使用 Chat 网页", lambda: choose("chat"))])
                 ui.button("取消", on_click=lambda:dialog.submit(None)).props("outline")
         mode = await dialog
         if not mode or self.identity() != identity: return
@@ -134,30 +141,16 @@ class StepAIEditor:
         if self.debug_state is None: return
         step_id = self.identity()[1]
         identity = self.identity()
-        feedback = self.debug_state.feedback or {}
-        feedback_run_id = self.debug_state.feedback_run_id
         active_run_id = self.trials.get(step_id)
-        has_feedback = False
-        if active_run_id:
-            run = await self.controller.call("run.get", run_id=active_run_id)
-            if self.identity() != identity or self.trials.get(step_id) != active_run_id:
-                return
-            failed = next((attempt for attempt in reversed(run.get("attempts", []))
-                           if attempt.get("valid") and attempt.get("status") in {"FAILED", "UNKNOWN"}), None)
-            if failed and failed.get("step_id") == step_id:
-                feedback = await self.controller.trial_feedback(active_run_id, step_id)
-                if self.identity() != identity or self.trials.get(step_id) != active_run_id:
-                    return
-                has_feedback = bool(feedback and feedback.get("run_id") == active_run_id
-                                    and feedback.get("attempt_id") == failed.get("attempt_id"))
-                if has_feedback:
-                    feedback_run_id = active_run_id
-                    self.debug_state.feedback = feedback
-                    self.debug_state.feedback_run_id = feedback_run_id
-            else:
-                feedback = {}
-        if not has_feedback:
-            feedback = {}
+        feedback = await self._flow().repair_evidence(identity, step_id, active_run_id)
+        if feedback is None:
+            return
+        has_feedback = bool(feedback)
+        feedback_run_id = active_run_id if has_feedback else self.debug_state.feedback_run_id
+        if has_feedback:
+            self.debug_state.feedback = feedback
+            self.debug_state.feedback_run_id = feedback_run_id
+        draft = self.interaction.choice(identity, supplement=self.debug_state.supplements.get(step_id, ''))
         with ui.dialog() as dialog, ui.card().classes("tw-repair-mode-dialog w-full max-w-4xl"):
             with ui.row().classes("tw-repair-dialog-header w-full items-center justify-between"):
                 ui.label("AI · 修复步骤").classes("text-lg font-semibold")
@@ -175,27 +168,27 @@ class StepAIEditor:
             ).classes("w-full")
             deduplicate = ui.checkbox("精简重复静态字段",value=True)
             supplement = ui.textarea(
-                "本轮补充说明", value=(supplement_control.value or "") if supplement_control is not None else self.debug_state.supplements.get(step_id, ""),
+                "本轮补充说明", value=draft.supplement,
                 placeholder="补充本轮修复需要关注的细节（可选）",
             ).props("outlined autogrow").classes("tw-repair-supplement w-full")
+            rounds.on_value_change(lambda event: setattr(draft, 'history_rounds', event.value))
+            deduplicate.on_value_change(lambda event: setattr(draft, 'deduplicate', event.value))
+            supplement.on_value_change(lambda event: setattr(draft, 'supplement', event.value or ''))
             ui.label("依据当前步骤实际执行内容、失败动作、快照和日志生成；遵守移除项与脱敏设置。").classes("text-sm text-gray-500")
             with ui.row().classes("tw-repair-dialog-actions w-full items-center gap-2 flex-wrap"):
                 api, chat = submit_ai_choice(dialog, [
-                    ("大模型api调用", lambda: ("api", rounds.value, deduplicate.value, supplement.value or "")),
-                    ("大模型网页chat调用", lambda: ("chat", rounds.value, deduplicate.value, supplement.value or "")),
+                    ("大模型api调用", lambda: draft.submit('api', self.identity())),
+                    ("大模型网页chat调用", lambda: draft.submit('chat', self.identity())),
                 ])
                 if not has_feedback:
                     api.disable(); chat.disable()
                 ui.button("取消", on_click=lambda:dialog.submit(None)).props("outline")
         choice = await dialog
         if not choice or self.identity() != identity or not has_feedback: return
-        current_run = await self.controller.call("run.get", run_id=feedback_run_id)
-        if self.identity() != identity or self.trials.get(step_id) != feedback_run_id:
+        evidence_status = await self._flow().recheck_repair(identity, step_id, feedback_run_id, feedback)
+        if evidence_status == 'stale':
             return
-        latest_failure = next((attempt for attempt in reversed(current_run.get("attempts", []))
-                               if attempt.get("valid") and attempt.get("status") in {"FAILED", "UNKNOWN"}), None)
-        if (latest_failure is None or latest_failure.get("step_id") != step_id
-                or latest_failure.get("attempt_id") != feedback.get("attempt_id")):
+        if evidence_status == 'changed':
             ui.notify("调试记录已变化，请重新打开 AI 修复并核对最新尝试。", type="warning")
             return
         mode, history_rounds, dedup, text = choice
@@ -226,24 +219,19 @@ class StepAIEditor:
         saved = await self.confirmation_step()
         if self.identity() != identity:
             return
-        step_id = saved["step_id"]
-        run_id = self.trials.get(step_id)
-        confirmed = None
-        if run_id:
-            try:
-                confirmed = await self.controller.confirm(saved, run_id)
-            except TaskError as exc:
-                if exc.code != "VALIDATION_EVIDENCE_INVALID": raise
-        if confirmed is None:
+        decision = await self._flow().confirm_saved(saved, identity)
+        if decision.status == 'stale':
+            return
+        if decision.status == 'manual':
             with ui.dialog() as dialog, ui.card().classes("w-full max-w-xl"):
                 ui.label("当前已保存的步骤尚未调试通过，是否手动确认验证通过？")
                 with ui.row().classes("w-full items-center gap-2 flex-wrap"):
                     ui.button("取消",on_click=lambda:dialog.submit(False)).props("outline")
                     ui.button("确认验证通过",on_click=lambda:dialog.submit(True)).props("outline text-color=teal-8").style("background: #f0fdfa; border: 1px solid #0f766e")
-            if not await dialog: return
-            if self.identity() != identity: return
-            confirmed = await self.controller.call("step.confirm.manual",step_id=step_id,expected_hash=saved["content_hash"],environment_id=self.environment_id() or None)
-        if self.identity() != identity: return
+            decision = await self._flow().confirm_manual(
+                decision, approved=bool(await dialog), environment_id=self.environment_id())
+        if decision.status != 'confirmed':
+            return
         ui.notify("步骤验证成功",type="positive")
         controls = self.controls()
         if controls is not None:
@@ -256,10 +244,7 @@ class StepAIEditor:
         if not step_id: return
         if self.reset_conversation:
             self.reset_conversation(step_id)
-        self.debug_state.supplements.pop(step_id, None)
-        self.debug_state.feedback = None
-        self.debug_state.feedback_run_id = None
-        self.debug_state.removed_feedback.clear()
+        self.interaction.clear_repair(self.debug_state, step_id)
         if supplement_control is not None and not supplement_control.is_deleted:
             supplement_control.value = ""
         ui.notify("已清空当前步骤的 AI 修复上下文；调试实例和运行记录继续保留", type="positive")
@@ -273,80 +258,24 @@ class StepAIEditor:
         identity = self.identity()
         if identity != requested_identity or saved["step_id"] != identity[1]:
             return None
-        trial = None
-        feedback = None
-        if fix_logs and run_id:
-            trial = await self.controller.call("run.get", run_id=run_id)
-            if self.identity() != identity:
-                if feedback_override is not None:
-                    ui.notify("当前调试尝试已变化，请重新打开 AI 修复并核对最新证据。", type="warning")
-                return None
-            if trial["attempts"]:
-                failed = next((a for a in reversed(trial["attempts"])
-                               if a["valid"] and a["status"] in {"FAILED", "UNKNOWN"}), None)
-                if failed and failed["step_id"] != saved["step_id"]:
-                    definition = json.loads(trial["definition_json"])["steps"]
-                    name = next(st["name"] for st in definition if st["step_id"] == failed["step_id"])
-                    raise TaskError("FORM_INVALID", "本次流程调试失败在“" + name + "”，请切换到该步骤修复。")
-                feedback = await self.controller.trial_feedback(trial["run_id"], saved["step_id"])
-                if feedback_override is not None and (
-                    self.identity() != identity or self.trials.get(saved["step_id"]) != trial["run_id"]
-                ):
-                    ui.notify("当前调试尝试已变化，请重新打开 AI 修复并核对最新证据。", type="warning")
-                    return None
-                if self.identity() != identity:
-                    return None
-                if feedback_override is not None:
-                    bound_attempt_id = feedback_override.get("attempt_id")
-                    current_attempt_id = failed.get("attempt_id") if failed and failed.get("step_id") == saved["step_id"] else None
-                    refreshed_run_id = feedback.get("run_id") if isinstance(feedback, dict) else None
-                    refreshed_attempt_id = feedback.get("attempt_id") if isinstance(feedback, dict) else None
-                    if (
-                        feedback_run_id != trial["run_id"]
-                        or feedback_override.get("run_id") != trial["run_id"]
-                        or trial.get("run_id") != run_id
-                        or self.trials.get(saved["step_id"]) != trial["run_id"]
-                        or not bound_attempt_id
-                        or bound_attempt_id != current_attempt_id
-                        or refreshed_run_id != trial["run_id"]
-                        or refreshed_attempt_id != current_attempt_id
-                        or refreshed_attempt_id != bound_attempt_id
-                    ):
-                        ui.notify("当前调试尝试已变化，请重新打开 AI 修复并核对最新证据。", type="warning")
-                        return None
-                    feedback = dict(feedback_override)
-                for key in removed_feedback:
-                    feedback.pop(key, None)
-        if fix_logs and feedback is None:
-            raise TaskError("VALIDATION_EVIDENCE_INVALID", "请先执行当前步骤调试")
-        generation_contexts = context_ai_items(
-            await self.controller.call("context.ai", step_id=saved["step_id"])
-        )
-        if self.identity() != identity:
-            return None
-        if fix_logs:
-            refreshed, availability = await self.controller.repair_contexts(saved, trial["run_id"], feedback)
-            if self.identity() != identity:
-                return None
-            if refreshed:
-                generation_contexts.append({"provider_id": "debug.refresh", "name": "本次调试刷新",
-                    "context_notes": "", "order_index": len(generation_contexts),
-                    "captures": [{"label": "当前页面", "capture_index": 0, "items": refreshed}]})
-            feedback["current_context_status"] = availability
-            if not availability["available"]:
-                ui.notify("当前页面上下文无法刷新，将明确告知 AI；未打开新浏览器。", type="warning")
-        ui.notify("正在准备网页对话内容。" if web_chat else "正在生成建议，界面保持响应；当前草稿已保存。")
-        proposal = await self._request(
-            "step.generate", saved, step_id=saved["step_id"], expected_hash=saved["content_hash"],
-            step_description=saved["step_description"], feedback=feedback, contexts=generation_contexts,
-            environment_id=self.environment_id() or None, repair_notes=supplement,
-            use_history=fix_logs and history_rounds != 0,
-            history_rounds=(-1 if fix_logs else 0) if history_rounds is None else history_rounds,
-            deduplicate_history=deduplicate_history, export_only=web_chat,
-        )
-        if self.identity() != identity:
-            return None
-        return saved, proposal, identity
+        messages = {
+            'repair_changed': '当前调试尝试已变化，请重新打开 AI 修复并核对最新证据。',
+            'context_unavailable': '当前页面上下文无法刷新，将明确告知 AI；未打开新浏览器。',
+            'preparing_chat': '正在准备网页对话内容。',
+            'generating': '正在生成建议，界面保持响应；当前草稿已保存。',
+        }
+        async for event in self._flow().generate_events(
+            saved, identity, environment_id=self.environment_id(), fix_logs=fix_logs,
+            web_chat=web_chat, supplement=supplement, run_id=run_id,
+            history_rounds=history_rounds, deduplicate_history=deduplicate_history,
+            feedback_override=feedback_override, feedback_run_id=feedback_run_id,
+            removed_feedback=removed_feedback,
+        ):
+            if isinstance(event, Notice):
+                ui.notify(messages[event.code], type=event.kind)
+            else:
+                return event.candidate
+        return None
 
     async def present_content_candidate(self, saved, proposal, identity, repaint):
         if self.identity() != identity:
@@ -365,11 +294,10 @@ class StepAIEditor:
             async def accept():
                 await self._validate_retained_request(retained, identity)
                 controls = self.controls()
-                if self.identity() != identity or not controls:
-                    raise TaskError("EDIT_CONFLICT", "生成期间当前步骤已切换，请重新生成建议")
-                if proposal["stale"] or controls["code"].value != saved["step_content"]:
-                    raise TaskError("EDIT_CONFLICT", "生成期间内容已修改，请重新生成建议")
-                controls["code"].value = proposal["proposed_content"]
+                if not controls:
+                    raise TaskError('EDIT_CONFLICT', '当前编辑器已关闭')
+                source = self._flow().content_candidate(saved, proposal, identity, self._current_code())
+                controls["code"].value = source
                 await self.save_editor()
                 if self.identity() != identity:
                     return
@@ -385,7 +313,6 @@ class StepAIEditor:
     async def web_chat_dialog(self, saved, exported, use_history, identity=None, *, repaint):
         import json
         import logging
-        from taskweave.desktop.chat import parse_chat_reply
         identity = self.identity() if identity is None else identity
         if not self.identity() == identity:
             return
@@ -399,22 +326,20 @@ class StepAIEditor:
                 ui.notify("对话内容已复制")
             self.button("复制对话内容", copy_prompt)
             render_preview_attachments(exported)
-            reply = ui.textarea("粘贴网页 AI 回复").classes("w-full").props("autogrow")
+            draft = self.interaction.choice(identity)
+            reply = ui.textarea("粘贴网页 AI 回复", value=draft.reply).classes("w-full").props("autogrow")
+            reply.on_value_change(lambda event: setattr(draft, 'reply', event.value or ''))
             async def preview_reply():
                 await self._validate_retained_request(retained, identity)
-                source, explanation = parse_chat_reply(reply.value or "")
+                source, explanation = draft.parse_content()
                 current = await self.controller.call("step.get", step_id=saved["step_id"])
-                if (not self.identity() == identity or not self.controls()
-                        or current["content_hash"] != exported["expected_hash"]
-                        or self.controls()["code"].value != saved["step_content"]):
-                    raise TaskError("EDIT_CONFLICT", "步骤已修改，请重新生成网页对话内容")
-                candidate = normalize_step({**saved, "step_content": source})
-                diagnostics = await self.controller.validate_step_candidate(candidate)
-                if not self.identity() == identity:
+                if not self.controls():
+                    raise TaskError('EDIT_CONFLICT', '当前编辑器已关闭')
+                self._flow().validate_version(saved, current, identity,
+                                              current_code=self._current_code(), expected_hash=exported['expected_hash'])
+                diagnostics = await self._flow().validate_web_candidate(saved, source, identity)
+                if diagnostics is None:
                     return
-                errors = [item.get("message", "") for item in diagnostics if item.get("severity") == "error"]
-                if errors:
-                    raise TaskError("CHAT_REPLY_INVALID", "；".join(errors))
                 with ui.dialog() as preview, ui.card().classes("w-full max-w-4xl"):
                     ui.label("网页 AI 回复预览").classes("text-lg")
                     ui.label("解释").classes("font-medium")
@@ -431,10 +356,10 @@ class StepAIEditor:
                     async def adopt():
                         await self._validate_retained_request(retained, identity)
                         latest = await self.controller.call("step.get", step_id=saved["step_id"])
-                        if (not self.identity() == identity or not self.controls()
-                                or latest["content_hash"] != exported["expected_hash"]
-                                or self.controls()["code"].value != saved["step_content"]):
-                            raise TaskError("EDIT_CONFLICT", "预览期间步骤已修改，请重新生成网页对话内容")
+                        if not self.controls():
+                            raise TaskError('EDIT_CONFLICT', '当前编辑器已关闭')
+                        self._flow().validate_version(saved, latest, identity,
+                                                      current_code=self._current_code(), expected_hash=exported['expected_hash'])
                         code_control = self.controls()["code"]
                         code_control.value = source
                         try:
@@ -475,32 +400,31 @@ class StepAIEditor:
             return
         identity = self.identity()
         self.pending_identity = identity
+        draft = self.interaction.choice(identity)
+        def choose(channel):
+            choice = draft.submit(channel, self.identity())
+            return (choice[0], choice[3]) if choice else None
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
             ui.label("AI 生成步骤描述").classes("text-lg font-medium")
             requirement = ui.textarea(
                 "你想让这个步骤完成什么",
                 placeholder="例如：登录后进入记录管理，新建比例再通用示例通用示例，并保存结果截图",
             ).props("autogrow").classes("w-full")
+            requirement.on_value_change(lambda event: setattr(draft, 'supplement', event.value or ''))
             with ui.row().classes("w-full gap-2 flex-wrap"):
                 submit_ai_choice(dialog, [
-                    ("使用 API", lambda: ("api", requirement.value or "")),
-                    ("使用 Chat 网页", lambda: ("chat", requirement.value or "")),
+                    ("使用 API", lambda: choose('api')),
+                    ("使用 Chat 网页", lambda: choose('chat')),
                 ])
                 ui.button("取消", on_click=lambda: dialog.submit(None)).props("flat")
         choice = await dialog
         if not choice or self.identity() != identity:
             return
         mode, supplement = choice
-        contexts = context_ai_items(await self.controller.call("context.ai", step_id=saved["step_id"]))
-        if self.identity() != identity:
-            return
-        proposal = await self._request(
-            "step.generate_goal", saved, step_id=saved["step_id"], expected_hash=saved["content_hash"],
-            supplement=supplement,
-            contexts=contexts,
-            environment_id=self.environment_id() or None, export_only=mode == "chat",
-        )
-        if self.identity() != identity:
+        proposal = await self._flow().generate_goal(
+            saved, identity, supplement=supplement,
+            environment_id=self.environment_id(), web_chat=mode == 'chat')
+        if proposal is None:
             return
         await self._present_goal_result(saved, proposal, identity, web_chat=mode == 'chat')
 
@@ -512,11 +436,12 @@ class StepAIEditor:
                 ui.label("网页 AI 生成步骤描述").classes("text-lg")
                 ui.textarea("复制到网页 AI", value=proposal["prompt"]).props("readonly autogrow").classes("w-full")
                 render_preview_attachments(proposal)
-                reply = ui.textarea("粘贴网页回复").props("autogrow").classes("w-full")
+                draft = self.interaction.choice(identity)
+                reply = ui.textarea("粘贴网页回复", value=draft.reply).props("autogrow").classes("w-full")
+                reply.on_value_change(lambda event: setattr(draft, 'reply', event.value or ''))
 
                 async def adopt_chat_goal():
-                    from taskweave.desktop.chat import parse_goal_reply
-                    description, notes = parse_goal_reply(reply.value or "")
+                    description, notes = draft.parse_goal()
                     await self.preview_goal(saved, description, notes, chat, identity)
 
                 with ui.row().classes("gap-2 flex-wrap"):
@@ -542,13 +467,12 @@ class StepAIEditor:
             async def accept():
                 await self._validate_retained_request(retained, identity)
                 latest = await self.controller.call("step.get", step_id=saved["step_id"])
-                if self.identity() != identity or latest["content_hash"] != saved["content_hash"]:
-                    raise TaskError("EDIT_CONFLICT")
                 controls = self.controls()
-                if not controls:
-                    raise TaskError("EDIT_CONFLICT")
-                controls["step_description"].value = description_text
-                controls["step_notes"].value = notes_text
+                values = self._flow().goal_candidate(
+                    latest, saved, identity, has_draft=bool(controls),
+                    description=description_text, notes=notes_text)
+                for name, value in values.items():
+                    controls[name].value = value
                 await self.save_editor()
                 preview.close()
                 if parent:

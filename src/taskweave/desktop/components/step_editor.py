@@ -3,7 +3,9 @@
 import json
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Awaitable, Callable, Protocol
+from taskweave.desktop.state import StepEditorState
+from taskweave.presentation.state import ContextPageState
 
 from nicegui import ui
 
@@ -17,45 +19,65 @@ def document_text(value):
     return json.dumps(value, ensure_ascii=False, indent=2, default=str)
 
 from taskweave.core.validation import TaskError, normalize_step
-from taskweave.desktop.dependencies import result_fields
+from taskweave.presentation.result_fields import result_fields
+
+
+class EditorApplicationPort(Protocol):
+    async def call(self, operation: str, **params) -> dict | list[dict]: ...
+    async def validate_step_candidate(self, document: dict) -> list[dict]: ...
+    async def previous_result(self, task_id: str, step_id: str, environment_id: str | None, *, output: str = 'data') -> object: ...
+
+
+class EditorButtonFactory(Protocol):
+    def __call__(self, title: str, action: Callable[[], object], *, primary: bool = False, flat: bool = False) -> ui.button: ...
+
+
+class StepListRenderer(Protocol):
+    actions: dict
+    async def render(self, steps: list[dict], catalog: dict, toolbar: ui.element, container: ui.element) -> ui.element | None: ...
+    def bind_move_menu_items(self, up: ui.element, down: ui.element) -> None: ...
+
+
+class AuthoringEditorActions(Protocol):
+    async def generate_goal_dialog(self) -> None: ...
+    def retained_request(self) -> object | None: ...
+    async def recover_generation(self, *, repaint: Callable[[], Awaitable[None]]) -> None: ...
+    async def choose_generation_mode(self, *, repaint: Callable[[], Awaitable[None]]) -> None: ...
+    async def confirm_step(self, repaint: Callable[[], Awaitable[None]]) -> None: ...
+
+
+class DebugDrawerRenderer(Protocol):
+    @property
+    def environment_id(self) -> str | None: ...
+    def set_visible(self, visible: bool) -> None: ...
+    async def refresh(self) -> None: ...
+    async def render(self, host: ui.element, step: dict, baseline: dict, *, current: Callable[[], bool]) -> bool: ...
+
+
+class ContextMaterialsRenderer(Protocol):
+    def render(self, container: ui.element) -> None: ...
 
 
 @dataclass
 class StepEditorRenderContext:
     """Explicit editor-only services and view handles used during composition."""
-    state: Any
-    context_state: Any
-    debug_panel: Any
-    controller: Any
-    button: Callable
-    page_getter: Callable
-    page_generation_getter: Callable
-    page_timer: Callable
-    step_list: Any
-    save_editor: Callable
-    document: Callable
-    paint: Callable
-    animate_reorder: Callable
-    finish_reorder_animation: Callable
-    environment_select: Callable
-    trial_variables: Callable
-    refresh_trial_inputs: Callable
-    debug_session: Any
-    ai_editor: Any
-    context_component: Any
-    confirm_end: Callable
-    selected_step_control: Any = None
-    save_state: Any = None
-    context_panel: Any = None
-    trial_ai_supplement: Any = None
-    trial_variables_area: Any = None
-    trial_form: Any = None
-    trial_environment: Any = None
-    trial_start_status: Any = None
-    edit_controls_cache: Any = None
+    state: StepEditorState
+    context_state: ContextPageState
+    debug_drawer: DebugDrawerRenderer
+    controller: EditorApplicationPort
+    button: EditorButtonFactory
+    page_getter: Callable[[], str]
+    page_generation_getter: Callable[[], int]
+    step_list: StepListRenderer
+    save_editor: Callable[[], Awaitable[dict]]
+    document: Callable[[], dict]
+    paint: Callable[[], Awaitable[None]]
+    ai_editor: AuthoringEditorActions
+    context_component: ContextMaterialsRenderer
+    selected_step_control: ui.element | None = None
+    save_state: ui.label | None = None
+    context_panel: ui.element | None = None
     open_debug_on_navigation: bool = False
-    on_debug_visibility: Callable = lambda visible: None
-    debug_poll_allowed: Callable = lambda: True
 
     @property
     def task_id(self): return self.state.task_id
@@ -88,11 +110,7 @@ class StepEditorRenderContext:
     @contexts.setter
     def contexts(self, value): self.context_state.ai_contexts = value
     @property
-    def debug_supplements(self): return self.debug_panel.state.supplements
-    @property
-    def environment_id(self): return self.debug_panel.state.environment_id
-    @environment_id.setter
-    def environment_id(self, value): self.debug_panel.state.environment_id = value
+    def environment_id(self): return self.debug_drawer.environment_id
 
 
 class StepEditor:
@@ -120,14 +138,9 @@ class StepEditor:
 
     def snapshot_debug_inputs(self):
         form = self.view.get('trial_form')
-        environment = self.view.get('trial_environment')
-        if form is None or environment is None or environment.is_deleted:
+        if form is None:
             return None
-        return deepcopy({
-            'task_id': self.state.task_id, 'step_id': self.state.step_id,
-            'environment_id': environment.value,
-            'task': form.task_edits(), 'step': form.step_edits(),
-        })
+        return form.input_draft.snapshot(self.state.task_id, self.state.step_id)
 
     def _is_current(self, identity):
         return self.identity() == identity
@@ -196,11 +209,9 @@ class StepEditor:
         return True
 
     def capture_view(self, ctx):
-        self.view = {name: getattr(ctx, name) for name in (
+        self.view.update({name: getattr(ctx, name) for name in (
             "selected_step_control", "save_state", "context_panel",
-            "trial_ai_supplement", "trial_variables_area", "trial_form", "trial_environment",
-            "trial_start_status",
-        )}
+        )})
 
     def own_timer(self, timer):
         self.timers.append(timer)
@@ -295,11 +306,9 @@ class StepEditor:
             with ui.column().classes("tw-panel tw-editor-panel tw-content w-full relative overflow-hidden").style('position: relative; min-height: calc(100vh - 260px)') as editor_panel:
                 def set_debug_layout(opening):
                     debug_column.set_visibility(opening)
-                    ctx.on_debug_visibility(opening)
+                    ctx.debug_drawer.set_visible(opening)
                     if opening:
                         editor_layout.classes(add="tw-debug-open")
-                        if debug_drawer:
-                            debug_drawer.style('width: 100%; min-width: 0; max-height: calc(100vh - 300px); overflow-y: auto')
                     else:
                         editor_layout.classes(remove="tw-debug-open")
                     debug_toggle.text = '收起调试' if opening else '调试'
@@ -307,7 +316,6 @@ class StepEditor:
 
                 debug_built = False
                 debug_building = False
-                debug_drawer = None
 
                 async def toggle_debug_drawer():
                     nonlocal debug_building
@@ -326,10 +334,11 @@ class StepEditor:
                     if not editor_is_current(): return
                     set_debug_layout(opening)
                     if opening:
-                        await ctx.debug_panel.refresh_trial()
+                        await ctx.debug_drawer.refresh()
 
                 def mark_dirty(_=None):
                     if editor_is_current() and ctx.edit_controls and ctx.save_state and not ctx.save_state.is_deleted:
+                        self.sync_draft()
                         ctx.save_state.text = '未保存修改'
 
                 with ui.row().classes("tw-step-config-heading w-full items-center gap-2"):
@@ -535,7 +544,7 @@ class StepEditor:
                                                 raise
                                             preview.text = '尚无成功结果；可以填写 /字段名。运行时从本次任务 DB 读取。'
                                             return
-                                        from taskweave.desktop.dependencies import result_fields
+                                        from taskweave.presentation.result_fields import result_fields
                                         if not editor_is_current():
                                             return
                                         fields = result_fields(result)
@@ -545,6 +554,7 @@ class StepEditor:
                                             options[ref_pointer.value] = ref_pointer.value or '全部结果'
                                         ref_pointer.options = options
                                         ref_pointer.update()
+                                        self.sync_draft()
                                         preview.text = '字段与示例值来自最近成功运行；执行仍读取本次运行结果。'
 
                                     async def choose_field(event):
@@ -608,71 +618,14 @@ class StepEditor:
             debug_column.set_visibility(False)
 
             async def build_debug():
-                nonlocal debug_built, debug_drawer
+                nonlocal debug_built
                 if debug_built:
                     return
-                debug_column.clear()
-                with debug_column:
-                    with ui.column().classes('tw-debug-drawer tw-panel bg-white gap-3') as debug_drawer:
-                        with ui.row().classes('w-full items-center justify-between gap-2'):
-                            with ui.column().classes('gap-0'):
-                                ui.label('调试 · ' + step['name']).classes('text-lg font-medium')
-                        ui.label('输入来自已保存的配置；运行调试前会先保存当前草稿。').classes('text-xs text-gray-500')
-                        environment = await ctx.environment_select()
-                        environment.classes(remove="w-72", add="w-full min-w-0")
-                        if not editor_is_current():
-                            return
-                        ctx.trial_environment = environment
-                        ctx.trial_variables_area = ui.column().classes('w-full')
-                        with ctx.trial_variables_area:
-                            trial_form = await ctx.trial_variables(ctx.old_step, environment)
-                        if not editor_is_current():
-                            return
-                        ctx.trial_form = trial_form
-                        recovered_inputs = ctx.step_state.reload_debug
-                        if recovered_inputs and (recovered_inputs['task_id'], recovered_inputs['step_id']) == (ctx.task_id, ctx.step_id):
-                            trial_form.apply_task_values(recovered_inputs['task'])
-                            trial_form.apply_step_values(recovered_inputs['step'])
-                            ctx.step_state.reload_debug = None
-                        ctx.trial_start_status = ui.label().classes('text-sm text-gray-500')
-                        debug_panel = ctx.debug_panel
-                        debug_panel.render_actions(
-                            ui.column().classes('tw-debug-actions w-full gap-2'),
-                            lambda: ctx.debug_session.start_trial(continue_session=True),
-                            ctx.debug_session.start_flow_trial,
-                            lambda: debug_panel.end(ctx.confirm_end, debug_panel.refresh_trial),
-                        )
-                        debug_panel.trial_area = ui.column().classes("w-full")
-                        ui.separator()
-                        ctx.trial_ai_supplement = ui.textarea(
-                            'AI 补充说明（可选）',
-                            value=ctx.debug_supplements.get(ctx.step_id, ''),
-                            placeholder='仅用于当前调试轮次，例如：点击结果后会打开新标签页。',
-                        ).props('outlined autogrow debounce=50').classes('w-full')
-                        def remember_supplement(event, step_id=ctx.step_id):
-                            ctx.debug_supplements[step_id] = event.value or ''
-                        ctx.trial_ai_supplement.on_value_change(remember_supplement)
-                        with ui.row().classes('w-full items-center gap-2 flex-nowrap'):
-                            ctx.button('AI 修复', lambda control=ctx.trial_ai_supplement: ctx.ai_editor.choose_repair_mode(
-                                control, repaint=ctx.paint)).classes('flex-1 min-w-0')
-                            async def clear_ai_repair_context(control=ctx.trial_ai_supplement):
-                                ctx.ai_editor.new_debug_round(control)
-                            ctx.button('清空 AI 修复上下文', clear_ai_repair_context).classes('flex-1 min-w-0')
-                        async def refresh_current_trial():
-                            if (ctx.page == 'editor' and ctx.step_state.generation == editor_generation
-                                    and ctx.step_id == editor_step_id and debug_column.visible
-                                    and ctx.debug_poll_allowed()
-                                    and not getattr(ctx.debug_session, "flow_dialog_open", False)
-                                    and not getattr(ctx.ai_editor, "_ai_flow_active", False)):
-                                await debug_panel.poll()
-                    with ui.column().classes("tw-debug-log-panel tw-panel w-full min-w-0"):
-                        ui.label("调试日志").classes("font-semibold")
-                        debug_panel.logs_area = ui.column().classes("tw-debug-log-body w-full")
-                if not editor_is_current():
-                    return
-                debug_built = True
-                self.capture_view(ctx)
-                self.own_timer(ctx.page_timer(1, refresh_current_trial))
+                debug_built = await ctx.debug_drawer.render(
+                    debug_column, step, ctx.old_step, current=editor_is_current,
+                )
+                if debug_built:
+                    self.capture_view(ctx)
 
             set_debug_layout(False)
             ctx.edit_controls = {
@@ -687,6 +640,7 @@ class StepEditor:
                 "timeout": timeout,
                 "bindings": binding_rows,
             }
+            self.sync_draft()
             for control in (name, step_description, step_notes, code, caps, delay, timeout):
                 control.on_value_change(mark_dirty)
         if editor_is_current():
@@ -696,72 +650,32 @@ class StepEditor:
                 await build_debug()
                 if editor_is_current():
                     set_debug_layout(True)
-                    await ctx.debug_panel.refresh_trial()
+                    await ctx.debug_drawer.refresh()
 
+
+    def sync_draft(self):
+        """Translate widget input into plain values at the framework boundary."""
+        controls = self.state.edit_controls
+        if not controls:
+            return
+        self.state.capture_draft({
+            'fields': {key: controls[key].value for key in (
+                'name', 'step_description', 'step_notes', 'code', 'caps', 'delay', 'timeout')},
+            'schema': controls['schema'].raw_rows(),
+            'schema_original': controls['schema'].original,
+            'bindings': [[control.value for control in row] for row in controls['bindings']],
+            'field_types': {row[0].value.strip(): getattr(row[5], 'field_types', {})
+                            for row in controls['bindings']},
+            'plugin_actions': controls['plugin_actions'],
+        })
 
     def document(self):
-        controls = self.state.edit_controls
-        doc = normalize_step(self.state.old_step)
-        doc.update(
-            name=controls["name"].value,
-            step_description=controls["step_description"].value,
-            step_notes=controls["step_notes"].value,
-            step_content=controls["code"].value,
-            capabilities=sorted({action for plugin in (controls["caps"].value or []) for action in controls["plugin_actions"].get(plugin, [])}),
-            input_schema=controls["schema"].schema(),
-            delay_after_previous_seconds=(
-                int(controls["delay"].value or 0)
-                if float(controls["delay"].value or 0).is_integer()
-                else controls["delay"].value
-            ),
-            timeout_ms=int(controls["timeout"].value or 60) * 1000,
-        )
-        doc["bindings"] = {}
-        for name, source, value, source_step, output, ref_pointer in controls["bindings"]:
-            key = name.value.strip()
-            if not key or key in doc["bindings"]:
-                raise TaskError("FORM_INVALID", "输入绑定名称不能为空或重复")
-            if source.value == "literal":
-                try:
-                    literal = json.loads(value.value)
-                except ValueError:
-                    literal = value.value
-                doc["bindings"][key] = {"literal": literal}
-            else:
-                ref = {"source": source.value, "pointer": ref_pointer.value}
-                if source.value == "step":
-                    if not source_step.value:
-                        raise TaskError("FORM_INVALID", "请选择前序步骤")
-                    ref.update(step_id=source_step.value, output=output.value or "data")
-                doc["bindings"][key] = {"ref": ref}
-        properties = (doc["input_schema"].setdefault("properties", {}) if doc["bindings"]
-                      else doc["input_schema"].get("properties", {}))
-        for key, binding in doc["bindings"].items():
-            if key not in properties:
-                if "literal" in binding:
-                    kind = result_fields(binding["literal"])[""]["type"]
-                else:
-                    control = next(row[5] for row in controls["bindings"] if row[0].value.strip() == key)
-                    kind = getattr(control, "field_types", {}).get(binding["ref"]["pointer"], "string")
-                properties[key] = {"type": kind}
-        return doc
+        from taskweave.presentation.editor import document_from_draft
+        if self.state.draft is None:
+            self.sync_draft()
+        return document_from_draft(self.state.old_step, self.state.draft)
 
     async def save(self, document=None):
-        state = self.state
-        task_id, step_id, generation = state.task_id, state.step_id, state.generation
-        page_generation = self.page_generation()
+        from taskweave.presentation.editor import EditorSession
         document = self.document() if document is None else document
-        async with state.save_lock:
-            if ((state.task_id, state.step_id, state.generation) != (task_id, step_id, generation)
-                    or self.page_generation() != page_generation):
-                raise TaskError("EDITOR_CHANGED", "步骤已切换，请重新保存当前草稿。")
-            # A queued save must use the latest optimistic-lock baseline after
-            # the preceding save has committed, while keeping this request's
-            # document snapshot from the moment it was triggered.
-            old_step = state.old_step
-            saved = await self.controller.save_draft(task_id, document, old_step)
-            if ((state.task_id, state.step_id, state.generation) == (task_id, step_id, generation)
-                    and self.page_generation() == page_generation):
-                state.old_step = saved
-                state.step_id = saved["step_id"]
-            return saved
+        return await EditorSession(getattr(self.state, "interaction", self.state), self.controller.save_draft, self.page_generation).save(document)

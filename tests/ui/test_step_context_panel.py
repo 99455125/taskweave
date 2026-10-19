@@ -219,12 +219,16 @@ class StepContextPanelTests(unittest.TestCase):
             def props(self, *_args, **_kwargs): return self
             def style(self, *_args, **_kwargs): return self
             def on_value_change(self, *_args, **_kwargs): return self
+            def on(self, event, callback):
+                self.events = {**getattr(self, "events", {}), event: callback}
+                return self
             def disable(self): self.enabled = False
             def set_enabled(self, value): self.enabled = value
             def set_visibility(self, _value): return self
             def open(self): return self
             def close(self): return self
             def clear(self): return self
+            def descendants(self): return []
 
         async def scenario():
             from taskweave.desktop.workbench import Workbench
@@ -249,6 +253,7 @@ class StepContextPanelTests(unittest.TestCase):
                     return {"group":{"context_id":"ctx", "provider_id":"p", "name":"Group", "captures":[]}}
                 raise AssertionError(operation)
             controller = MagicMock()
+            controller._collection_workspaces = {}
             controller.call = AsyncMock(side_effect=call)
             controller.plugin_context_requests.return_value = {"p":{"type":"object","properties":{}}}
             workbench = object.__new__(Workbench)
@@ -260,9 +265,9 @@ class StepContextPanelTests(unittest.TestCase):
                 task_id=lambda:"task", environment_id=lambda:"env", button=workbench.button,
                 render_result_view=AsyncMock(),
             )
-            with patch("taskweave.desktop.components.step_contexts.ui", ui), patch(
+            with patch("taskweave.desktop.components.step_contexts.ui", ui), patch("taskweave.desktop.contexts.ui", ui), patch(
                 "taskweave.desktop.components.step_contexts.ValueForm",
-                return_value=SimpleNamespace(hide_fields=MagicMock(), values=MagicMock(return_value={})),
+                return_value=SimpleNamespace(hide_fields=MagicMock(), controls={}, values=MagicMock(return_value={})),
             ):
                 await page.collect()
                 click = buttons["确认保存"]
@@ -295,12 +300,16 @@ class StepContextPanelTests(unittest.TestCase):
             def props(self, *_args, **_kwargs): return self
             def style(self, *_args, **_kwargs): return self
             def on_value_change(self, *_args, **_kwargs): return self
+            def on(self, event, callback):
+                self.events = {**getattr(self, "events", {}), event: callback}
+                return self
             def disable(self): self.enabled = False
             def set_enabled(self, value): self.enabled = value
             def set_visibility(self, _value): return self
             def open(self): return self
             def close(self): return self
             def clear(self): return self
+            def descendants(self): return []
 
         async def scenario():
             from types import SimpleNamespace
@@ -315,6 +324,7 @@ class StepContextPanelTests(unittest.TestCase):
                 return button
             ui.button.side_effect = make_button
             controller = MagicMock()
+            controller._collection_workspaces = {}
             async def call(operation, **kwargs):
                 operations.append((operation, kwargs.get("step_id") or kwargs.get("task_id")))
                 if operation == "run.context.sessions": return []
@@ -331,9 +341,9 @@ class StepContextPanelTests(unittest.TestCase):
                 button=lambda title, callback, **_kwargs: ui.button(title, on_click=callback),
                 render_result_view=AsyncMock(),
             )
-            with patch("taskweave.desktop.components.step_contexts.ui", ui), patch(
+            with patch("taskweave.desktop.components.step_contexts.ui", ui), patch("taskweave.desktop.contexts.ui", ui), patch(
                 "taskweave.desktop.components.step_contexts.ValueForm",
-                return_value=SimpleNamespace(hide_fields=MagicMock(), values=MagicMock(return_value={})),
+                return_value=SimpleNamespace(hide_fields=MagicMock(), controls={}, values=MagicMock(return_value={})),
             ):
                 await page.collect()
                 confirm = buttons["确认保存"]

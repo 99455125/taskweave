@@ -1,12 +1,12 @@
 """Persistence for planning generation status and frozen candidate records."""
 
 import json
-from taskweave.infrastructure.storage import now, uid
+from taskweave.infrastructure.sqlite_storage import SQLiteStorage, now, uid
 
 
 class PlanGenerationRepository:
 
-    def __init__(self, store):
+    def __init__(self, store: SQLiteStorage):
         self.store = store
 
     def generation(self, generation_id):

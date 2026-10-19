@@ -23,6 +23,7 @@
 - CSS 字符串定位器继续兼容；selector 可为 `{kind: css|role|label|placeholder, value: ..., name?: ..., exact?: true, frame?: iframe CSS}`。所有读取、填充、点击和断言共用解析器。
 - 页面快照过滤隐藏控件，密码框仅描述定位信息、不读取值，优先表单与按钮，提供可见/启用/可编辑状态、标签、placeholder、推荐定位器、实际匹配数量、frame、采集时间与当前会话标识。最多 8 个 frame、80 个元素、每 frame 最多 40 个；不读取输入值、cookie 或完整 HTML。无法可靠定位的嵌套 frame 不生成可执行定位器。
 - 新动作 page_input_value / page_assert_value 读取或等待实际控件值；page_assert_title 等待标题包含文字；page_assert_url 等待 Playwright URL glob；page_assert_text 改为等待实际页面文字。文本能力仍不代表输入值。
+- `page_input_value` 可读取唯一且可见的禁用输入框，适用于自动汇总和审核只读字段；它不启用控件。写入、点击仍拒绝禁用目标，隐藏目标与多匹配继续报错。
 - 操作前识别 LOCATOR_NOT_FOUND / LOCATOR_AMBIGUOUS / LOCATOR_HIDDEN / LOCATOR_DISABLED / LOCATOR_NOT_EDITABLE，填充不接受不可编辑控件。开始/完成/失败日志标明动作序号、定位器、阶段及耗时，不记录填入的值。
 - 失败时尽力采集只读 BrowserFailureSnapshot 与截图，采集失败不覆盖原错误。AI 修复前自动刷新仍保留会话中的页面；丢失会话时明确 unavailable，不打开新页面。
 - 插件提示词要求按最新真实快照定位、继续当前页面、区分输入值与文字、验证实际结果，禁止固定 True 伪造成功。运行时 page_inspect 观察现有页面，编写工具 page_inspect 观察明确 URL 的独立页面，两者分别说明。

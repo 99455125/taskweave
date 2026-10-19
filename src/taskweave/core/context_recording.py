@@ -1,6 +1,6 @@
 """Optional recording wire validation; no browser, UI or storage dependency."""
 import json
-from taskweave.core.ports import ContextRecordingBatch, ContextRecordingCommand
+from taskweave.core.context_contracts import ContextRecordingBatch, ContextRecordingCommand
 from taskweave.core.context_collection import serialize_context_collection
 from taskweave.core.validation import TaskError
 

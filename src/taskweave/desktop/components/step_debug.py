@@ -4,6 +4,7 @@ import inspect
 import json
 import asyncio
 from nicegui import ui
+from taskweave.presentation.debug import DebugInteraction, TrialInputDraft
 from taskweave.core.validation import TaskError
 from taskweave.desktop.controller import command_id
 from taskweave.desktop.display import readable_metadata, step_names
@@ -30,6 +31,7 @@ class StepDebugSession:
         self.update_environment, self.reset_feedback = update_environment, reset_feedback
         self.trial_start_status = trial_start_status
         self.debug_state = debug_state
+        self.interaction = DebugInteraction(debug_state, trials, controller)
 
     async def enter_debug(self):
         identity = self.identity()
@@ -40,18 +42,13 @@ class StepDebugSession:
         if self.identity() != identity:
             return
         self.controller.reset_debug_conversation(saved["step_id"])
-        self.debug_state.fresh_round = True
-        self.debug_state.feedback = None
-        self.debug_state.feedback_run_id = None
-        self.debug_state.removed_feedback = set()
-        self.debug_state.supplements.pop(saved["step_id"], None)
-        self.debug_state.trial_signature = None
+        self.interaction.fresh_round(saved["step_id"])
         await self.refresh_trial()
 
     async def settle_trial_start(self, run_id, timeout=0.8, *, expected_identity=None):
         """Wait for immediate validation, then refresh only the same debug session."""
         identity = expected_identity or self.identity()
-        if self.identity() != identity or self.trials.get(identity[1]) != run_id:
+        if not self.interaction.owns(identity, self.identity(), run_id):
             return
         status = self.trial_start_status()
         if status is not None and not status.is_deleted:
@@ -60,17 +57,17 @@ class StepDebugSession:
         deadline = loop.time() + timeout
         while loop.time() < deadline:
             current = await self.controller.call("run.get", run_id=run_id)
-            if self.identity() != identity or self.trials.get(identity[1]) != run_id:
+            if not self.interaction.owns(identity, self.identity(), run_id):
                 return
             request = await self.controller.run_request(run_id)
-            if self.identity() != identity or self.trials.get(identity[1]) != run_id:
+            if not self.interaction.owns(identity, self.identity(), run_id):
                 return
-            if current["status"] != "RUNNING" or request.get("waiting_input") or current.get("attempts"):
+            if self.interaction.settled(current, request):
                 break
             await asyncio.sleep(0.05)
         self.debug_state.trial_signature = None
         await self.refresh_trial()
-        if self.identity() != identity or self.trials.get(identity[1]) != run_id:
+        if not self.interaction.owns(identity, self.identity(), run_id):
             return
         status = self.trial_start_status()
         if status is not None and not status.is_deleted:
@@ -103,17 +100,15 @@ class StepDebugSession:
                 if self.identity() != identity:
                     dialog.close()
                     return
-                form = self.trial_form()
-                environment = self.trial_environment()
+                inputs = TrialInputDraft(self.debug_state)
                 run = await self.controller.call(
-                    "step.trial.flow", step_id=saved["step_id"], inputs=form.task_values(),
-                    step_inputs={saved["step_id"]: form.step_values()},
-                    environment_id=environment.value or None, command_id=command_id(),
+                    "step.trial.flow", step_id=saved["step_id"], inputs=inputs.task.values(),
+                    step_inputs={saved["step_id"]: inputs.step.values()},
+                    environment_id=inputs.state.environment_id, command_id=command_id(),
                     defer_inputs=True, start_step_id=start.value,
                 )
-                if self.identity() != identity:
+                if not self.interaction.accept_run(identity, self.identity(), saved['step_id'], run):
                     return
-                self.trials[saved["step_id"]] = run["run_id"]
                 dialog.close()
                 await self.settle_trial_start(run["run_id"])
 
@@ -131,8 +126,7 @@ class StepDebugSession:
         if self.identity() != identity or saved["step_id"] != identity[1]:
             return
         await self._reset_feedback()
-        form = self.trial_form()
-        environment = self.trial_environment()
+        inputs = TrialInputDraft(self.debug_state)
         if continue_session:
             previous_id = self.trials.get(saved["step_id"])
             if previous_id:
@@ -142,25 +136,25 @@ class StepDebugSession:
                 previous_request = await self.controller.run_request(previous_id)
                 if self.identity() != identity:
                     return
-                if previous.get("can_end") and previous["environment_id"] != (environment.value or None):
+                decision = self.interaction.continuation(previous, previous_request, inputs.state.environment_id, saved['step_id'])
+                if decision.action == 'abandon':
                     if not await self.confirm_end(previous) or self.identity() != identity:
                         return
                     await self.controller.call("run.control", run_id=previous_id, command_id=command_id(), operation="abandon")
                     if self.identity() != identity:
                         return
-                if previous.get("can_end") and previous["status"] != "CANCELLED" and previous["environment_id"] == (environment.value or None):
+                if decision.action in {"resume", "other_step", "repeat"}:
                     waiting = previous_request.get("waiting_input")
-                    if waiting:
-                        if waiting["scope"] == "step" and waiting["step_id"] != saved["step_id"]:
+                    if decision.action in {"resume", "other_step"}:
+                        if decision.action == "other_step":
                             ui.notify("请先填写下方等待步骤的输入，再继续。")
                             return
-                        values = form.task_values() if waiting["scope"] == "task" else form.step_values()
+                        values = inputs.task.values() if waiting["scope"] == "task" else inputs.step.values()
                         await self.resume_inputs(previous, values, expected_identity=identity)
                         if self.identity() == identity:
                             await self.refresh_trial()
                         return
-                    uncertain = any(a["valid"] and (a["status"] == "UNKNOWN" or (a["status"] == "FAILED" and a["effect_state"] in {"UNKNOWN", "SUCCEEDED"})) for a in previous["attempts"])
-                    if uncertain:
+                    if decision.needs_confirmation:
                         with ui.dialog() as retry_dialog, ui.card().classes("w-full max-w-xl"):
                             ui.label("保留当前页面并再次调试？").classes("text-lg")
                             ui.label("上次操作结果未确认，请先检查当前页面；再次执行可能重复点击或提交。浏览器会保留，上次失败记录不会被改写。")
@@ -169,17 +163,15 @@ class StepDebugSession:
                                 ui.button("取消", on_click=lambda: retry_dialog.submit(False)).props("outline")
                         if not await retry_dialog or self.identity() != identity:
                             return
-                    run = await self.controller.repeat_trial(saved, previous_id, overrides=form.values())
-                    if self.identity() != identity:
+                    run = await self.interaction.launch(saved, inputs.values(), inputs.state.environment_id, previous_run_id=previous_id)
+                    if not self.interaction.accept_run(identity, self.identity(), saved['step_id'], run):
                         return
-                    self.trials[saved["step_id"]] = run["run_id"]
                     self.update_environment(previous["environment_id"])
                     await self.settle_trial_start(run["run_id"])
                     return
-            run = await self.controller.trial(saved, form.values(), environment.value or None)
-            if self.identity() != identity:
+            run = await self.interaction.launch(saved, inputs.values(), inputs.state.environment_id)
+            if not self.interaction.accept_run(identity, self.identity(), saved['step_id'], run):
                 return
-            self.trials[saved["step_id"]] = run["run_id"]
             await self.settle_trial_start(run["run_id"])
             return
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
@@ -193,16 +185,15 @@ class StepDebugSession:
                 return
 
             async def launch():
-                run = await self.controller.trial(saved, form.values(), environment.value or None)
-                if self.identity() != identity:
+                run = await self.interaction.launch(saved, form.input_draft.values(), form.input_draft.state.environment_id)
+                if not self.interaction.accept_run(identity, self.identity(), saved['step_id'], run):
                     return
-                self.trials[saved["step_id"]] = run["run_id"]
-                self.update_environment(environment.value)
+                self.update_environment(form.input_draft.state.environment_id)
                 current_environment = self.trial_environment()
-                if current_environment.value != environment.value:
+                if current_environment.value != form.input_draft.state.environment_id:
                     current_environment._tw_skip_change = True
-                    current_environment.value = environment.value
-                await self.trial_form().replace(environment.value or None, form.task_values(), form.step_values())
+                    current_environment.value = form.input_draft.state.environment_id
+                await self.trial_form().replace(form.input_draft.state.environment_id, form.input_draft.task.values(), form.input_draft.step.values())
                 dialog.close()
                 await self.settle_trial_start(run["run_id"])
 

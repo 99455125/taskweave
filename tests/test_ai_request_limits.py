@@ -19,8 +19,13 @@ class AIRequestLimitTests(unittest.TestCase):
             self.assertEqual(AISettings(home).get()["request_limit_bytes"], 1024 * 1024)
             settings.update(512)
             self.assertEqual(AISettings(home).get()["ai_request_limit_kib"], 512)
-            for value in (0, -1, 4097, 1.5, True):
+            settings.update(8192)
+            self.assertEqual(AISettings(home).get()["request_limit_bytes"], 8388608)
+            settings.update(16384)
+            self.assertEqual(AISettings(home).get()["request_limit_bytes"], 16777216)
+            for value in (0, -1, 16385, 1.5, True):
                 with self.assertRaises(TaskError): settings.update(value)
+            self.assertEqual(AISettings(home).get()["ai_request_limit_kib"], 16384)
 
     def test_final_utf8_body_boundary_is_exact(self):
         model = HttpModel("https://example.com/v1/chat/completions", "m")

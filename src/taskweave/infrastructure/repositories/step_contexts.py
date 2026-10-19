@@ -2,7 +2,7 @@
 
 import json
 from taskweave.core.validation import TaskError, dumps
-from taskweave.infrastructure.storage import now, uid
+from taskweave.infrastructure.sqlite_storage import SQLiteStorage, now, uid
 
 
 class StepContextRepository:
@@ -16,7 +16,7 @@ class StepContextRepository:
         db.execute("UPDATE step_context_captures SET operation_notes=COALESCE(?,operation_notes),send_preview=COALESCE(?,send_preview) WHERE capture_id=?",
                    (notes, None if send is None else int(send), capture_id))
 
-    def __init__(self, store, steps):
+    def __init__(self, store: SQLiteStorage, steps):
         self.store = store
         self.steps = steps
 

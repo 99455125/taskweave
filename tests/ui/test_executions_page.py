@@ -2,6 +2,7 @@
 
 import asyncio
 import unittest
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from taskweave.desktop.pages.executions import ExecutionsPage
@@ -20,19 +21,21 @@ class ExecutionsPageTests(unittest.TestCase):
             task_filter.classes.return_value = task_filter
             status_filter.props.return_value = status_filter
             status_filter.classes.return_value = status_filter
-            task_filter.value = ["t1"]
-            status_filter.value = ["RUNNING"]
+            task_filter.value = ["stale-control-value"]
+            status_filter.value = ["stale-control-value"]
             fake_ui = MagicMock()
             fake_ui.select.side_effect = [task_filter, status_filter]
             page = ExecutionsPage(controller, state, MagicMock(), refresh)
 
             with patch("taskweave.desktop.pages.executions.ui", fake_ui):
                 await page.render()
-                await task_filter.on_value_change.call_args.args[0](None)
+                await task_filter.on_value_change.call_args.args[0](SimpleNamespace(value=["t1"]))
+                self.assertEqual(state.statuses, ["FAILED"])
+                await status_filter.on_value_change.call_args.args[0](SimpleNamespace(value=["RUNNING"]))
 
             self.assertEqual(state.task_ids, ["t1"])
             self.assertEqual(state.statuses, ["RUNNING"])
-            self.assertEqual(refresh.await_count, 2)
+            self.assertEqual(refresh.await_count, 3)
             self.assertIsNone(state.signature)
 
         asyncio.run(scenario())

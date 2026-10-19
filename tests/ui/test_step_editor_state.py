@@ -10,6 +10,38 @@ from taskweave.desktop.workbench import Workbench
 
 
 class StepEditorStateTests(unittest.TestCase):
+    def test_arriving_result_metadata_is_saved_without_another_input_change(self):
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('metadata')
+            previous = app.repo.save_step(task['task_id'], {'name': 'source'})
+            step = app.repo.save_step(task['task_id'], {
+                'name': 'consumer',
+                'bindings': {'payload': {'ref': {'source': 'step', 'step_id': previous['step_id'], 'output': 'data', 'pointer': '/payload'}}},
+            })
+            controller = DesktopController(app)
+            controller.previous_result = AsyncMock(return_value={'payload': 'initial'})
+            client = Client(page('/result-metadata'))
+            async def scenario():
+                with client:
+                    wb = Workbench(controller)
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    row = wb.edit_controls['bindings'][0]
+                    self.assertEqual(wb.step_editor.document()['input_schema']['properties']['payload']['type'], 'string')
+                    controller.previous_result.return_value = {'payload': {'nested': 1}}
+                    # A delayed metadata response must update the plain draft even
+                    # when the user makes no further changes before saving.
+                    await row[3]._change_handlers[-1](None)
+                    saved = await wb.step_editor.save()
+                    self.assertEqual(saved['input_schema']['properties']['payload']['type'], 'object')
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
     def test_reload_keeps_failed_debug_run_and_raw_inputs_without_starting_again(self):
         from nicegui.client import Client
         from nicegui.page import page

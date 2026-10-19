@@ -1,9 +1,12 @@
 """Shared contracts for task execution, authoring and plugin contributions."""
 
 from dataclasses import dataclass, field
-from typing import Any, AsyncContextManager, Mapping, Protocol, Sequence, TypedDict
+from typing import Any, AsyncContextManager, Mapping, Protocol, Sequence
 
-JSON = Any  # Wire values must be null/bool/number/string/list/string-keyed dict.
+from taskweave.core.json_types import JSON
+from taskweave.core.capability_contracts import Diagnostic, CapabilitySpec, AuthoringContribution
+from taskweave.core.context_contracts import ContextItem, ContextView, ContextCollection, ContextRecordingCommand, ContextRecordingBatch, ContextTarget
+from taskweave.core.model_ports import ToolCall, ModelReply, ModelPort
 
 
 @dataclass(frozen=True)
@@ -12,14 +15,6 @@ class Scope:
     run_id: str
     step_id: str
     attempt_id: str
-
-
-@dataclass(frozen=True)
-class Diagnostic:
-    code: str
-    message: str
-    path: str = ""
-    severity: str = "error"
 
 
 @dataclass(frozen=True)
@@ -53,78 +48,6 @@ class ErrorInfo:
     message: str
     phase: str
     effect_state: str  # NOT_STARTED, SUCCEEDED, FAILED, UNKNOWN
-
-
-@dataclass(frozen=True)
-class CapabilitySpec:
-    id: str
-    description: str
-    input_schema: Mapping[str, JSON]
-    output_schema: Mapping[str, JSON]
-    effect: str  # READ, WRITE
-    timeout_ms: int = 30000
-    retry_safe: bool = False
-    resource_ids: Sequence[str] = ()
-
-
-@dataclass(frozen=True)
-class AuthoringContribution:
-    instructions: str
-    examples: Sequence[str] = ()
-    context_provider_ids: Sequence[str] = ()
-    tool_ids: Sequence[str] = ()
-    constraints: Mapping[str, JSON] = field(default_factory=dict)
-    channel_overrides: Mapping[str, JSON] = field(default_factory=dict)
-
-
-@dataclass(frozen=True)
-class ContextItem:
-    kind: str  # text, image
-    mime_type: str
-    content: str  # text or controlled image reference
-    source: str
-    truncated: bool = False
-
-
-@dataclass(frozen=True)
-class ContextView:
-    """Plugin-defined preview stored beside context evidence."""
-
-    title: str
-    renderer: str
-    data: JSON
-
-
-@dataclass(frozen=True)
-class ContextCollection:
-    """One atomic authoring capture and its optional user previews."""
-
-    items: Sequence[ContextItem]
-    views: Sequence[ContextView] = field(default_factory=tuple)
-
-
-@dataclass(frozen=True)
-class ContextRecordingCommand:
-    """Optional capture lifecycle command; cursors never imply persistence."""
-
-    operation: str
-    recording_id: str | None = None
-    after: int = 0
-    through: int | None = None
-    limit: int = 100
-
-
-@dataclass(frozen=True)
-class ContextRecordingBatch:
-    """Non-consuming evidence page or lifecycle acknowledgement."""
-
-    recording_id: str
-    state: str  # RECORDING, PAUSED, STOPPED, DISCARDED
-    cursor: int
-    collection: ContextCollection = field(default_factory=lambda: ContextCollection(()))
-    available_after: int = 0
-    dropped_count: int = 0
-    has_more: bool = False
 
 
 @dataclass(frozen=True)
@@ -217,12 +140,6 @@ class ResourceProvider(Protocol):
     async def close(self, resource: Any) -> None: ...
 
 
-class ContextTarget(TypedDict):
-    target_id: str
-    label: str
-    request: Mapping[str, JSON]
-
-
 class ContextTargetProvider(Protocol):
     """Optional plugin extension; enumerate retained resources without opening any."""
 
@@ -258,32 +175,3 @@ class Plugin(Protocol):
     async def diagnose(
         self, error: ErrorInfo, refs: Sequence[ResultRef]
     ) -> Sequence[Diagnostic]: ...
-
-
-@dataclass(frozen=True)
-class ToolCall:
-    call_id: str
-    tool_id: str
-    arguments: Mapping[str, JSON]
-
-
-@dataclass(frozen=True)
-class ModelReply:
-    proposed_content: str | None = None
-    explanation: str = ""
-    tool_calls: Sequence[ToolCall] = ()
-    structured_content: Mapping[str, JSON] = field(default_factory=dict)
-
-
-class ModelPort(Protocol):
-    def capabilities(
-        self,
-    ) -> Mapping[str, JSON]: ...  # tools, images, json_object, json_schema
-    async def complete(
-        self,
-        messages: Sequence[JSON],
-        tool_specs: Sequence[CapabilitySpec],
-        response_contract: JSON,
-        *,
-        request_limit_bytes: int | None = None,
-    ) -> ModelReply: ...

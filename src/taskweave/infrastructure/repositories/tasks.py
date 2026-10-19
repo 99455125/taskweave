@@ -1,11 +1,11 @@
 """SQLite persistence for task metadata and task lifecycle."""
 
 from taskweave.core.validation import TaskError, check_schema, dumps, fingerprint
-from taskweave.infrastructure.storage import now, uid
+from taskweave.infrastructure.sqlite_storage import SQLiteStorage, now, uid
 
 
 class TaskRepository:
-    def __init__(self, store, steps, step_contexts):
+    def __init__(self, store: SQLiteStorage, steps, step_contexts):
         self.store = store
         self.steps = steps
         self.step_contexts = step_contexts

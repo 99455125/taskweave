@@ -4,14 +4,14 @@ import json
 from pathlib import Path
 import shutil
 from taskweave.core.validation import TaskError
-from taskweave.infrastructure.storage import now, uid
+from taskweave.infrastructure.sqlite_storage import SQLiteStorage, now, uid
 from taskweave.infrastructure.repositories.collaboration import PlanContextCopier
 from taskweave.infrastructure.repositories.plan_helpers import decode_plan, expect_plan_revision
 
 
 class PlanMetadataRepository:
 
-    def __init__(self, store, plan_contexts: PlanContextCopier):
+    def __init__(self, store: SQLiteStorage, plan_contexts: PlanContextCopier):
         self.store = store
         self.plan_contexts = plan_contexts
         self.root = Path(store.home) / 'plans'

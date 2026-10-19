@@ -12,6 +12,15 @@ from taskweave.desktop.components.step_debug import StepDebugSession
 from taskweave.infrastructure.storage import uid
 
 
+def input_draft(values=None, environment_id=None):
+    from taskweave.presentation.debug import TrialInputDraft
+    draft = TrialInputDraft()
+    draft.task.configure({'properties': {key: {'type': 'integer' if isinstance(value, int) else 'string'} for key, value in (values or {}).items()}}, values or {})
+    draft.step.configure({'properties': {}}, {})
+    draft.set_environment(environment_id)
+    return draft
+
+
 class TrialVariableGroups(unittest.TestCase):
     def test_environment_switch_renders_values_and_preserves_task_and_step_edits(self):
         async def scenario():
@@ -29,13 +38,23 @@ class TrialVariableGroups(unittest.TestCase):
             forms=[]
             fake_ui=MagicMock()
             fake_ui.label.side_effect=lambda text: labels.append(text) or MagicMock()
+            class Control:
+                def __init__(self, value):
+                    self._value, self.handlers = value, []
+                def on_value_change(self, handler): self.handlers.append(handler)
+                @property
+                def value(self): return self._value
+                @value.setter
+                def value(self, value):
+                    self._value = value
+                    for handler in self.handlers: handler(SimpleNamespace(value=value))
             def build(schema, values):
-                controls = {key: ('string', SimpleNamespace(value=values.get(key, spec.get('default')))) for key, spec in schema['properties'].items()}
+                controls = {key: ('string', Control(values.get(key, spec.get('default')))) for key, spec in schema['properties'].items()}
                 form=SimpleNamespace(schema=schema, controls=controls, defaults={key:control.value for key, (_,control) in controls.items()},
                     values=lambda:{key:control.value for key, (_,control) in controls.items() if control.value is not None})
                 forms.append(form)
                 return form
-            step={'input_schema':{'properties':{'url':{'type':'string'},'code':{'type':'string'},'result':{'default':7}}},'bindings':{}}
+            step={'input_schema':{'properties':{'url':{'type':'string'},'code':{'type':'string'},'result':{'type':'integer','default':7}}},'bindings':{}}
             with patch('taskweave.desktop.components.trial_inputs.ui',fake_ui),patch('taskweave.desktop.components.trial_inputs.ValueForm',side_effect=build):
                 form=await bench.trial_variables(step,environment)
                 self.assertEqual(form.values(),{'code':'uat','url':'uat','result':7})
@@ -56,7 +75,7 @@ class TrialVariableGroups(unittest.TestCase):
                 with self.subTest(previous_env=previous_env, can_end=can_end):
                     saved={'step_id':'step'}
                     trials={'step':'previous'}
-                    form=SimpleNamespace(values=lambda:{'code':'edited'}, task_values=lambda:{'code':'edited'}, step_values=lambda:{})
+                    form=SimpleNamespace(input_draft=input_draft({'code':'edited'}, 'uat'))
                     environment=SimpleNamespace(value='uat')
                     previous={'environment_id':previous_env,'status':'SUCCEEDED','can_end':can_end,'attempts':[]}
                     controller=SimpleNamespace(call=AsyncMock(return_value=previous), run_request=AsyncMock(return_value={}),
@@ -67,11 +86,10 @@ class TrialVariableGroups(unittest.TestCase):
                         environment_select=AsyncMock(), trial_variables=AsyncMock(), trials=trials, button=AsyncMock(),
                         confirm_end=confirm_end, resume_inputs=AsyncMock(), refresh_trial=refresh,
                         refresh_trial_inputs=AsyncMock(), update_environment=update_env, reset_feedback=reset,
-                        trial_start_status=lambda:None, debug_state=__import__("taskweave.desktop.state", fromlist=["DebugState"]).DebugState())
+                        trial_start_status=lambda:None, debug_state=form.input_draft.state)
                     session.settle_trial_start = settle
-                    tabs=SimpleNamespace(value=None)
                     with patch('taskweave.desktop.components.step_debug.ui',MagicMock()) as fake_ui:
-                        await session.start_trial(tabs,'feedback',continue_session=True)
+                        await session.start_trial(continue_session=True)
                         fake_ui.dialog.assert_not_called()
                     if previous_env=='uat' and can_end:
                         controller.repeat_trial.assert_awaited_once_with(saved,'previous',overrides={'code':'edited'})

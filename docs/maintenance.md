@@ -7,14 +7,14 @@
 | 本次要改什么 | 先读 | 主要源码入口（src/taskweave 下） | 测试键示例 |
 | --- | --- | --- | --- |
 | 任务 CRUD、复制、任务包、步骤保存与确认 | [任务与步骤](modules/tasks.md) | application/tasks.py、steps.py、task_transfer.py；repositories/tasks.py、steps.py | application.tasks、application.steps、ui.tasks、ui.editor |
-| 规划配置、生成、导入、复制 | [规划](modules/planning.md) | application/planning.py；desktop/planning.py；repositories/plans.py、plan_generations.py | application.planning、ui.planning |
+| 规划配置、生成、导入、复制 | [规划](modules/planning.md) | application/planning.py；desktop/pages/planning.py、presentation/planning.py；repositories/plans.py、plan_generations.py | application.planning、ui.planning |
 | 步骤 AI 生成、网页回复、失败修复 | [AI 编写](modules/authoring.md) | application/authoring.py、prompts.py、ai_requests.py；components/step_ai.py | application.authoring、ui.debug |
 | 上下文组、采集项、会话目标与预览 | [上下文](modules/contexts.md) | application/contexts.py；infrastructure/context_sessions.py；desktop/contexts.py | domain.contexts、repository.contexts、ui.contexts |
-| 执行、调试、补录、重跑、恢复、结果 | [执行与结果](modules/execution.md) | application/runs.py；infrastructure/runtime.py、worker.py | application.runs、ui.executions、ui.results、ui.debug |
-| 环境变量、SQLite、事务、清理与迁移 | [存储与环境](modules/storage.md) | application/environments.py；infrastructure/storage.py、unit_of_work.py、repositories/ | application.environments、shared.storage、repository.environments |
-| 页面布局、导航、组件状态、设置与历史 | [桌面 UI](modules/desktop.md) | desktop/workbench.py、pages/、components/、state.py | ui.tasks、ui.editor、ui.settings、ui.history（按实际选择） |
+| 执行、调试、补录、重跑、恢复、结果 | [执行与结果](modules/execution.md) | application/runs.py；infrastructure/run_coordinator.py、coordinator_pool.py、worker_transport.py、worker.py | application.runs、ui.executions、ui.results、ui.debug |
+| 环境变量、SQLite、事务、清理与迁移 | [存储与环境](modules/storage.md) | application/environments.py；infrastructure/sqlite_storage.py、storage.py、unit_of_work.py、repositories/ | application.environments、shared.storage、repository.environments |
+| 页面布局、导航、组件状态、设置与历史 | [桌面 UI](modules/desktop.md) | presentation/；desktop/workbench.py、pages/、components/、state.py | ui.tasks、ui.editor、ui.settings、ui.history（按实际选择） |
 | 插件契约、Playwright/OCR/TiDB/utility | [插件](modules/plugins.md) | plugins/sdk.py、registry.py；仓库根 plugins/ 下对应插件 | shared.contracts、plugins.playwright、plugins.ocr、plugins.tidb、plugins.utility |
-| CLI/HTTP 操作路由或整体依赖边界 | [架构](architecture.md)及受影响模块 | __main__.py；application/operations.py、service.py；infrastructure/http.py | 用 --changed 预览实际消费者 |
+| CLI/HTTP 操作路由或整体依赖边界 | [架构](architecture.md)及受影响模块 | __main__.py；application/operations.py、composition.py、service.py；infrastructure/http.py | 用 --changed 预览实际消费者 |
 | 打包、安装或启动 | [交付与运行](deployment.md) | pyproject.toml；packaging/windows/；scripts/build_windows.ps1 | 按受影响平台验证，见 testing.md |
 | DevOps 组合步骤、跨插件结果保存 | [插件](modules/plugins.md)及[组合示例](../examples/devops/README.md) | examples/devops/；infrastructure/worker.py 既有结果契约 | examples.devops |
 | 测试选择器或模块映射 | [测试规则](testing.md) | scripts/test_modules.py；tests/module-map.json | shared.testing |

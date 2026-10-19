@@ -33,6 +33,8 @@
 
 通用动作补充hover/double-click/容器滚动/同frame拖拽（WRITE且不可自动重试），以及state/assert_state、allowlist属性、列表和native/ARIA表格有界读取（READ）。集合在浏览器端限制长度、行列和字节预算，保留截断信息及表格单元格跨度；只读当前DOM，不自动翻页或加载虚拟化内容。读取预检不做点击的actionability扫描；全部继续共用页面身份与范围定位。新增page_upload接受有界Base64文件（隐藏input或显式chooser触发），page_dialog只处理本次动作按类型/完整提示匹配的原生弹窗；二者WRITE且不可自动重试，取消释放监听，文件通过步骤绑定从file.read取得。方法/参数及限制以[插件说明](../../plugins/playwright/README.md)为准。
 
+`page_input_value` 允许读取唯一、可见但禁用的输入框，以回读自动汇总或只读审核值；点击/写入仍保留禁用门禁，隐藏与多匹配校验保持。
+
 Playwright的上传/原生弹窗、定位预检、快照与集合读取在外层取消或预算超时时保留单次已发协议调用的回复归属，接收其最终异常，不保留后续动作流程。取消发生在命令发出前不执行命令；已发生的业务动作不能回滚或自动重试。iframe路径检查使用的临时元素句柄检查后释放。
 
 录制操作保留发生时的文档身份、去除查询参数/凭据的URL和短标题；基线前后及目标后状态均核对文档，快速跳转时标明PAGE_DOCUMENT_CHANGED缺失证据，不能把新页DOM或复用token当旧页验证。
@@ -44,6 +46,8 @@ SDK 的可选录制协议已作为独立扩展提供 ContextRecordingCommand/Bat
 文件插件是可选 `files` extra：`file.read` 完整读取显式 file_root 内的 text/JSON/CSV/Base64，超限报错，不截断 SQL。数据经步骤返回与 `/content` 输入绑定交给 TiDB，不新增跨插件直调协议。任务包、步骤绑定和核心持久化格式保持不变。
 
 TiDB 新增 `tidb.execute_sql` WRITE、不可自动重试；旧 `tidb.query` 保持只读。默认 DML/查询脚本整批事务，DDL 须显式逐条提交；报告逐条结果、影响行数，失败区分已回滚、部分提交和未知提交。语句/文件限制与取消边界见插件说明。数据库驱动和 SQL 解析器仍仅属于 TiDB 插件依赖。
+
+TiDB 只读动作按握手识别使用集群 TSO 的原生只读快照事务，避免普通 READ ONLY 的1235和墙上时钟超前错误；MySQL保持原事务方式。结果兼容增加 `query_info.transaction_mode`，失败不退化成可写事务，连接清理不覆盖查询主因。实际支持边界与本机8.5.4验证见[TiDB说明](../../plugins/tidb/README.md)。
 
 ## 验证入口
 

@@ -311,6 +311,9 @@ class ConcurrentAIFlowTests(unittest.TestCase):
             entered, release = asyncio.Event(), asyncio.Event()
             calls = []
             class Editor:
+                def __init__(self):
+                    from taskweave.presentation.authoring import AIInteraction
+                    self.interaction = AIInteraction()
                 @exclusive_ai_flow
                 async def run(self):
                     calls.append(1)
@@ -325,7 +328,7 @@ class ConcurrentAIFlowTests(unittest.TestCase):
                 self.assertEqual(len(calls), 1)
                 release.set()
                 with self.assertRaises(RuntimeError): await first
-                self.assertFalse(editor._ai_flow_active)
+                self.assertFalse(editor.interaction.active)
                 with self.assertRaises(RuntimeError): await editor.run()
                 self.assertEqual(len(calls), 2)
         asyncio.run(scenario())
@@ -351,3 +354,40 @@ class ConcurrentAIFlowTests(unittest.TestCase):
         api.assert_not_called()
         for control in controls:
             control.disable.assert_called_once_with()
+
+
+class AIPlainDraftWiringTests(unittest.TestCase):
+    def test_real_reply_input_updates_plain_draft_before_preview(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page as page_route
+        client = Client(page_route('/plain-ai-reply'))
+        callbacks, drafts = {}, []
+        def button(label, callback, **kwargs):
+            callbacks[label] = callback
+            return ui.button(label, on_click=callback)
+        editor = StepAIEditor(SimpleNamespace(), button, AsyncMock(), lambda: None,
+                              lambda: {}, lambda: ('task', 'step', 0, 0))
+        editor.preview_goal = AsyncMock()
+        original = editor.interaction.choice
+        def remember(*args, **kwargs):
+            draft = original(*args, **kwargs)
+            drafts.append(draft)
+            return draft
+        editor.interaction.choice = remember
+        async def scenario():
+            with client:
+                await editor._present_goal_result({'step_id': 'step'}, {'prompt': 'fixture'},
+                                                 editor.identity(), web_chat=True)
+                control = next(element for element in client.elements.values()
+                               if element._props.get('label') == '粘贴网页回复')
+                control.value = '{"step_description":"typed goal","step_notes":"typed note"}'
+                self.assertEqual(drafts[0].reply, control.value)
+                # Plain draft remains the command source after rendering.
+                drafts[0].reply = '{"step_description":"plain goal","step_notes":"plain note"}'
+                await callbacks['解析并预览']()
+                self.assertEqual(editor.preview_goal.call_args.args[1:3], ('plain goal', 'plain note'))
+        try:
+            asyncio.run(scenario())
+        finally:
+            client.delete()

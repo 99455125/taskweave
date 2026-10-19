@@ -2,6 +2,7 @@
 import asyncio
 import unittest
 from unittest.mock import AsyncMock, MagicMock
+from types import SimpleNamespace
 
 from nicegui import ui
 from nicegui.client import Client
@@ -50,6 +51,8 @@ class PlanningEditorLateCandidateTests(unittest.TestCase):
             with patch("taskweave.desktop.planning.ui.select", side_effect=track_select):
                 with root:
                     await page.editor(plan)
+                    tabs = next(element for element in root.descendants() if 'tw-task-tabs' in element.classes)
+                    await tabs._change_handlers[-1](SimpleNamespace(value='能力与素材'))
 
             def ancestor_with_class(element, css_class):
                 parent = element

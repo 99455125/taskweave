@@ -2,11 +2,11 @@
 
 from taskweave.core.validation import TaskError, normalize_step, fingerprint, check_bindings, dumps
 import json
-from taskweave.infrastructure.storage import uid, now
+from taskweave.infrastructure.sqlite_storage import SQLiteStorage, uid, now
 
 
 class StepRepository:
-    def __init__(self, store, environments):
+    def __init__(self, store: SQLiteStorage, environments):
         self.store = store
         self.environments = environments
 

@@ -10,6 +10,111 @@ from taskweave.desktop.pages.tasks import TasksPage
 
 
 class TasksPageTests(unittest.TestCase):
+    def test_import_session_blocks_duplicate_and_closed_dialog_feedback(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page as nice_page
+
+        async def scenario():
+            entered, release = asyncio.Event(), asyncio.Event()
+            imported = []
+            callbacks = {}
+            async def call(operation, **params):
+                entered.set()
+                await release.wait()
+                imported.append(params['package'])
+                return {'task_id': 'new'}
+            def button(title, callback, **kwargs):
+                callbacks[title] = callback
+                return ui.button(title)
+            repaint = AsyncMock()
+            page = TasksPage(SimpleNamespace(call=call), button, AsyncMock(), repaint)
+            await page.import_task_dialog()
+            mode = next(e for e in ui.context.client.elements.values() if isinstance(e, ui.toggle))
+            source = next(e for e in ui.context.client.elements.values() if isinstance(e, ui.textarea))
+            dialog = next(e for e in ui.context.client.elements.values() if isinstance(e, ui.dialog))
+            mode.value, source.value = 'text', '{"name":"task"}'
+            with patch('taskweave.desktop.pages.tasks.ui.notify') as notify:
+                pending = asyncio.create_task(callbacks['导入为新任务']())
+                await entered.wait()
+                duplicate = asyncio.create_task(callbacks['导入为新任务']())
+                await asyncio.sleep(0)
+                ignored = duplicate.done()
+                # Deliver the same hide event that the browser sends on close.
+                for listener in dialog._event_listeners.values():
+                    if listener.type == 'hide':
+                        listener.handler()
+                release.set()
+                await asyncio.gather(pending, duplicate)
+                await callbacks['导入为新任务']()
+                self.assertTrue(ignored)
+                self.assertEqual(imported, [{'name': 'task'}])
+                repaint.assert_not_awaited()
+                notify.assert_not_called()
+
+        client = Client(nice_page('/import-inflight-close'))
+        try:
+            async def run():
+                with client:
+                    await scenario()
+            asyncio.run(run())
+        finally:
+            client.delete()
+
+    def test_import_dialog_accepts_task_with_large_context_preview(self):
+        import json
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page as nice_page
+
+        async def scenario():
+            callbacks = {}
+            controller = SimpleNamespace(call=AsyncMock())
+            def button(title, callback, **kwargs):
+                callbacks[title] = callback
+                return ui.button(title)
+            page = TasksPage(controller, button, AsyncMock(), AsyncMock())
+            await page.import_task_dialog()
+            upload = next(e for e in ui.context.client.elements.values() if isinstance(e, ui.upload))
+            package = {'format': 'taskweave-task-2', 'origin': 'task_export',
+                       'contexts': [{'captures': [{'views': [{'data': 'a' * (23 * 1024 * 1024)}]}]}]}
+            content = json.dumps(package).encode()
+            event = SimpleNamespace(file=SimpleNamespace(name='task.json', size=lambda: len(content), read=AsyncMock(return_value=content)))
+            await upload._upload_handlers[0](event)
+            controller.call.assert_not_awaited()
+            with patch('taskweave.desktop.pages.tasks.ui.notify'):
+                await callbacks['导入为新任务']()
+            controller.call.assert_awaited_once_with('task.import', package=package)
+            controller.call.reset_mock()
+            invalid = SimpleNamespace(file=SimpleNamespace(name='invalid.json', size=lambda: 36 * 1024 * 1024, read=AsyncMock()))
+            await upload._upload_handlers[0](invalid)
+            invalid.file.read.assert_not_awaited()
+            with self.assertRaisesRegex(TaskError, '请先选择有效'):
+                await callbacks['导入为新任务']()
+            controller.call.assert_not_awaited()
+            for invalid_content in (b'{invalid', b'\xff'):
+                bad_file = SimpleNamespace(file=SimpleNamespace(name='invalid.json', size=lambda: 8,
+                                           read=AsyncMock(return_value=invalid_content)))
+                await upload._upload_handlers[0](bad_file)
+                with self.assertRaisesRegex(TaskError, '请先选择有效'):
+                    await callbacks['导入为新任务']()
+            mode = next(e for e in ui.context.client.elements.values() if isinstance(e, ui.toggle))
+            source = next(e for e in ui.context.client.elements.values() if isinstance(e, ui.textarea))
+            mode.value = 'text'
+            source.value = '{"format": "taskweave-task-2"}'
+            with patch('taskweave.desktop.pages.tasks.ui.notify'):
+                await callbacks['导入为新任务']()
+            controller.call.assert_awaited_once_with('task.import', package={'format': 'taskweave-task-2'})
+
+        client = Client(nice_page('/large-task-import'))
+        try:
+            async def within_client():
+                with client:
+                    await scenario()
+            asyncio.run(within_client())
+        finally:
+            client.delete()
+
     def test_direct_steps_tab_enters_guarded_editor_route(self):
         async def scenario():
             current_route = ["tasks"]

@@ -62,7 +62,7 @@ class TaskRepositoryTests(unittest.TestCase):
         self.assertEqual(
             {
                 "tasks", "steps", "environments", "runs", "results",
-                "step_contexts", "plans", "plan_contexts", "plan_generations",
+                "step_contexts", "plans", "plan_contexts", "plan_generations", "organization",
             },
             set(vars(repositories)),
         )

@@ -8,6 +8,56 @@ from taskweave.core.validation import TaskError
 
 
 class TrialInputDraftTests(unittest.TestCase):
+    def test_real_controls_restore_raw_draft_and_submit_without_reading_widgets(self):
+        import asyncio
+        import json
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.presentation.state import DebugState
+        from taskweave.desktop.components.trial_inputs import TrialInputPanel
+        from taskweave.desktop.components.step_editor import StepEditor
+
+        async def scenario():
+            schema = {'properties': {'org': {'type': 'string'}, 'settings': {'type': 'object'}}, 'required': ['org']}
+            async def call(operation, **kwargs):
+                if operation == 'task.get': return {'input_schema_json': json.dumps(schema)}
+                if operation == 'environment.list':
+                    return [{'environment_id': name, 'public_config_json': json.dumps({'org': name, 'settings': {}})} for name in ('old', 'new')]
+                raise AssertionError(operation)
+            panel = TrialInputPanel(SimpleNamespace(call=call), lambda: 'task', str)
+            handlers = []
+            environment = SimpleNamespace(value='old', on_value_change=handlers.append)
+            step = {'step_id': 'step', 'input_schema': {'properties': {}}, 'bindings': {}}
+            form = await panel.render(step, environment)
+            state = DebugState()
+            form.input_draft.bind(state, ('task', 'step'))
+            form.task_form.controls['org'][1].value = ''
+            form.task_form.controls['settings'][1].value = '{"unfinished":'
+            self.assertEqual(state.task_inputs['raw']['settings'], '{"unfinished":')
+            await handlers[0](SimpleNamespace(value='new'))
+            self.assertEqual(form.task_form.controls['org'][1].value, '')
+            self.assertEqual(form.task_form.controls['settings'][1].value, '{"unfinished":')
+            editor = SimpleNamespace(view={'trial_form': form}, state=SimpleNamespace(task_id='task', step_id='step'))
+            snapshot = StepEditor.snapshot_debug_inputs(editor)
+            self.assertEqual(snapshot['environment_id'], 'new')
+            restored = await panel.render(step, SimpleNamespace(value='new', on_value_change=lambda _: None))
+            restored.apply_task_values(snapshot['task'])
+            self.assertEqual(restored.task_form.controls['settings'][1].value, '{"unfinished":')
+            self.assertEqual(restored.task_form.controls['org'][1].value, '')
+            restored.task_form.controls['org'][1].value = 'fixed'
+            restored.task_form.controls['settings'][1].value = '{"ok":true}'
+            restored.task_form.values = lambda: self.fail('submission read widgets')
+            restored.task_form.controls.clear()
+            self.assertEqual(restored.values(), {'org': 'fixed', 'settings': {'ok': True}})
+
+        client = Client(page('/trial-input-state-owner'))
+        try:
+            async def within_client():
+                with client: await scenario()
+            asyncio.run(within_client())
+        finally:
+            client.delete()
+
     def test_paused_run_uses_its_frozen_task_schema_and_task_id(self):
         import asyncio
         import json

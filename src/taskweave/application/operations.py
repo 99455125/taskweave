@@ -1,6 +1,9 @@
 """Stable public operation routing, separated from use-case composition."""
 
 import asyncio
+from dataclasses import dataclass
+import inspect
+from typing import Callable
 
 from taskweave.core.validation import TaskError
 
@@ -18,7 +21,7 @@ LOCK_EXEMPT_OPERATIONS = frozenset({
 })
 
 
-def build_operation_routes(app):
+def _operation_handlers(app):
     sync = {
         "plugin.configure": app.configure_plugin,
         "plugin.list": app.installed_plugins,
@@ -126,14 +129,47 @@ def build_operation_routes(app):
     return sync, asynchronous
 
 
+@dataclass(frozen=True)
+class OperationContract:
+    """One bound operation, including authoritative defaults and result annotation."""
+    name: str
+    handler: Callable
+    asynchronous: bool
+    lock_exempt: bool
+
+    @property
+    def signature(self) -> inspect.Signature:
+        # Derived from the real use case, so parameter defaults cannot drift.
+        return inspect.signature(self.handler)
+
+
+def build_operation_contracts(app):
+    sync, asynchronous = _operation_handlers(app)
+    return {
+        name: OperationContract(name, handler, is_async,
+                                is_async or name in LOCK_EXEMPT_OPERATIONS)
+        for is_async, routes in ((False, sync), (True, asynchronous))
+        for name, handler in routes.items()
+    }
+
+
+def build_operation_routes(app):
+    """Compatibility view of the centralized operation contracts."""
+    contracts = build_operation_contracts(app)
+    return (
+        {name: spec.handler for name, spec in contracts.items() if not spec.asynchronous},
+        {name: spec.handler for name, spec in contracts.items() if spec.asynchronous},
+    )
+
+
 def dispatch_operation(app, operation, params=None):
-    sync, asynchronous = build_operation_routes(app)
+    contract = build_operation_contracts(app).get(operation)
     arguments = params or {}
-    if operation in asynchronous:
-        return asyncio.run(asynchronous[operation](**arguments))
-    if operation not in sync:
+    if contract is None:
         raise TaskError("OPERATION_UNKNOWN", operation)
-    if operation in LOCK_EXEMPT_OPERATIONS:
-        return sync[operation](**arguments)
+    if contract.asynchronous:
+        return asyncio.run(contract.handler(**arguments))
+    if contract.lock_exempt:
+        return contract.handler(**arguments)
     with app.coordinator.lock:
-        return sync[operation](**arguments)
+        return contract.handler(**arguments)

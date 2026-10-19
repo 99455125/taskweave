@@ -1,7 +1,8 @@
 """Small local test adapters, not browser implementations."""
 
 import asyncio
-from taskweave.core.ports import CapabilitySpec, AuthoringContribution, PreparedResult
+from taskweave.core.capability_contracts import CapabilitySpec, AuthoringContribution
+from taskweave.core.ports import PreparedResult
 from taskweave.plugins.registry import Registry
 
 

@@ -52,11 +52,13 @@ class TaskConfigRefresh(unittest.TestCase):
             with patch('taskweave.desktop.workbench.ui', fake_ui), \
                  patch('taskweave.desktop.pages.tasks.ui', fake_ui), \
                  patch('taskweave.desktop.pages.tasks.SchemaEditor') as schema_editor:
-                schema = {'type': 'object', 'properties': {'loginurl': {'type': 'string'}}}
-                schema_editor.return_value.schema.return_value = schema
+                schema = {'type': 'object', 'properties': {'loginurl': {'type': 'string'}}, 'required': []}
+                schema_editor.return_value.raw_rows.return_value = [['loginurl', 'string', '', '', False, {'type': 'string'}]]
                 await workbench.task_dialog(stale)
                 fields['任务名称'].value = '新名称'
                 fields['说明'].value = '新说明'
+                for label in ('任务名称', '说明'):
+                    fields[label].on_value_change.call_args.args[0](SimpleNamespace(value=fields[label].value))
                 await buttons['保存']()
                 await workbench.task_dialog(stale)
                 self.assertEqual(fields['任务名称'].value, '新名称')

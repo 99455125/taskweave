@@ -13,6 +13,15 @@ from taskweave.desktop.state import DebugState
 from taskweave.desktop.workbench import Workbench
 
 
+def input_draft(values=None, environment_id=None):
+    from taskweave.presentation.debug import TrialInputDraft
+    draft = TrialInputDraft()
+    draft.task.configure({'properties': {key: {'type': 'integer' if isinstance(value, int) else 'string'} for key, value in (values or {}).items()}}, values or {})
+    draft.step.configure({'properties': {}}, {})
+    draft.set_environment(environment_id)
+    return draft
+
+
 class StepDebugSessionTests(unittest.TestCase):
     def test_real_local_debug_entry_and_trial_submission(self):
         with tempfile.TemporaryDirectory() as home, Application(
@@ -26,7 +35,7 @@ class StepDebugSessionTests(unittest.TestCase):
             controller = DesktopController(app)
             identity = (task_id, step['step_id'], 0, 1)
             trials, events = {}, []
-            form = SimpleNamespace(values=lambda: {}, task_values=lambda: {}, step_values=lambda: {})
+            form = SimpleNamespace(input_draft=input_draft())
             session = StepDebugSession(
                 controller=controller, identity=lambda: identity, task_id=lambda: task_id,
                 save_editor=AsyncMock(return_value=step), trial_form=lambda: form,
@@ -35,7 +44,7 @@ class StepDebugSessionTests(unittest.TestCase):
                 confirm_end=AsyncMock(), resume_inputs=AsyncMock(),
                 refresh_trial=AsyncMock(side_effect=lambda: events.append("refresh")),
                 refresh_trial_inputs=AsyncMock(), update_environment=AsyncMock(),
-                reset_feedback=MagicMock(), trial_start_status=lambda: None, debug_state=DebugState(),
+                reset_feedback=MagicMock(), trial_start_status=lambda: None, debug_state=form.input_draft.state,
             )
             async def scenario():
                 await session.enter_debug()
@@ -132,9 +141,10 @@ class StepDebugSessionTests(unittest.TestCase):
             workbench.task_id, workbench.step_id = "task", "step"
             workbench.step_state.task_id, workbench.step_state.step_id = "task", "step"
             workbench.trials["step"] = "previous"
-            form = SimpleNamespace(values=lambda:{"x":1}, task_values=lambda:{"x":1}, step_values=lambda:{})
+            form = SimpleNamespace(input_draft=input_draft({"x":1}, "uat"))
             environment = SimpleNamespace(value="uat")
             workbench.step_debug_session.save_editor = AsyncMock(return_value={"step_id":"step"})
+            form.input_draft.bind(workbench.step_debug_session.debug_state, ("task", "step"))
             workbench.step_editor.view.update(trial_form=form, trial_environment=environment)
             workbench.step_debug_session.settle_trial_start = AsyncMock()
             self.assertIs(workbench.step_debug_session.trial_environment(), environment)
@@ -356,7 +366,7 @@ class StepDebugSessionTests(unittest.TestCase):
                 return {"run_id": "run-a"}
 
             controller = SimpleNamespace(trial=AsyncMock(side_effect=trial))
-            form = SimpleNamespace(values=lambda: {"a": 1})
+            form = SimpleNamespace(input_draft=input_draft({"a":1}, "dev"))
             environment = SimpleNamespace(value="dev")
             session = StepDebugSession(
                 controller=controller,
@@ -375,7 +385,7 @@ class StepDebugSessionTests(unittest.TestCase):
                 update_environment=AsyncMock(),
                 reset_feedback=AsyncMock(),
                 trial_start_status=lambda: None,
-                debug_state=DebugState(),
+                debug_state=form.input_draft.state,
                 refresh_trial_inputs=AsyncMock(),
             )
             session.settle_trial_start = AsyncMock()

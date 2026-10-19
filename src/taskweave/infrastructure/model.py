@@ -9,7 +9,7 @@ import certifi
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 from urllib.parse import urlparse
-from taskweave.core.ports import ModelReply, ToolCall
+from taskweave.core.model_ports import ModelReply, ToolCall
 from taskweave.core.validation import TaskError, validate
 from taskweave.infrastructure.privacy import redact
 from taskweave.application.prompts import FORMAT_CORRECTION
