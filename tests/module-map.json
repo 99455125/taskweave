@@ -981,6 +981,67 @@
         "application.authoring"
       ],
       "browser_targets": []
+    },
+    "domain.sequences": {
+      "source_globs": [
+        "src/taskweave/core/task_sequences.py",
+        "src/taskweave/core/sequence_ports.py"
+      ],
+      "targets": [
+        "tests.test_task_sequences_storage",
+        "tests.test_task_sequences"
+      ],
+      "depends_on": [
+        "domain.tasks"
+      ],
+      "browser_targets": []
+    },
+    "repository.sequences": {
+      "source_globs": [
+        "src/taskweave/infrastructure/repositories/sequences.py"
+      ],
+      "targets": [
+        "tests.test_task_sequences_storage",
+        "tests.test_task_sequences_lifecycle"
+      ],
+      "depends_on": [
+        "domain.sequences",
+        "repository.runs",
+        "shared.storage"
+      ],
+      "browser_targets": []
+    },
+    "application.sequences": {
+      "source_globs": [
+        "src/taskweave/application/sequences.py",
+        "src/taskweave/application/sequence_driver.py"
+      ],
+      "targets": [
+        "tests.test_task_sequences",
+        "tests.test_task_sequences_lifecycle"
+      ],
+      "depends_on": [
+        "repository.sequences",
+        "application.runs",
+        "domain.sequences"
+      ],
+      "browser_targets": []
+    },
+    "ui.sequences": {
+      "source_globs": [
+        "src/taskweave/desktop/pages/sequences.py",
+        "src/taskweave/presentation/sequences.py"
+      ],
+      "targets": [
+        "tests.ui.test_sequences_page"
+      ],
+      "depends_on": [
+        "application.sequences",
+        "shared.ui"
+      ],
+      "browser_targets": [
+        "tests.test_sequences_browser"
+      ]
     }
   }
 }

@@ -299,6 +299,9 @@ CREATE TABLE sequence_run_nodes (
 CREATE INDEX sequence_nodes_task ON sequence_run_nodes(task_id);
 """
 
+CONTROL_V19 = "ALTER TABLE sequence_runs ADD COLUMN cleanup_json TEXT;"
+CONTROL_V20 = "ALTER TABLE sequence_runs ADD COLUMN control_command_json TEXT;"
+
 
 def migrate(db, path, target, migrations):
     current = db.execute("PRAGMA user_version").fetchone()[0]
@@ -338,8 +341,8 @@ def initialize(path, name):
         migrate(
             db,
             path,
-            18 if name == "control" else 2,
-            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8, 9: CONTROL_V9, 10: CONTROL_V10, 11: CONTROL_V11, 12: CONTROL_V12, 13: CONTROL_V13, 14: CONTROL_V14, 15: CONTROL_V15, 16: CONTROL_V16, 17: CONTROL_V17, 18: CONTROL_V18},
+            20 if name == "control" else 2,
+            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8, 9: CONTROL_V9, 10: CONTROL_V10, 11: CONTROL_V11, 12: CONTROL_V12, 13: CONTROL_V13, 14: CONTROL_V14, 15: CONTROL_V15, 16: CONTROL_V16, 17: CONTROL_V17, 18: CONTROL_V18, 19: CONTROL_V19, 20: CONTROL_V20},
         )
 
 

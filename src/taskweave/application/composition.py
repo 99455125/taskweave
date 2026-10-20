@@ -9,6 +9,8 @@ from taskweave.infrastructure import sqlite_storage as storage_core
 from taskweave.application.steps import StepUseCases
 from taskweave.application.environments import EnvironmentUseCases
 from taskweave.application.runs import RunUseCases
+from taskweave.application.sequences import SequenceUseCases
+from taskweave.application.sequence_driver import SequenceDriver
 from taskweave.application.contexts import ContextUseCases
 from taskweave.infrastructure.repository import Repository
 from taskweave.infrastructure.coordinator_pool import CoordinatorPool
@@ -63,6 +65,12 @@ def compose_application(self, model, registry_factory):
     self.steps = StepUseCases(stores.steps, stores.tasks, stores.runs, self.registry, self.authoring, self.coordinator, self.context_sessions)
     self.environments = EnvironmentUseCases(stores.environments, stores.runs, self.coordinator, self.context_sessions, stores.plans)
     self.runs = RunUseCases(stores.runs, stores.tasks, stores.steps, stores.environments, stores.results, self.registry, self.authoring, self.coordinator, self.context_sessions)
+    self.runs.sequence_repository = stores.sequences
+    self.tasks.sequence_repository = stores.sequences
+    self.environments.sequence_repository = stores.sequences
+    self.sequences = SequenceUseCases(stores.sequences, self.runs, stores.tasks, stores.steps, stores.environments, self.registry)
+    self.sequence_driver = SequenceDriver(self.sequences, self.storage)
+    self.sequences.driver = self.sequence_driver
     self.contexts = ContextUseCases(stores.step_contexts, stores.steps, self.registry, self.authoring, self.coordinator, self.context_sessions)
     self.planning = PlanningService(
         plans=stores.plans,
@@ -88,3 +96,4 @@ def compose_application(self, model, registry_factory):
     )
     from taskweave.application.authoring_sessions import bind_application_requests
     self.authoring_requests = bind_application_requests(self)
+    self.sequence_driver.recover()

@@ -9,6 +9,7 @@ class EnvironmentUseCases:
     def __init__(self, environments: EnvironmentRepository, runs: EnvironmentRunReader, coordinator, context_sessions, plans: PlanRepositoryPort):
         self.environments, self.runs = environments, runs
         self.coordinator, self.context_sessions, self.plans = coordinator, context_sessions, plans
+        self.sequence_repository = None
 
     def save(self, name, public_config, secret_refs=None, environment_id=None, descriptions=None):
         return self.environments.save_environment(name, public_config, secret_refs, environment_id, descriptions)
@@ -16,6 +17,8 @@ class EnvironmentUseCases:
     def get(self, environment_id): return self.environments.environment(environment_id)
 
     def delete(self, environment_id):
+        if self.sequence_repository and self.sequence_repository.environment_is_referenced(environment_id):
+            raise TaskError("SEQUENCE_ENVIRONMENT_REFERENCED", "请先删除引用此环境的任务组合及运行记录")
         for instance in self.context_sessions.list():
             if instance.get('environment_id') == environment_id:
                 raise TaskError("ENVIRONMENT_LOCKED", "该环境仍被上下文采集实例使用，请先结束实例")
