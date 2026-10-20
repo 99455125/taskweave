@@ -1,38 +1,26 @@
-# 执行、调试与结果
+# 执行与结果
 
-执行定义好的步骤，管理每次运行、尝试、资源与结果；运行中的数据不能仅依赖页面内存。
+## 职责与主链路
 
-## 当前行为与约束
+RunUseCases接受创建、启动、补参、重跑、控制、核对和结果查询；CoordinatorPool分配实例，Coordinator协调运行，WorkerTransport管理进程/消息，worker加载插件并实际执行步骤。执行状态与有效结果以持久化事实为准。
 
-- 调试实例按任务复用，正式执行按运行隔离；实例池上限由设置管理。运行协调器负责控制，插件拥有实际浏览器等资源。
-- 正式执行读取绑定与同一运行前序有效输出；依赖结果来自持久化结果，不拿其他运行或失效尝试代替。
-- 单步试跑显式输入优先于步骤默认值；包括布尔值、0及空字符串。未提供的字段继续使用步骤默认、任务值和环境值；显式无效类型在创建运行时拒绝，不以默认值替换。流程试跑仍通过绑定和独立步骤覆盖解析。
-- 缺少必录输入时暂停，查看或切回运行只显示手动补录入口；用户取消补录保持暂停，草稿按运行/补参请求身份保留；补录写入后按原模式/目标继续原运行。离页可阻止旧 UI 更新，不能漏掉已接受输入的运行续启。
-- 从中间步骤重跑要求前序成功，撤销起点及其后续有效输出；从头重跑重建资源。历史尝试与当前有效输出区通用示例存。
-- command_id、内容指纹、锁与租约保护重复/冲突操作。外部副作用结果不确定时使用 UNKNOWN 与人工核对，不自动重复提交。
-- 成功历史不等于还有活跃资源；结束能力按实时实例/会话/租约判断。导航离页不终止后台运行。
-- 桌面执行详情的步骤轨道选择仅切换当前展示步骤，不调用启动/重启操作；执行到该步是独立显式动作，并保留原核心状态校验和确认。
-- 桌面执行页左栏组合任务/状态/文本筛选和运行卡片；右栏“执行详情”默认展示运行摘要、带成功/失败/待执行节点的进度卡、选中步骤详情和本次持久化结果，“历史记录”展示尝试历史。每步结果查看仍经声明的结果 renderer，节点选择仍只更新展示步骤。
-- 执行详情默认选择最新有效尝试；有效输入与执行信息并排展示（窄屏堆叠），输出引用和错误/核对信息随后展示，运行日志位于步骤详情卡片下方独立容器，按需读取、分页显示，提供完整查看与复制入口；默认关闭的实时日志按游标取新增事件，仅更新日志容器，停止/离页/隐藏时不继续查。历史页签可展开每次尝试的时间、有效状态、输入快照、结果引用、错误和该次尝试日志。展开历史只读数据，不提供重执行入口；日志异步加载后核对页面、运行和步骤身份。窄屏步骤轨道可在内部横向滚动至末节点。
-- 业务结果保存在任务库，文件保存在任务目录，控制库记录引用。结果 views 声明引用已保存数据；查看结果不重执行步骤，没有声明的文件不自动生成展示页签。
-- 执行总览右侧区域按父级网格分配剩余宽度并允许内部内容收缩；结果、摘要、步骤轨道和历史长内容在各自容器内滚动，切换详情/历史页签不改变右栏宽度。
+## 当前行为
 
-保留 worker 的空闲等待使用异步线程等待管道消息，事件循环继续处理浏览器监听；没有新增 UI 轮询或空闲 Heartbeat。录制命令沿现有上下文 IPC 发送，返回不计为步骤执行结果；未保存证据阻止破坏实例的操作。应用退出或进程异常仍会失去内存录制，应明确区分资源丢失与已保存证据。原执行期间 Heartbeat、取消与恢复协议保持。
+- 正式执行读取确认后的定义与版本快照。调试实例按任务复用，正式执行按运行隔离；实例池并发设置范围1–8。
+- 输入由环境、任务值、步骤默认/显式覆盖及绑定解析；具体优先级见[步骤契约](../contracts/steps.md)。单步调试显式false、0和空字符串不等于未填写。
+- 缺少必录输入时暂停并记录waiting_input身份；查看运行只显示手动补录入口。RunInputs/InputSubmission保留原始草稿、校验、防重及续启原命令；接受补录后离页仍完成后台续启。
+- 从中间重跑要求前序成功，撤销起点及之后的有效输出；从头重跑重新建立资源。旧尝试保留为历史，不再冒作当前输出。
+- command_id、命令指纹、锁、租约与回执共同防重复/冲突操作。副作用不确定进入UNKNOWN/人工核对，决策为completed或not_completed，不自动重发业务动作。
+- 结束/清理判断同时核对活跃资源、租约与未保存录制，不能用历史成功状态推断可安全结束。
 
-运行编排、实例池及worker IPC分别位于infrastructure/run_coordinator.py、coordinator_pool.py和worker_transport.py，旧runtime路径重导出兼容类。core/run_ports.py按查询、事件、租约和写入划分消费者端口。presentation/execution.py、debug.py、inputs.py、polling.py负责界面无关的选择、继续、输入请求及可见性/查询代次；页面dispose释放控件与timer，不改浏览器文档的实际可见状态。
+## UI与查询
 
-运行创建由presentation/run_creation.py的RunCreation持有任务/起点/输入草稿，并执行create→start；NiceGUI RunPage绑定相同对象。InputSubmission复用普通输入草稿完成补参校验与提交，RunInputs管理打开/提交防重和原运行续启。ExecutionInteraction按页面、运行、步骤及刷新代次接纳查询；HistoryLoadState供历史详情及执行日志复用，界面只传入普通身份和可见性。
+RunCreation负责正式运行的任务/起点/输入选择和create→start流程；ExecutionInteraction管理选择、查询缓存与响应代次。步骤轨道选择只切换展示，执行到该步是单独显式动作。
 
-## 代码入口
+详情查询在页面可见且有变化时刷新；运行日志独立于详情重绘。完整日志按需分页，增量日志默认关闭；run.events.page提供有界游标事件，游标不能跨运行使用。HistoryLoadState控制手动日志的在途与接纳，LogStreamState控制增量状态；离页/隐藏不继续向旧视图写入。
 
-[运行用例](../../src/taskweave/application/runs.py)、[运行协调](../../src/taskweave/infrastructure/runtime.py)、[worker](../../src/taskweave/infrastructure/worker.py)、[运行仓储](../../src/taskweave/infrastructure/repositories/runs.py)、[结果仓储](../../src/taskweave/infrastructure/repositories/results.py)、[结果展示契约](../../src/taskweave/core/result_views.py)。UI 见 [执行页](../../src/taskweave/desktop/pages/executions.py)、[补录组件](../../src/taskweave/desktop/components/run_inputs.py)、[调试组件](../../src/taskweave/desktop/components/step_debug.py)。
+## 代码与验证
 
-## 验证入口
+[运行用例](../../src/taskweave/application/runs.py)、[运行端口](../../src/taskweave/core/run_ports.py)、[Coordinator](../../src/taskweave/infrastructure/run_coordinator.py)、[Pool](../../src/taskweave/infrastructure/coordinator_pool.py)、[通信](../../src/taskweave/infrastructure/worker_transport.py)、[worker](../../src/taskweave/infrastructure/worker.py)、[结果仓储](../../src/taskweave/infrastructure/repositories/results.py)。
 
-`application.runs`、`repository.runs`、`repository.results`、`ui.executions`、`ui.debug`、`ui.results`。重点验证恢复/UNKNOWN、输入暂停与续启、命令幂等、不同运行隔离和结果有效性。涉及真实资源的浏览器流程必须显式选择；日常回归不默认运行全量。关联：[任务](tasks.md)、[存储](storage.md)、[桌面 UI](desktop.md)。
-
-## 按需深入
-
-[运行恢复与补录](../reference/runtime.md)、[存储迁移与结果](../reference/persistence-results.md)。只在本次修改涉及相应契约时阅读。
-
-`run.events.page(run_id, after=0, limit=100)` 是新增只读游标操作，最多 1000 条，返回 events/cursor/has_more/reset/status；游标是本地事件顺序号，不能跨运行使用，删除历史导致顺序回退时重置。无数据库迁移，旧 `run.events` 的返回保持不变；实时摘要有界，完整事件仍保存在原库。
+测试键application.runs、repository.runs、repository.results、ui.executions、ui.results、ui.debug；检查命令幂等、输入身份/续启、资源隔离、UNKNOWN恢复、重跑有效性及文件/输出持久化。结果形状见[结果契约](../contracts/results.md)。

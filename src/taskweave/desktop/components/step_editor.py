@@ -601,8 +601,8 @@ class StepEditor:
                         else:
                             ui.label("默认 0 秒；单步和继续也遵守间隔，已等待足够时间则立即执行。")
                         timeout = ui.number(
-                            "步骤执行超时（秒，不包含间隔）", value=fields.get('timeout', step["timeout_ms"] // 1000),
-                            min=1, max=3600, step=1,
+                            "步骤执行超时（秒，不包含间隔）", value=fields.get('timeout', step["timeout_ms"] / 1000),
+                            min=0.001, max=3600, step=0.001,
                         ).classes("w-full")
                     ui.label("执行代码").classes("text-base font-semibold")
                     code = ui.codemirror(fields.get('code', step["step_content"]), language="Python", line_wrapping=True).classes("w-full border rounded")

@@ -1,5 +1,5 @@
-# 插件 SDK 与注册
+# 宿主插件入口
 
-sdk.py 定义贡献与能力契约，registry.py 注册/校验能力，manager.py 管理发现与配置。具体插件实现位于仓库根 plugins/。
+sdk.py是插件公开导入入口，manager.py负责entry point发现与显式启用，registry.py校验并注册能力。具体插件位于根目录plugins/，不在宿主层维护其实现和可选依赖。
 
-开发边界与测试见 [插件模块](../../../docs/modules/plugins.md)，不要求先读历史 REQ 契约快照。
+见[插件模块](../../../docs/modules/plugins.md)与[SDK契约](../../../docs/contracts/plugins.md)。

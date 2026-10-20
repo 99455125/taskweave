@@ -1,84 +1,38 @@
-# 桌面 UI
+# 桌面UI与交互
 
-NiceGUI/pywebview 展示层；通过 DesktopController 调用 Application 操作，页面不直接访问仓储或数据库。
+## 职责划分
 
-macOS arm64 应用入口为 `packaging/macos/taskweave_launcher.py`，先分流冻结子进程，再装配工作台。`desktop/bundle.py` 负责 bundle 浏览器定位、首次插件配置及原生启动错误；已有插件配置保持不变，创建缺失配置时取得协调器锁。冻结启动在 `ui.run` 前同步初始化 Application，让实例锁及配置错误进入可见告警与脱敏日志；源码模式仍在异步 startup 装配。包资源与用户工作空间分开，交付及本机原生操作证据见 [交付说明](../deployment.md)和[验收记录](../design/macos-app-acceptance-2026-10-18.md)。
+NiceGUI/pywebview保留为当前UI框架。desktop负责控件、布局、渲染、定时器及平台行为；presentation负责普通状态与交互决定；DesktopController转接应用操作、共享编写请求和平台适配。页面不直接访问仓储或SQL。
 
-## 组件边界与行为
+| 交互 | 普通状态/流程所有者 | 实际适配 |
+| --- | --- | --- |
+| 路由、离开选择、标签页草稿恢复 | WorkspaceNavigation、TaskWorkspace、TaskTabTransition、RecoveryState | Workbench、TasksPage、launcher |
+| 任务/步骤编辑、保存与批量操作 | TaskDraft、EditorSession、StepActions | TasksPage、StepEditor、StepList |
+| 规划配置、候选与导入 | PlanningInteraction、PlanEditorSession | PlanningPage及采集/生成视图 |
+| AI选择、生成/修复候选 | AIInteraction、AIChoiceDraft、AuthoringFlow | StepAIEditor |
+| 采集草稿、目标、录制提交 | CollectionForm、TargetSelection、ContextCaptureDraft、RecordingDraft | 步骤/规划采集组件、RecordingControls |
+| 调试、正式创建、补参 | DebugInteraction、TrialInputDraft、RunCreation、RunInputs | StepDebugPanel、RunPage、RunInputDialog |
+| 执行查询、按需/增量日志 | ExecutionInteraction、PollingState、HistoryLoadState、LogStreamState | ExecutionDetails、HistoryPage、LiveRunLogs |
+| 分类、筛选、环境和设置 | CategorySession、CatalogFilter、PluginSelection、EnvironmentSession、SettingsSession | 对应页面与控件事件 |
 
-- Workbench 负责外壳、导航、显式装配和兼容委托；Tasks、Environment、Executions、History、Plugins、Settings、Marketplace 页面在 pages/，Home及Planning也位于pages/；desktop/planning.py保留兼容导出。
-- StepEditor组合步骤列表、调试、AI和上下文组件，拥有view handles，普通编辑状态由presentation/state.py持有；不要把整个 Workbench 作为任意 host proxy 传入子组件。
-- 保存串行化并使用 expected_hash；步骤采用显式保存，顶部显示未保存状态并提供保存；底部仅校验与确认验证。编辑事件更新 dirty，不进行周期扫描或写库；切换步骤/导航提供保存、放弃、取消，保存失败不能离开。失败保留草稿，不因跳页丢失编辑。
-- 规划采集项操作只同步对应素材卡片组，保留基础配置草稿；步骤原位重排后同步“上移/下移”菜单的边界状态并保留选中步骤。
-- 页面/组件实现 dispose，释放自己拥有的 timer、绑定及 view handles；异步回调核对 task、step、run 和页面代次，防止迟到响应污染新目标。
-- 调试抽屉 UI 控件与业务 StepDebugPanel 是不同对象；AI/debug 共用 trials 对象，空字典不能被悄悄替换。
-- 同步回调不能盲目 await。真实确认入口忙碌时只提交一次；旧弹窗离页后不能向新步骤写入。
-- 弹窗统一策略：点外可关、ESC 可关、点外那一次点击不穿透到下层页面；调用点直接用 `ui.dialog()`。禁止 Quasar 的 `persistent` 与 `no-esc-dismiss`（两者都会关掉 ESC，只有 `no-backdrop-dismiss` 保留 ESC），由 `scripts/check_project.py` 拦截。穿透守卫装在共享 head 的捕获阶段（[dialogs.py](../../src/taskweave/desktop/dialogs.py)），不依赖计时器，并放行 `.q-menu`/`.q-tooltip`/`.q-notification` 等浮层，避免误伤弹窗内的 `ui.select` 下拉。不要给弹窗加 `dialogs.dialog()` 之类的包装工厂：那会让 `patch(...step_ai.ui...)` 一类既有测试替身失效。实测单次点击本来也不会穿透（Chrome 在按下目标断开后取消该 click），守卫是把"弹窗打开时点击不得落到页面内容上"变成结构上不可能，不是某条已知路径的修复。
-- RunInputDialog 查看等待输入时仅显示手动入口，主动点击才构建稳定布局下的弹窗；原始草稿按运行/请求保留，提交核对请求身份并防重。组件映射补录输入与显示，presentation/inputs.py负责原运行续启及请求身份；页面已变时只阻止旧 UI 更新，不能取消已提交的业务动作。
-- 工作台首页以任务、执行和步骤用例数据展示摘要、最近更新任务、活跃执行、待核对结果和最近结果；运行操作按核心状态提供查看、继续、填写输入、核对与结束入口，并沿用原用例和结束确认。
-- 首页“新建规划”先通过导航守卫进入规划页，再创建并打开新规划；回调保持客户端上下文，避免首页容器删除使后续操作失效。取消导航时不创建规划。
-- 工作台首页 DOM 顺序与阅读顺序一致：上排为最近任务、最近执行结果，下排为快速开始、活跃执行；窄屏依照相同顺序堆叠。
-- 工作台首页及执行详情在每次异步读取后检查页面/渲染身份；离页、运行或步骤选择变化后，迟到响应不能覆盖当前页面或组件句柄。
-- 执行详情按运行显示有序步骤轨道；选择节点只改变详情选择状态，不启动或重启运行。执行到选中步骤仍由单独操作进入原确认流程。
-- 执行列表页把搜索/筛选和运行卡片置于左栏；右栏分别展示运行摘要、步骤进度、当前步骤详情、本次保存结果与尝试历史。窄屏将两栏顺序堆叠。
-- TasksPage 同时拥有任务列表和任务内工作区（概览、步骤、执行历史、调试历史）；Workbench 只负责装配并委托渲染。同任务列表选择经过工作区页签切换守卫；跨任务导航仅在步骤离开决策接受后将新任务工作区重置为概览。页签切换、步骤编辑和上下文操作按任务、步骤及页面代次保护迟到响应，离开步骤视图前保存失败则留在原视图。
-- 任务概览展示定义中的输入变量、执行状态统计和最近调试记录；步骤编辑器的调试与上下文区域继续读取真实运行记录和采集证据。
-- 任务和规划列表支持收藏、单层分类、分类筛选和管理；分类删除使关联对象转为未分类。组织元数据不改变任务定义确认或规划 revision。
-- 任务列表长名称保持单行省略，并在悬停时提供完整名称；任务概览四项执行统计在 768 px 保持紧凑四列且标签不换行。市集主图标使用 48 px 圆形底座与 24 px 图标，资源卡图标使用 44 px 底座与 24 px 图标。
-- 规划使用基础配置、能力与素材、生成记录三个页签；已保存候选可重新打开并显式重复导入。
-- 规划环境控件位于“能力与素材”卡片顶部、插件选择之前，仍保存到同一 `environment_id` 并用于采集与身份保护；生成记录入口仅保留主页签。
-- 步骤列表“更多”中的批量确认先保存并校验全部步骤；任一步校验失败会列出全部步骤序号、名称和原因，且不会开始确认。全部有效后逐步持久化确认；中途失败时刷新持久状态并报告成功数。成功重绘后仅在同一任务、步骤和编辑代次下显示完成提示。
-- 执行详情仅显示“执行详情”和“历史记录”页签，默认详情；每步的结果查看入口继续使用声明的结果展示器。
-- 规划 AI 辅助侧栏在基础配置、能力与素材、生成记录三个页签间持续显示最新候选详情与诊断，支持就地重复导入且保留当前候选；步骤编辑器以单页分区呈现配置、动作表单、上下文素材、输入依赖与时间设置，保留保存与离页守卫。
-- 插件页从本地已发现清单和当前 registry 展示完整动作契约、上下文采集 schema、配置变量表及真实加载状态；不提供安装或升级入口。环境页保留原草稿、默认环境和密钥引用行为，并用独立详情标题、变量行和保存操作呈现配置。
-- 设置分组使用左侧选择导航；输入字段使用 outlined/dense 控件，窄屏导航换行后内容紧跟导航显示。桌面主导航按钮在图标和名称间横向排列，并压缩为可容纳单行入口的间距。
-- 桌面断点在 1024 px 保留任务列表与概览双栏，768 px 堆叠；步骤配置与调试为并列容器，901 px 以上保留右侧调试栏，900 px 及以下调试与日志移到配置下方。执行列表在窄屏保留有限内部滚动区，步骤轨道在窄屏使用内部横向滚动并保留节点连接线，设置四组在窄屏横向选择，环境变量字段在窄屏使用两列。
-- 组件单测之外，装配变化需选择已有真实浏览器流程；mock 正常不证明 NiceGUI 实际接线正确。
+这些对象位于[presentation](../../src/taskweave/presentation)，UI对象留在[desktop](../../src/taskweave/desktop)。未来替换UI需要新适配器，不需要复制交互规则；当前没有第二套UI或远程前端协议。
 
-## 框架适配与交互状态
+## 生命周期规则
 
-`presentation/`承载EditorSession、WorkspaceNavigation、TaskTabTransition、PlanningInteraction、AuthoringFlow、RunInputs及执行查询策略。保存、冲突、候选身份、离开选择、过期响应和恢复快照在普通状态上判断；NiceGUI负责输入同步、展示通知、对话框和timer。`desktop/state.py`的兼容属性转发到同一interaction，控件留在适配对象；TasksPage用TaskEditorPanel/TaskHistoryPanels/TaskLifecycle协作，StepEditor用窄渲染接口组合调试及素材。
+输入事件及时写入普通草稿，业务动作消费草稿，不在提交时扫描控件树。异步响应检查任务/步骤/运行、版本及视图代次，旧响应不能修改新目标。控件存活与文档可见性由框架观察并传入，交互层决定是否刷新和接纳。
 
-控制器的平台文件/窗口行为委托desktop/platform.py，设置用例位于application/settings.py，桌面settings适配负责界面调用。替换UI需重写渲染和平台适配，可以复用交互及后端；目前没有第二套框架实现。
+dispose释放自己拥有的计时器和控件资源、使在途视图响应失效；它不改变真实文档可见性，不终止后台运行，也不取消已接受写入。UI重绘不能重新创建业务请求或清除共享在途状态。
 
-环境配置的普通行、秘密引用、保存基线与离开决定由presentation/environment.py持有；设置每次挂载独立SettingsSession，旧确认使用原会话草稿，避免重绘后改写待确认目标。任务配置使用TaskDraft，收藏分类并发更新由TaskOrganization串行协调。调试的TrialInputDraft/InputScopeDraft与DebugState共享raw状态，控件事件更新、提交和重连快照消费同一份普通数据。
+同一标签页的步骤/调试/补参普通草稿可在服务内缓存恢复，标签页相互隔离；恢复保留原expected_hash，其他窗口修改时继续报冲突。缓存不承诺服务重启或标签页关闭后恢复，规划/环境表单和未提交AI弹窗不属于这一标签页恢复范围。
 
-任务/规划目录筛选由presentation/catalog.py的CatalogFilter/CategoryFilter持有，执行筛选直接更新普通ExecutionPageState；原filter_tasks/filter_plans导入保留兼容。普通交互还包括TaskImportSession的模式、内容、文件代次及提交防重，CategorySession的分类草稿，PluginSelection的筛选与选择，RunCreation的运行创建/启动，以及StepActions的步骤批量操作。AIInteraction和AIChoiceDraft持有弹窗草稿、忙状态与候选身份；CollectionForm和TargetSelection持有采集请求、目标及会话选择。运行补参由RunInputs/InputSubmission持有原始输入、校验与提交状态。ExecutionInteraction管理查询接纳；历史和执行按需日志复用HistoryLoadState。控件输入事件更新这些普通数据，业务提交从相同状态读取。
+## 页面与平台
 
-## 代码入口
+Workbench显式装配Home、Tasks、Planning、Executions、History、Plugins、Environments、Settings和Marketplace等页面。StepEditor组合步骤、AI、调试和上下文；窄面板协作，避免将整个Workbench作为任意服务代理。
 
-[Workbench](../../src/taskweave/desktop/workbench.py)、[controller](../../src/taskweave/desktop/controller.py)、[弹窗策略](../../src/taskweave/desktop/dialogs.py)、[页面](../../src/taskweave/desktop/pages)、[组件](../../src/taskweave/desktop/components)、[状态](../../src/taskweave/desktop/state.py)、[表单](../../src/taskweave/desktop/forms.py)。
+对话框支持ESC和点外关闭，共享捕获守卫阻止穿透；不要给普通弹窗加persistent/no-esc-dismiss。文件选择、剪贴板、打开路径及原生窗口在desktop/platform.py等适配；浏览器调试模式与原生窗口模式分别验证。
 
-## 验证入口
+首页“新建执行”直接打开任务选择与运行配置窗口，创建成功后进入执行页；最近执行结果通过“全部记录”进入执行页。任务行的“新建执行”继续预选该任务。
 
-只选对应 `ui.*`，如 `ui.tasks`、`ui.editor`、`ui.planning`、`ui.settings`；共享组件通过 changed dry-run 展开消费者。组件测试在 [tests/ui](../../tests/ui)，原行为断言迁移见 [MIGRATION.md](../../tests/ui/MIGRATION.md)，后者只在查测试来源时读取。
+## 验证定位
 
-页面业务规则按需读 [任务](tasks.md)、[规划](planning.md)、[AI 编写](authoring.md)、[上下文](contexts.md)或[执行](execution.md)，不要求一次全部读取。启动与平台限制见 [交付](../deployment.md)。
-
-## 按需深入
-
-[桌面交互](../reference/desktop.md)、[API与本地配置](../reference/api-and-configuration.md)。只在本次修改涉及相应契约时阅读。
-
-## 采集与调试补充
-
-规划与步骤复用默认折叠的上下文组。调试日志位于右侧调试区下方的独立滚动卡片，与调试栏共同显示/收起，清空 AI 修复上下文不清除运行日志。AI 模式选择和生成请求共享忙状态，首次选择禁用 API/Chat 双入口；弹窗挂在稳定页面布局下，不由调试区定时刷新删除。页面 URL 记录视图、任务、步骤和调试展开状态，重新加载时验证归属并恢复；不以 URL 恢复替代编辑草稿保存。
-
-调试面板允许成功步骤没有业务数据输出：`OUTPUT_NOT_AVAILABLE` 不阻断后续尝试和修复反馈展示。有效失败步骤及原因显示在调试状态下方；失效历史尝试不冒用当前有效尝试的数据输出。
-
-调试控件和输入首次打开才构建；配置、调试为并列容器，日志是调试栏下方的独立容器。步骤保存后更新调试输入并保留已填值。调试自动查询仅在步骤工作区及调试栏可见、没有操作/起点选择弹窗/AI 流程占用时运行；刷新串行，终态停止自动查询，显式展开或调试操作仍可同步。无变化时不更新动作样式。调试日志按需读取并以每页 24000 字符显示，翻页保留完整日志；日志格式化在后台线程执行，调试数据与报错详情使用固定行数只读文本，避免代码高亮及长文本自动撑高带来的额外开销。起点选择弹窗挂载于稳定页面布局，不隶属定时刷新的结果区。
-
-执行详情复用轻量运行列表的事件 revision/结果数量；无变化不重复读取完整详情或日志，空闲 5 秒、运行中 1 秒检查，同类刷新防重叠，文档隐藏时停止查询。运行日志独立于详情重绘，提供按需分页、完整查看/复制，以及默认关闭的增量实时更新；调试复用同一实时组件，收起调试及切历史暂停查询。顶部“实时日志”仍打开独立服务日志窗口，与 worker 运行日志分开。
-
-独立服务日志窗口只在可见且未暂停时读取内存增量；窗口隐藏或暂停时停止定时器，返回窗口时从原游标补读。服务端日志文件写入不受显示暂停影响。
-
-任务执行/调试历史详情打开时不自动读取整份运行日志；用户点击“查看 / 刷新日志”后才加载。历史与执行复用纯文本日志分页，每页24000字符、完整文本可复制，不对运行日志做整份代码高亮。日志格式化在后台线程执行，重复点击合并为一个在途请求；关闭详情或离开原任务视图后，迟到日志不再写入弹窗，失败可显式重试。历史详情的尝试元数据仍沿用原展示方式，不能据此认定全部历史内容性能已验收。
-
-规划与步骤的采集录制复用同一控制条；录制中锁定观察目标与请求参数，关闭暂停并保留暂存内容。同一服务内页面重载后重新装配客户端控件，不向旧客户端打开弹窗；在途操作不能重绑，旧 hide 回调不覆盖新草稿。保存和确认分别防重，保存失败不消费、确认失败不重复提交组。
-
-同一标签页连接断开时，步骤未保存表单与运行补参草稿保留在服务内的标签页缓存；不周期扫描、不写业务数据库。步骤恢复包括代码、长说明、未完成的参数定义及输入绑定，保留原保存版本的 expected_hash，其他窗口已修改时仍报告冲突。恢复前即设置控件初值，显示“未保存修改 · 已恢复草稿”；显式保存后才持久化，补参弹窗仍须手动打开。调试保留该标签原选运行、原始未完成输入、AI补充说明及移除反馈设置，不因其他窗口有更新运行就改选，也不自动开始调试。复制标签页的缓存相互分离。缓存不能保证服务重启、标签页关闭或框架缓存过期后的恢复；规划/环境表单及未提交的AI弹窗输入仍不在该恢复范围。
-
-步骤生成、描述生成和修复的在途请求由共享 DesktopController 保留。同一步骤仍在等待时，新客户端不能重复发起API或网页Chat请求；UI等待被取消不取消已有模型操作。重载后的“查看上次 AI 结果”显式等待或展示原结果，不再调用模型，也不自动采纳或执行。查看及采纳时复核步骤版本、编辑代码、原请求和修复运行/尝试身份；旧客户端过期删除时使其页面代次失效，迟到结果不再向已删除页面创建弹窗。最多保留16个步骤的最新请求，只回收已完成项；服务重启不保留请求，不新增轮询。
-
-本地访问凭据授权跳转仅移除 URL 的 access 参数，保留视图、任务、步骤和调试开合参数；Host、Origin、Cookie 和 WebSocket 校验继续生效。无效或已删除对象仍按原路由验证返回工作台并提示。
-
-正式启动器在页面创建/就绪、连接/断开、客户端释放及路由恢复失败时写入 `UI_LIFECYCLE` 结构化服务日志。记录客户端/标签页 UUID、原生模式、请求视图与当前视图、是否选中任务/步骤、调试开合及重连间隔；恢复失败只附异常类型和格式受限的公开错误码。这条诊断记录不含原始 URL、业务标识、表单值或异常正文，不增加定时器、探活查询或页面更新。`socket_disconnected` 需结合 `has_socket` 判断是否仍有其他连接；`client_deleted` 本身不说明释放原因。创建和连接时视图可能尚未恢复，应以 `page_ready` 区分初始外壳与实际返回首页。
+对应ui.*及presentation.interactions。无GUI导入测试证明普通交互可运行，实际NiceGUI事件测试证明接线，真实浏览器验证页面装配；三者覆盖含义不同。启动与包资源见[运行与打包](../deployment.md)。

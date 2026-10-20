@@ -1,5 +1,5 @@
 # core
 
-步骤内容、绑定与数据校验、结果展示、上下文和仓储端口契约。不得依赖具体插件、UI、数据库驱动或模型 SDK。
+普通数据、步骤/Schema校验、绑定解析、结果与上下文，以及仓储、运行、模型、资源端口。主题契约在独立模块维护，ports.py保留运行协议及旧公开导出。
 
-规则见 [架构](../../../docs/architecture.md)，按改动选择 [任务与步骤](../../../docs/modules/tasks.md)、[上下文](../../../docs/modules/contexts.md)或[存储](../../../docs/modules/storage.md)。精确字段、签名以本目录源码为准。
+不依赖UI、数据库驱动、浏览器、模型SDK或具体插件。参见[领域模型](../../../docs/domain.md)、[架构](../../../docs/architecture.md)及[契约索引](../../../docs/contracts/README.md)。

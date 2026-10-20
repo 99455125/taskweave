@@ -10,6 +10,52 @@ from taskweave.desktop.workbench import Workbench
 
 
 class StepEditorStateTests(unittest.TestCase):
+    def test_opening_step_preserves_capabilities_and_timeout_until_edited(self):
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('unchanged step')
+            step = app.repo.save_step(task['task_id'], {
+                'name': 'one capability', 'capabilities': ['fixture.read'], 'timeout_ms': 1500,
+            })
+            client = Client(page('/unchanged-step'))
+            async def scenario():
+                with client:
+                    controller = DesktopController(app)
+                    original_call = controller.call
+                    async def call(operation, **params):
+                        result = await original_call(operation, **params)
+                        if operation == 'capabilities':
+                            result['versions']['fixture'] = '1'
+                            result['actions'].extend([
+                                {'id': 'fixture.' + action, 'description': action, 'input_schema': {'type': 'object'}}
+                                for action in ('read', 'write')
+                            ])
+                        return result
+                    controller.call = call
+                    wb = Workbench(controller)
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    doc = wb.step_editor.document()
+                    self.assertEqual(doc['capabilities'], step['capabilities'])
+                    self.assertEqual(doc['timeout_ms'], 1500)
+                    self.assertFalse(wb._step_editor_is_dirty())
+                    wb.edit_controls['name'].value = 'changed'
+                    self.assertTrue(wb._step_editor_is_dirty())
+                    wb.edit_controls['name'].value = step['name']
+                    self.assertFalse(wb._step_editor_is_dirty())
+                    wb.edit_controls['caps'].value = []
+                    self.assertEqual(wb.step_editor.document()['capabilities'], [])
+                    self.assertTrue(wb._step_editor_is_dirty())
+                    wb.edit_controls['caps'].value = ['fixture']
+                    self.assertFalse(wb._step_editor_is_dirty())
+                    self.assertTrue(await wb.navigate('home'))
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
     def test_arriving_result_metadata_is_saved_without_another_input_change(self):
         from nicegui.client import Client
         from nicegui.page import page

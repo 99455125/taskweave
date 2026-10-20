@@ -1,5 +1,5 @@
 # application
 
-应用装配与公开操作路由；任务、步骤、环境、运行用例以及规划、AI 编写服务。该层不直接写 SQL，也不绑定 UI 框架。
+用例、应用服务与公开操作路由。composition.py显式装配依赖；service.py提供Application及兼容转发；operations.py集中声明handler、异步与锁策略。用例不持有GUI对象，不直接写SQL。
 
-从 [维护索引](../../../docs/maintenance.md) 选择对应业务模块，跨模块边界见 [架构](../../../docs/architecture.md)。公开操作以 operations.py 为准。
+从[模块导航](../../../docs/maintenance.md)定位业务，[系统架构](../../../docs/architecture.md)说明依赖，[操作契约](../../../docs/contracts/operations.md)列出现行调用入口。

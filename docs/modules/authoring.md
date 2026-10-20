@@ -1,35 +1,39 @@
-# AI 步骤编写
+# 步骤编写与校验（Authoring）
 
-产品内 AI 辅助编写服务，与研发 AI 协作文档无关。生成、修订、试跑、确认分别有明确入口；固定任务执行不调用模型。
+## 职责
 
-## 当前行为与约束
+本知识模块对应产品内的步骤编写与校验，跨application、presentation和desktop三个实现层。它涵盖AI生成/修订、描述生成、调试修复候选、提示导出/Chat回复解析，也包括当前Authoring类承载的无模型校验和插件诊断；与研发AI协作流程无关。固定执行不调用模型。
 
-- 支持手写、API 模型生成、网页 Chat 导出/粘贴回复；统一使用步骤内容与插件契约。提示词集中在 prompts.py，模型适配在基础设施层。
-- AI 返回候选，本地解析/校验和差异预览后由用户采纳。模型响应不能直接当作运行成功，也不能覆盖已切换步骤的新草稿。
-- 所选插件贡献能力、规则、示例、上下文和渠道覆盖；网页渠道只导出文本，不假装能访问本机工具。插件不能越过公共能力约束。
-- 普通生成与基于调试历史修复区分处理；历史按用户选择组织，不默默压缩或丢弃选中内容。请求容量检查位于 ai_requests.py；已知失败见当前状态，不因文档整理改业务策略。
-- 请求大小默认 2048 KiB，可在设置中调整为 1–16384 KiB；已有配置保持有效，超限仍在发送前拒绝。该值是本地 UTF-8 字节预算，不替代模型或网页 Chat 的输入容量限制。
-- 生成失败保留草稿；调试修复绑定正确步骤和运行，迟到响应不能写入新页面。debug 与 AI 组件共享同一个 trials 会话对象。
-- 修复弹窗按当前运行读取最新有效失败尝试与反馈，因此清空 AI 缓存后仍可引用真实运行/尝试编号继续修复。打开或取消弹窗只读运行证据；提交前复核步骤、运行及尝试身份，并继续应用用户移除的反馈字段。
-- 桌面端在同一服务内按步骤保留最新在途生成/描述/修复请求，客户端重载不会解除该请求的防重。用户可显式查看原结果，恢复查看不重新调用模型；恢复及采纳继续检查原版本和修复尝试，不能自动写入候选。请求保留有界且仅在服务内存中，不是跨进程持久化作业。
-- 输出提示遵守隐私配置；环境/任务本地存储可含普通密钥值，不代表可以原样发给模型。
+## 当前源码的职责对应
 
-Authoring通过core/authoring_ports.py的资源工厂获取会话，由infrastructure/resource_sessions.py实现，应用组合负责注入。应用级authoring_sessions.py持有在途请求，跨Controller复用；presentation/authoring.py处理生成、确认、修复证据和候选身份，输出普通通知供NiceGUI展示。
+| 责任 | 当前实现 | 调用关系 |
+| --- | --- | --- |
+| 步骤内容/描述生成、对话材料 | application/authoring.py的generate、generate_goal、reset_conversation | step.generate、step.generate_goal及桌面编写入口 |
+| 步骤静态校验与插件lint | Authoring.validate_step | 步骤保存/校验、任务包验证及正式运行创建都会复用；这条路径不调用模型 |
+| 插件失败诊断 | Authoring.diagnose | step.diagnose根据attempt证据调用插件诊断，不等同于模型修复生成 |
+| 共享在途请求 | application/authoring_sessions.py的AuthoringRequests | 按步骤保留请求，多个Controller复用 |
+| 普通交互与候选采纳 | presentation/authoring.py、chat.py | StepAIEditor实际绑定；负责草稿、忙状态、身份及解析/采纳决定 |
+| 规划模型调用支撑 | PlanningService读取authoring.model并调用authoring._complete | 当前存在跨服务复用，规划快照/生成记录/导入仍由PlanningService负责 |
 
-AIInteraction管理同一编辑会话的在途流程；AIChoiceDraft保存生成/修复/描述弹窗中的原始选择和补充文字，并保护重复提交与旧候选。网页回复解析位于presentation/chat.py；desktop/chat.py保留兼容导出。模型协议和回复数据位于core/model_ports.py，旧core.ports导出保持兼容。
+Authoring还保留一次性collect_context/context_targets辅助入口；当前常规context.read/targets通过ContextUseCases进入ContextSessions或运行Coordinator，采集持久化与活跃会话不归Authoring统一管理。详见[上下文模块](contexts.md)。
 
-## 代码入口
+当前类的实际范围比“仅AI生成”更广。这里按源码记录校验、诊断与共享模型调用的落点，不将它们描述成已经拆出的独立服务。
 
-[编写服务](../../src/taskweave/application/authoring.py)、[提示词](../../src/taskweave/application/prompts.py)、[请求容量](../../src/taskweave/application/ai_requests.py)、[模型适配](../../src/taskweave/infrastructure/model.py)、[隐私处理](../../src/taskweave/infrastructure/privacy.py)、[AI UI](../../src/taskweave/desktop/components/step_ai.py)。
+## 当前行为
 
-## 验证入口
+- application/prompts.py组合提示；Authoring汇集插件能力、步骤契约、上下文和用户选定反馈。API模型与网页Chat渠道共用业务校验，网页渠道通过提示与附件交付材料。
+- 输出是候选，必须经本地解析/验证及用户采纳。版本、当前编辑代码、原请求以及修复run/attempt身份变化时，不采纳旧结果。
+- 修复引用当前有效失败尝试；历史由用户显式选择，移除的反馈字段继续从请求中排除。采集预览仅在send_preview开启时发送，图片通过模型支持的图片消息或网页附件传递。
+- AI请求大小默认2048KiB，设置范围1–16384KiB；统计实际材料预算，超限在发送前拒绝。该值不是HTTP传输上限，也不保证模型上下文容量足够。
+- AuthoringRequests在共享应用会话中按步骤保留最新请求，最多16个步骤槽位，只回收已完成项。同一步骤在途请求阻止重复生成；UI取消等待不取消已接受模型调用。服务重启不保留请求。
+- AIInteraction/AIChoiceDraft管理本地弹窗草稿、忙状态和选择身份；AuthoringFlow协调生成、修复及确认，实际NiceGUI绑定相同对象。网页文本解析位于presentation/chat.py。
 
-`application.authoring`、`ui.editor`、`ui.debug`，实际依赖使用 changed dry-run。检查 API/Chat 回复校验、容量与历史选择、失败保留、步骤切换后的响应隔离；模型 fixture 通过不等于真实服务账号验收。关联知识：[任务与步骤](tasks.md)、[上下文](contexts.md)、[插件](plugins.md)。
+## 依赖边界
 
-## 按需深入
+Authoring依赖core资源工厂接口，由composition注入ResourceSessionFactory，不直接构造worker内部资源或具体结果设施。模型协议位于core/model_ports.py，HTTP模型适配位于infrastructure/model.py。可选插件的编写贡献不能越过插件声明的能力与数据边界。
 
-[AI请求与历史](../reference/authoring.md)。只在本次修改涉及相应契约时阅读。
+## 代码与验证
 
-## 选择发送采集预览
+[Authoring](../../src/taskweave/application/authoring.py)、[提示](../../src/taskweave/application/prompts.py)、[请求预算](../../src/taskweave/application/ai_requests.py)、[共享请求](../../src/taskweave/application/authoring_sessions.py)、[交互](../../src/taskweave/presentation/authoring.py)、[UI](../../src/taskweave/desktop/components/step_ai.py)。
 
-采集项的标题、操作说明和正文进入生成/修复材料。只有 `send_preview` 开启才携带该项插件预览：图片为实际图片消息，表格等为结构化 JSON。HTTP 适配器支持 data URL 图片消息，所配置模型仍需支持视觉输入。网页 Chat 提示词引用可下载的图片附件，用户需一并上传，不把 base64 字符串当作文本图片。请求上限核对包括预览数据；文本脱敏不截断或改写图片字节。
+测试键application.authoring、ui.debug；检查失败保留草稿、Chat解析、预算、请求恢复/防重、切换步骤后隔离、候选采纳以及资源异常清理。模型替身测试不等同于真实账号或模型能力验证。

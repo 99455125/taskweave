@@ -39,15 +39,22 @@ def document_from_draft(baseline: dict, draft: dict) -> dict:
     from taskweave.presentation.result_fields import result_fields
     fields = draft['fields']
     doc = normalize_step(baseline)
+    selected_plugins = set(fields['caps'] or [])
+    original_plugins = {cap.split('.', 1)[0] for cap in doc['capabilities']}
+    # Existing plugins retain their saved capability subset. Only newly selected
+    # plugins grant the catalog's actions; merely opening a step changes nothing.
+    capabilities = {cap for cap in doc['capabilities']
+                    if cap.split('.', 1)[0] in selected_plugins}
+    for plugin in selected_plugins - original_plugins:
+        capabilities.update(draft['plugin_actions'].get(plugin, []))
     doc.update(
         name=fields['name'], step_description=fields['step_description'],
         step_notes=fields['step_notes'], step_content=fields['code'],
-        capabilities=sorted({action for plugin in (fields['caps'] or [])
-                             for action in draft['plugin_actions'].get(plugin, [])}),
+        capabilities=sorted(capabilities),
         input_schema=schema_from_rows(draft['schema_original'], draft['schema']),
         delay_after_previous_seconds=(int(fields['delay'] or 0)
                                       if float(fields['delay'] or 0).is_integer() else fields['delay']),
-        timeout_ms=int(fields['timeout'] or 60) * 1000,
+        timeout_ms=round(float(fields['timeout'] or 60) * 1000),
     )
     doc['bindings'] = {}
     for name, source, value, source_step, output, pointer in draft['bindings']:

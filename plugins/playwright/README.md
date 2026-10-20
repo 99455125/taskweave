@@ -65,7 +65,7 @@ await ctx.call("playwright.page_assert_checked", {"selector": selector, "checked
 
 ### 通用交互、读取与状态断言
 
-以下是当前0.4.0实现，继续共用 role/target_id/within/nth/frame/timeout，不改变 SDK v1 和任务包。上传和原生 dialog 的当前范围见下一节；本轮验证证据和未验证平台范围见[实施记录](../../docs/design/next-repair-implementation-2026-09-30.md)。
+以下是当前0.4.0实现，继续共用 role/target_id/within/nth/frame/timeout，不改变 SDK v1 和任务包。上传和原生 dialog 的当前范围见下一节；当前职责与适配边界见[上下文模块](../../docs/modules/contexts.md)，验证范围见[测试指南](../../docs/testing.md)。
 
 | 方法 | 参数与结果 |
 | --- | --- |

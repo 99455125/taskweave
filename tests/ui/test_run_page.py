@@ -24,6 +24,12 @@ class RunPageTests(unittest.TestCase):
         asyncio.run(scenario())
 
     def test_real_dialog_submits_plain_selection_and_input_state(self):
+        self._exercise_dialog(standalone=False)
+
+    def test_standalone_dialog_selects_task_then_calls_completion(self):
+        self._exercise_dialog(standalone=True)
+
+    def _exercise_dialog(self, *, standalone):
         from nicegui import ui
         from nicegui.client import Client
         from nicegui.page import page as nicegui_page
@@ -49,18 +55,33 @@ class RunPageTests(unittest.TestCase):
             details = SimpleNamespace(refresh=AsyncMock(), own_timer=lambda timer: timer.cancel())
             run_page = RunPage(app, ExecutionPageState(), button, AsyncMock(),
                 AsyncMock(return_value=environment), inputs, details, lambda: 'run', lambda: 1)
-            await run_page.render()
-            await actions['新建执行']()
+            completed = AsyncMock()
+            if standalone:
+                await run_page.open_create(on_created=completed)
+                details.refresh.assert_not_awaited()
+                selects = [element for element in client.elements.values()
+                           if isinstance(element, ui.select) and element.label == '选择任务']
+                task_select = selects[-1]
+                # Exercise the real task-change event and dependent start selector.
+                task_select._props['model-value'] = 'b'
+                await task_select._change_handlers[-1](SimpleNamespace(value='b'))
+            else:
+                await run_page.render()
+                await actions['新建执行']()
             forms[-1].value = 7
             # Delete render handles: submitting must still consume ordinary state.
             forms[-1].delete()
             await actions['创建并执行']()
             create = app.calls[-2]
-            self.assertEqual(create[1]['task_id'], 'a')
+            self.assertEqual(create[1]['task_id'], 'b' if standalone else 'a')
             self.assertEqual(create[1]['inputs'], {'count': 7})
             self.assertEqual(create[1]['environment_id'], 'env')
             self.assertEqual(run_page.state.run_id, 'created')
-            run_page.paint.assert_awaited_once()
+            if standalone:
+                completed.assert_awaited_once()
+                run_page.paint.assert_not_awaited()
+            else:
+                run_page.paint.assert_awaited_once()
 
         client = Client(nicegui_page('/run-creation-state-owner'))
         try:

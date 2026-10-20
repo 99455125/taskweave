@@ -1,5 +1,10 @@
-# 工程脚本
+# 工程工具
 
-`uv run python scripts/check_project.py` 从任意工作目录检查新工程结构、语法、模块边界及 Markdown 链接，不启动旧应用。
+| 工具 | 用途 |
+| --- | --- |
+| check_project.py | 检查当前知识入口、源码语法、依赖边界、对话框策略、Markdown链接及CLI版本 |
+| test_modules.py | 按module-map选择目标；--changed与--dry-run预览实际消费者，默认排除浏览器 |
+| build_macos.py / verify_macos_bundle.py | macOS arm64构建与独立包检查 |
+| build_windows.ps1 | Windows x64便携分发构建 |
 
-`uv run python scripts/test_modules.py --list` 列出按业务职责映射的快速回归模块。使用 `--module ui.tasks` 运行指定模块，或使用 `--changed src/taskweave/desktop/pages/tasks.py --dry-run` 预览受影响模块、选择原因与显式 unittest targets。默认不选择浏览器流程；确认需要浏览器验收后添加 `--include-browser`。新增产品源码必须登记到 `tests/module-map.json`，否则选择器会报出未映射路径并退出。
+运行方式见[测试指南](../docs/testing.md)与[打包指南](../docs/deployment.md)。工程检查不等于功能/发布验收；脚本不会替代用户对真实数据和外部系统操作的授权。
