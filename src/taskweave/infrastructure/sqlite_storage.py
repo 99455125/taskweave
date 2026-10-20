@@ -274,6 +274,31 @@ ALTER TABLE plan_context_captures ADD COLUMN operation_notes TEXT NOT NULL DEFAU
 ALTER TABLE plan_context_captures ADD COLUMN send_preview INTEGER NOT NULL DEFAULT 0 CHECK(send_preview IN (0,1));
 """
 
+CONTROL_V18 = """
+CREATE TABLE task_sequences (
+ sequence_id TEXT PRIMARY KEY, name TEXT NOT NULL, description TEXT NOT NULL DEFAULT '',
+ input_schema_json TEXT NOT NULL, nodes_json TEXT NOT NULL, revision INTEGER NOT NULL,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL
+);
+CREATE TABLE sequence_runs (
+ sequence_run_id TEXT PRIMARY KEY,
+ sequence_id TEXT REFERENCES task_sequences(sequence_id) ON DELETE SET NULL,
+ request_id TEXT NOT NULL UNIQUE, request_hash TEXT NOT NULL,
+ status TEXT NOT NULL, snapshot_json TEXT NOT NULL, inputs_json TEXT NOT NULL,
+ current_node_id TEXT, stop_intent TEXT, error_code TEXT,
+ created_at TEXT NOT NULL, updated_at TEXT NOT NULL, finished_at TEXT
+);
+CREATE TABLE sequence_run_nodes (
+ sequence_run_id TEXT NOT NULL REFERENCES sequence_runs(sequence_run_id) ON DELETE CASCADE,
+ node_id TEXT NOT NULL, position INTEGER NOT NULL, task_id TEXT NOT NULL,
+ run_id TEXT UNIQUE REFERENCES task_runs(run_id), status TEXT NOT NULL,
+ resolved_inputs_json TEXT, resolved_step_inputs_json TEXT,
+ command_id TEXT, error_code TEXT, updated_at TEXT NOT NULL,
+ PRIMARY KEY(sequence_run_id,node_id), UNIQUE(sequence_run_id,position)
+);
+CREATE INDEX sequence_nodes_task ON sequence_run_nodes(task_id);
+"""
+
 
 def migrate(db, path, target, migrations):
     current = db.execute("PRAGMA user_version").fetchone()[0]
@@ -313,8 +338,8 @@ def initialize(path, name):
         migrate(
             db,
             path,
-            17 if name == "control" else 2,
-            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8, 9: CONTROL_V9, 10: CONTROL_V10, 11: CONTROL_V11, 12: CONTROL_V12, 13: CONTROL_V13, 14: CONTROL_V14, 15: CONTROL_V15, 16: CONTROL_V16, 17: CONTROL_V17},
+            18 if name == "control" else 2,
+            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8, 9: CONTROL_V9, 10: CONTROL_V10, 11: CONTROL_V11, 12: CONTROL_V12, 13: CONTROL_V13, 14: CONTROL_V14, 15: CONTROL_V15, 16: CONTROL_V16, 17: CONTROL_V17, 18: CONTROL_V18},
         )
 
 

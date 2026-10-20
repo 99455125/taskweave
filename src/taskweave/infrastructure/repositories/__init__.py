@@ -12,8 +12,9 @@ from taskweave.infrastructure.repositories.results import ResultRepository
 from taskweave.infrastructure.repositories.steps import StepRepository
 from taskweave.infrastructure.repositories.step_contexts import StepContextRepository
 from taskweave.infrastructure.repositories.tasks import TaskRepository
+from taskweave.infrastructure.repositories.sequences import SequenceRepository
 
-__all__ = ["EnvironmentRepository", "PlanContextRepository", "PlanGenerationRepository", "PlanMetadataRepository", "RepositorySet", "ResultRepository", "RunRepository", "StepContextRepository", "StepRepository", "TaskRepository"]
+__all__ = ["EnvironmentRepository", "PlanContextRepository", "PlanGenerationRepository", "PlanMetadataRepository", "RepositorySet", "ResultRepository", "RunRepository", "SequenceRepository", "StepContextRepository", "StepRepository", "TaskRepository"]
 
 
 def build_sqlite_repositories(store: SQLiteStorage):
@@ -28,6 +29,7 @@ def build_sqlite_repositories(store: SQLiteStorage):
     plans = PlanMetadataRepository(store, plan_contexts)
     plan_generations = PlanGenerationRepository(store)
     organization = OrganizationRepository(store)
+    sequences = SequenceRepository(store)
     return RepositorySet(
         tasks=tasks,
         steps=steps,
@@ -39,13 +41,14 @@ def build_sqlite_repositories(store: SQLiteStorage):
         plan_contexts=plan_contexts,
         plan_generations=plan_generations,
         organization=organization,
+        sequences=sequences,
     )
 
 
 class RepositorySet:
     """Explicit collection shared by use cases that span repository boundaries."""
 
-    def __init__(self, *, tasks, steps, environments, runs, results, step_contexts, plans, plan_contexts, plan_generations, organization):
+    def __init__(self, *, tasks, steps, environments, runs, results, step_contexts, plans, plan_contexts, plan_generations, organization, sequences):
         self.tasks = tasks
         self.steps = steps
         self.environments = environments
@@ -56,3 +59,4 @@ class RepositorySet:
         self.plan_contexts = plan_contexts
         self.plan_generations = plan_generations
         self.organization = organization
+        self.sequences = sequences
