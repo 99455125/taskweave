@@ -121,7 +121,7 @@ class CoordinatorPool:
         return result
     def active_instances(self):
         rows = []
-        for key, coordinator in self.instances.items():
+        for key, coordinator in list(self.instances.items()):
             if coordinator.process and coordinator.process.is_alive() and coordinator.session_run_id:
                 run = coordinator.describe_run(coordinator.session_run_id)
                 rows.append({**run, 'instance_type': key[0]})
@@ -136,6 +136,23 @@ class CoordinatorPool:
         coordinator.close()
         self.instances.pop(key, None)
         return result
+    def release_completed_run(self, run_id):
+        """Release a sequence child's resources without changing its saved result."""
+        with self.lock:
+            run = self.runs.run(run_id)
+            if run['status'] != 'SUCCEEDED':
+                return False
+            key = self._key(run)
+            coordinator = self.instances.get(key)
+            if coordinator is None:
+                return True
+            if coordinator.thread and coordinator.thread.is_alive():
+                return False
+            coordinator.close()
+            self.instances.pop(key, None)
+            if self.last is coordinator:
+                self.last = None
+            return True
     def clear_task_runs(self, task_id):
         with self.lock:
             selected = []

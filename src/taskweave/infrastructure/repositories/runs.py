@@ -49,6 +49,9 @@ class RunRepository:
     def run(self, run_id):
         return self.store.query("SELECT * FROM task_runs WHERE run_id=?", (run_id,), True)
 
+    def run_exists(self, run_id):
+        return bool(self.store.query("SELECT 1 FROM task_runs WHERE run_id=?", (run_id,)))
+
     def command_receipt(self, command_id, run_id, body, operation):
         """Atomically apply a runtime command and persist its idempotency receipt."""
         body_hash = fingerprint(body)

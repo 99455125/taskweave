@@ -10,6 +10,9 @@ class ControlDbMigrationTests(RuntimeFixture):
         self.app.close()
         path = Path(self.temp.name) / "taskweave.db"
         with closing(sqlite3.connect(path)) as db, db:
+            db.execute("DROP TABLE sequence_run_nodes")
+            db.execute("DROP TABLE sequence_runs")
+            db.execute("DROP TABLE task_sequences")
             db.execute("ALTER TABLE steps DROP COLUMN delay_after_previous_seconds")
             db.execute("ALTER TABLE steps DROP COLUMN validation_source")
             db.execute("ALTER TABLE steps RENAME COLUMN step_description TO goal")
@@ -34,7 +37,7 @@ class ControlDbMigrationTests(RuntimeFixture):
         self.assertTrue(Path(str(path) + ".v2.bak").exists())
         self.assertEqual(self.app.repo.task(self.task)["name"], "Interval")
         self.assertEqual(
-            self.app.repo.query("PRAGMA user_version")[0]["user_version"], 17
+            self.app.repo.query("PRAGMA user_version")[0]["user_version"], 20
         )
 
     def test_v14_generation_import_is_backfilled_and_task_deletion_keeps_history(self):
@@ -46,6 +49,9 @@ class ControlDbMigrationTests(RuntimeFixture):
         store.execute("INSERT INTO plan_generations(generation_id,plan_id,plan_revision,channel,request_snapshot_path,status,imported_task_id,created_at,updated_at) VALUES(?,?,1,'api','request','IMPORTED',?,'now','now')", (generation_id, plan["plan_id"], self.task))
         store.execute("DROP TABLE plan_generation_imports")
         with sqlite3.connect(store.path) as db:
+            db.execute("DROP TABLE sequence_run_nodes")
+            db.execute("DROP TABLE sequence_runs")
+            db.execute("DROP TABLE task_sequences")
             db.execute("ALTER TABLE tasks DROP COLUMN category_id")
             db.execute("ALTER TABLE tasks DROP COLUMN is_favorite")
             db.execute("ALTER TABLE plans DROP COLUMN category_id")
@@ -61,4 +67,4 @@ class ControlDbMigrationTests(RuntimeFixture):
         self.app.repo.delete_task(self.task)
         self.assertEqual([row["task_id"] for row in self.app.planning.generation_imports(generation_id)], [self.task])
         self.assertTrue(Path(str(store.path) + ".v14.bak").exists())
-        self.assertEqual(self.app.repo.query("PRAGMA user_version")[0]["user_version"], 17)
+        self.assertEqual(self.app.repo.query("PRAGMA user_version")[0]["user_version"], 20)

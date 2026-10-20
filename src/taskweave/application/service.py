@@ -25,6 +25,8 @@ class Application:
 
     def close(self):
         try:
+            if hasattr(self, "sequence_driver"):
+                self.sequence_driver.close()
             self.context_sessions.close()
             self.coordinator.close()
         finally:
@@ -91,6 +93,7 @@ class Application:
         self.tasks.registry = registry
         self.steps.registry = registry
         self.runs.registry = registry
+        self.sequences.registry = registry
         self.contexts.registry = registry
         self.planning.registry = registry
         return registry.catalog()

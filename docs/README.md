@@ -20,7 +20,7 @@
 | 项目 | 现行值 | 权威实现 |
 | --- | --- | --- |
 | Python / 主包 | Python ≥3.10，TaskWeave 0.1.0 | [pyproject.toml](../pyproject.toml) |
-| 控制库 / 任务数据 | 17 / 2 | [sqlite_storage.py](../src/taskweave/infrastructure/sqlite_storage.py) |
+| 控制库 / 任务数据 | 20 / 2 | [sqlite_storage.py](../src/taskweave/infrastructure/sqlite_storage.py) |
 | 插件API | 1 | [registry.py](../src/taskweave/plugins/registry.py) |
 | 步骤内容 | `python-async-v1` | [validation.py](../src/taskweave/core/validation.py) |
 | 任务包 | `taskweave-task-2` | [task_package.py](../src/taskweave/core/task_package.py) |

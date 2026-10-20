@@ -15,6 +15,7 @@ from taskweave.desktop.forms import SchemaEditor, ValueForm
 from taskweave.desktop.display import execution_title, readable_metadata, step_names, image_reference
 from taskweave.desktop.pages.planning import PlanningPage
 from taskweave.desktop.pages.tasks import TasksPage, filter_tasks
+from taskweave.desktop.pages.sequences import SequencesPage
 from taskweave.desktop.pages.environments import EnvironmentPage
 from taskweave.desktop.pages.history import HistoryPage
 from taskweave.desktop.pages.marketplace import MarketplacePage
@@ -68,13 +69,13 @@ ERRORS = {
     "EXECUTOR_CAPACITY": "执行器已达并发上限，请等待已有运行结束或手动结束实例。",
 }
 MAIN_NAV_ITEMS = (
-    ("home", "工作台"), ("planning", "规划"), ("tasks", "任务"), ("executions", "执行"),
+    ("home", "工作台"), ("planning", "规划"), ("tasks", "任务"), ("sequences", "任务组合"), ("executions", "执行"),
     ("plugins", "插件"), ("marketplace", "集市"), ("environment", "环境"),
     ("settings", "设置"),
 )
 MAIN_NAV_ICONS = {
     "home": "space_dashboard", "planning": "assignment", "tasks": "checklist",
-    "executions": "play_circle_outline", "plugins": "extension",
+    "sequences": "linear_scale", "executions": "play_circle_outline", "plugins": "extension",
     "marketplace": "storefront", "environment": "dns", "settings": "tune",
 }
 
@@ -381,6 +382,8 @@ class Workbench:
                 lambda task_id: self.render_task_history(task_id, 'TRIAL'), self.open_task_execution),
             page_identity=lambda: (self.page, self.page_generation),
         )
+        self.sequences_page = SequencesPage(controller, self.button, self.paint,
+                                             identity=lambda: (self.page, self.page_generation))
         self.environment_page = EnvironmentPage(
             controller, self.button, self.paint,
             self._on_environment_default_selected, self._on_environment_deleted,
@@ -795,6 +798,7 @@ class Workbench:
                 "planning": self.planning_page.render,
                 "home": self.workbench_home,
                 "tasks": self.tasks_page.render,
+                "sequences": self.sequences_page.render,
                 "editor": self.tasks_page.render_task_workspace,
                 "history": self.tasks_page.render_task_workspace,
                 "executions": self.execution_hub,
@@ -821,7 +825,7 @@ class Workbench:
             self.run_page.dispose()
             return
         page_name = {
-            "tasks":"tasks_page", "history":"history_page", "plugins":"plugins_page",
+            "tasks":"tasks_page", "sequences":"sequences_page", "history":"history_page", "plugins":"plugins_page",
             "marketplace":"marketplace_page", "environment":"environment_page",
             "settings":"settings_page", "planning":"planning_page",
         }.get(route)

@@ -46,3 +46,5 @@ git diff --check
 若执行环境注入的PYTHONPATH包含沙箱shim，worker启动可能明显变慢；确认该原因后，可用`env -u PYTHONPATH uv run python -m unittest <明确目标>`运行。不要把真实超时一律归因于环境。
 
 记录本次命令、结果、失败与未覆盖范围。旧通过记录不能证明当前版本，替身不能证明真实服务，未运行不称通过。恢复、UNKNOWN、补参续启及持久化变动需选择能观察状态/副作用的行为测试。
+
+任务组合变化可运行`tests.test_task_sequences_storage`、`tests.test_task_sequences`、`tests.test_task_sequences_lifecycle`和`tests.ui.test_sequences_page`。迁移或仓储变更另运行`tests.test_control_db_migration`，页面入口变化选`tests.ui.test_navigation`；独立浏览器三任务流程选`tests.test_sequences_browser`。

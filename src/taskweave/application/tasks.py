@@ -15,6 +15,12 @@ class TaskUseCases:
         self.registry = registry
         self.authoring = authoring
         self.coordinator = coordinator
+        self.sequence_repository = None
+
+    def _assert_not_in_sequence(self, task_id):
+        if self.sequence_repository and self.sequence_repository.task_is_referenced(task_id):
+            from taskweave.core.validation import TaskError
+            raise TaskError('SEQUENCE_TASK_REFERENCED', '请先删除引用此任务的任务组合与历史')
 
     def create(self, name, input_schema=None, description="") -> TaskRecord:
         return self.tasks.create_task(name, input_schema, description)
@@ -24,6 +30,7 @@ class TaskUseCases:
     def update(self, task_id, name, input_schema, description=""):
         return self.tasks.update_task(task_id, name, input_schema, description)
     def delete(self, task_id):
+        self._assert_not_in_sequence(task_id)
         if self.context_sessions:
             return self.context_sessions.change_task_owner(task_id, lambda: self.tasks.delete_task(task_id))
         return self.tasks.delete_task(task_id)
@@ -42,6 +49,7 @@ class TaskUseCases:
         )
 
     def clear_runs(self, task_id):
+        self._assert_not_in_sequence(task_id)
         result = self.coordinator.clear_task_runs(task_id)
         for step in self.steps.steps(task_id):
             self.authoring.reset_conversation(step["step_id"])

@@ -152,7 +152,7 @@ class WorkspaceNavigation:
         yield WorkspaceAction('done', True)
 
     async def restore(self, view='home', task_id=None, step_id=None, debug=False):
-        if view not in {'home', 'planning', 'tasks', 'editor', 'executions', 'plugins', 'marketplace', 'environment', 'settings'}:
+        if view not in {'home', 'planning', 'tasks', 'editor', 'sequences', 'executions', 'plugins', 'marketplace', 'environment', 'settings'}:
             yield WorkspaceAction('done', False)
             return
         if task_id:

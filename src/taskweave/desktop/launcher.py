@@ -17,7 +17,7 @@ from uuid import UUID
 def install_client_trace(client, workbench, *, native, requested_view):
     """Observe lifecycle events only; never log URLs, form values or exception bodies."""
     logger = logging.getLogger(__name__)
-    views = {'home', 'planning', 'tasks', 'editor', 'executions', 'plugins',
+    views = {'home', 'planning', 'tasks', 'editor', 'sequences', 'executions', 'plugins',
              'marketplace', 'environment', 'settings', 'run', 'history'}
     disconnected_at = None
     tab_id = None

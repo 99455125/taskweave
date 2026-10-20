@@ -6,7 +6,7 @@
 
 | 路径 | 数据归属 |
 | --- | --- |
-| `taskweave.db` | 控制库：任务/步骤、环境、运行/尝试、引用/事件/回执/租约、规划/采集/生成、分类收藏 |
+| `taskweave.db` | 控制库：任务/步骤、环境、运行/尝试、任务组合定义/运行/节点、引用/事件/回执/租约、规划/采集/生成、分类收藏 |
 | `tasks/<task_id>/data.db` | 任务业务数据、输出与结果回执、插件表结构版本 |
 | `tasks/<task_id>/` | 该任务的文件结果及相关本地文件 |
 | `plans/` | 规划请求、回复与冻结材料等本地文件 |
@@ -15,11 +15,11 @@
 | `model.json` | 桌面模型连接配置 |
 | `exports/` | 用户显式导出的任务包和规划提示 |
 
-数据库名/路径由[SQLiteStorage](../../src/taskweave/infrastructure/sqlite_storage.py)及对应结果/规划实现确定。控制库现行17、任务库2；sql/中的文件是初始DDL，最新结构还必须叠加sqlite_storage.py迁移，不能把初始user_version当作现行版本。
+数据库名/路径由[SQLiteStorage](../../src/taskweave/infrastructure/sqlite_storage.py)及对应结果/规划实现确定。控制库现行20、任务库2；sql/中的文件是初始DDL，最新结构还必须叠加sqlite_storage.py迁移，不能把初始user_version当作现行版本。
 
 ## 边界与一致性
 
-SQLiteStorage提供连接、迁移、路径及SQLiteUnitOfWork，不构造领域仓储。build_sqlite_repositories装配十个语义仓储；同一UoW事务中的组合操作共享连接。跨控制库、任务库与文件不能假定全局原子性，必须保留回执、引用、恢复和文件清理规则。
+SQLiteStorage提供连接、迁移、路径及SQLiteUnitOfWork，不构造领域仓储。build_sqlite_repositories装配十一个语义仓储；同一UoW事务中的组合操作共享连接。跨控制库、任务库与文件不能假定全局原子性，必须保留回执、引用、恢复和文件清理规则。组合清理意图保存在控制库，未清理完的子运行仍保留归属保护。
 
 迁移对已识别版本先备份再事务升级，更新PRAGMA user_version；过新或未知数据库报错。Store、Repository、PlanRepository是兼容适配，正常新消费者直接依赖规范存储/仓储接口，不通过通用SQL绕开用例。
 

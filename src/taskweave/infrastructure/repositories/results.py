@@ -26,6 +26,10 @@ class ResultRepository:
     def run(self, run_id):
         return self.query("SELECT * FROM task_runs WHERE run_id=?", (run_id,), True)
 
+    def run_id_for_result(self, result_id):
+        rows = self.query("SELECT run_id FROM result_refs WHERE result_id=?", (result_id,))
+        return rows[0]["run_id"] if rows else None
+
     def receipt(self, attempt):
         path = self.task_path(attempt["task_id"])
         if not path.exists():

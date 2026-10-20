@@ -365,7 +365,7 @@ class NavigationTests(unittest.TestCase):
             workbench.step_state = MagicMock()
             workbench.step_editor = MagicMock()
             workbench.execution_details = MagicMock()
-            for name in ("planning_page", "tasks_page", "executions_page", "run_page", "history_page", "plugins_page", "marketplace_page", "environment_page", "settings_page"):
+            for name in ("planning_page", "tasks_page", "sequences_page", "executions_page", "run_page", "history_page", "plugins_page", "marketplace_page", "environment_page", "settings_page"):
                 page = MagicMock()
                 page.render = AsyncMock()
                 setattr(workbench, name, page)
