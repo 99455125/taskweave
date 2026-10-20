@@ -57,7 +57,10 @@ def document_from_draft(baseline: dict, draft: dict) -> dict:
         timeout_ms=round(float(fields['timeout'] or 60) * 1000),
     )
     doc['bindings'] = {}
-    for name, source, value, source_step, output, pointer in draft['bindings']:
+    for row in draft['bindings']:
+        name, source, value, source_step, output, pointer, *extras = row
+        item_pointer = extras[0] if extras else ''
+        loop_node_id = extras[1] if len(extras) > 1 else ''
         key = name.strip()
         if not key or key in doc['bindings']:
             raise TaskError('FORM_INVALID', '输入绑定名称不能为空或重复')
@@ -73,11 +76,24 @@ def document_from_draft(baseline: dict, draft: dict) -> dict:
                 if not source_step:
                     raise TaskError('FORM_INVALID', '请选择前序步骤')
                 ref.update(step_id=source_step, output=output or 'data')
+                if item_pointer:
+                    ref['item_pointer'] = item_pointer
+                    if not loop_node_id:
+                        raise TaskError('FORM_INVALID', '逐轮投影需选择所属循环')
+                    ref['loop_node_id'] = loop_node_id
+            elif source == 'loop':
+                if not source_step or output not in {'item', 'index', 'state'}:
+                    raise TaskError('FORM_INVALID', '请选择循环及变量')
+                ref.update(node_id=source_step, field=output)
+            elif source == 'branch':
+                if not source_step or not output:
+                    raise TaskError('FORM_INVALID', '请选择分支及公共输出')
+                ref.update(node_id=source_step, output=output)
             doc['bindings'][key] = {'ref': ref}
     properties = (doc['input_schema'].setdefault('properties', {}) if doc['bindings']
                   else doc['input_schema'].get('properties', {}))
     for key, binding in doc['bindings'].items():
-        if key not in properties:
+        if key not in properties and binding.get('ref', {}).get('source') not in {'loop', 'branch'}:
             kind = (result_fields(binding['literal'])['']['type'] if 'literal' in binding
                     else draft['field_types'].get(key, {}).get(binding['ref']['pointer'], 'string'))
             properties[key] = {'type': kind}

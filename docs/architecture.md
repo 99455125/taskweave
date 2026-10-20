@@ -31,7 +31,7 @@ infrastructure → core契约：SQLite、worker、资源会话、模型适配
 
 ## 执行与资源
 
-`RunUseCases → CoordinatorPool → Coordinator → WorkerTransport → worker → 插件动作`。
+`RunUseCases → CoordinatorPool → Coordinator → WorkerTransport → worker → 插件动作`。含控制节点的任务由Coordinator调用FlowRunner推进流程树；纯线性任务保留现有顺序路径。流程决策在core/flow_machine.py完成，执行游标和每轮实例由FlowRunRepository持久化。
 
 实例池选择调试/正式运行实例并控制容量；Coordinator持有运行编排与锁，通过窄查询/事件/租约/写入端口更新持久状态；WorkerTransport负责进程与管道生命周期，worker校验并执行步骤。调试资源按任务复用，正式资源按运行隔离。命令回执、租约与尝试有效性由持久化事实约束，不依赖页面内存。
 

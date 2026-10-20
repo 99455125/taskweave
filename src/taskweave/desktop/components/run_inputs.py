@@ -105,6 +105,9 @@ class RunInputDialog:
         with dialog, ui.card().classes('w-full max-w-xl'):
             title = '任务运行输入' if waiting['scope'] == 'task' else '当前步骤输入'
             ui.label(title + ' · 补充必录参数').classes('font-medium')
+            if waiting.get('execution_path'):
+                from taskweave.desktop.components.execution_details import round_label
+                ui.label(round_label(waiting['execution_path'])).classes('text-sm text-gray-500')
             definition = json.loads(run['definition_json'])['steps']
             current = next(step for step in definition if step['step_id'] == waiting['step_id'])
             environment = type('FixedEnvironment', (), {'value': run['environment_id'], 'on_value_change': lambda *args: None})()

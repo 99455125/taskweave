@@ -10,6 +10,7 @@ class ControlDbMigrationTests(RuntimeFixture):
         self.app.close()
         path = Path(self.temp.name) / "taskweave.db"
         with closing(sqlite3.connect(path)) as db, db:
+            db.execute("DROP TABLE flow_instances")
             db.execute("DROP TABLE sequence_run_nodes")
             db.execute("DROP TABLE sequence_runs")
             db.execute("DROP TABLE task_sequences")
@@ -19,11 +20,14 @@ class ControlDbMigrationTests(RuntimeFixture):
             db.execute("ALTER TABLE steps DROP COLUMN step_notes")
             db.execute("ALTER TABLE environments DROP COLUMN descriptions_json")
             db.execute("ALTER TABLE tasks DROP COLUMN sort_order")
+            db.execute("ALTER TABLE tasks DROP COLUMN flow_validation_state")
+            db.execute("ALTER TABLE tasks DROP COLUMN flow_verified_hash")
             db.execute("ALTER TABLE tasks DROP COLUMN category_id")
             db.execute("ALTER TABLE tasks DROP COLUMN is_favorite")
             db.execute("ALTER TABLE task_runs DROP COLUMN definition_json")
             db.execute("ALTER TABLE task_runs DROP COLUMN waiting_step_id")
             db.execute("ALTER TABLE task_runs DROP COLUMN wait_until")
+            db.execute("ALTER TABLE task_runs DROP COLUMN flow_cursor_json")
             db.execute("DROP TABLE step_context_captures")
             db.execute("DROP TABLE plan_context_captures")
             db.execute("DROP TABLE step_contexts")
@@ -37,7 +41,7 @@ class ControlDbMigrationTests(RuntimeFixture):
         self.assertTrue(Path(str(path) + ".v2.bak").exists())
         self.assertEqual(self.app.repo.task(self.task)["name"], "Interval")
         self.assertEqual(
-            self.app.repo.query("PRAGMA user_version")[0]["user_version"], 20
+            self.app.repo.query("PRAGMA user_version")[0]["user_version"], 22
         )
 
     def test_v14_generation_import_is_backfilled_and_task_deletion_keeps_history(self):
@@ -49,11 +53,15 @@ class ControlDbMigrationTests(RuntimeFixture):
         store.execute("INSERT INTO plan_generations(generation_id,plan_id,plan_revision,channel,request_snapshot_path,status,imported_task_id,created_at,updated_at) VALUES(?,?,1,'api','request','IMPORTED',?,'now','now')", (generation_id, plan["plan_id"], self.task))
         store.execute("DROP TABLE plan_generation_imports")
         with sqlite3.connect(store.path) as db:
+            db.execute("DROP TABLE flow_instances")
             db.execute("DROP TABLE sequence_run_nodes")
             db.execute("DROP TABLE sequence_runs")
             db.execute("DROP TABLE task_sequences")
             db.execute("ALTER TABLE tasks DROP COLUMN category_id")
             db.execute("ALTER TABLE tasks DROP COLUMN is_favorite")
+            db.execute("ALTER TABLE tasks DROP COLUMN flow_validation_state")
+            db.execute("ALTER TABLE tasks DROP COLUMN flow_verified_hash")
+            db.execute("ALTER TABLE task_runs DROP COLUMN flow_cursor_json")
             db.execute("ALTER TABLE plans DROP COLUMN category_id")
             db.execute("ALTER TABLE plans DROP COLUMN is_favorite")
             db.execute("DROP TABLE organization_categories")
@@ -67,4 +75,19 @@ class ControlDbMigrationTests(RuntimeFixture):
         self.app.repo.delete_task(self.task)
         self.assertEqual([row["task_id"] for row in self.app.planning.generation_imports(generation_id)], [self.task])
         self.assertTrue(Path(str(store.path) + ".v14.bak").exists())
-        self.assertEqual(self.app.repo.query("PRAGMA user_version")[0]["user_version"], 20)
+        self.assertEqual(self.app.repo.query("PRAGMA user_version")[0]["user_version"], 22)
+
+    def test_v20_to_v21_preserves_tasks_and_defaults_flow_confirmation(self):
+        self.app.close()
+        path = Path(self.temp.name) / "taskweave.db"
+        with closing(sqlite3.connect(path)) as db, db:
+            db.execute("DROP TABLE flow_instances")
+            db.execute("ALTER TABLE task_runs DROP COLUMN flow_cursor_json")
+            db.execute("ALTER TABLE tasks DROP COLUMN flow_validation_state")
+            db.execute("ALTER TABLE tasks DROP COLUMN flow_verified_hash")
+            db.execute("PRAGMA user_version=20")
+        self.app = Application(self.temp.name)
+        task = self.app.repo.task(self.task)
+        self.assertEqual(task["flow_validation_state"], "VALIDATED")
+        self.assertIsNone(task["flow_verified_hash"])
+        self.assertEqual(self.app.repo.query("PRAGMA user_version")[0]["user_version"], 22)

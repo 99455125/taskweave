@@ -15,6 +15,7 @@ class Scope:
     run_id: str
     step_id: str
     attempt_id: str
+    execution_path: str | None = None
 
 
 @dataclass(frozen=True)

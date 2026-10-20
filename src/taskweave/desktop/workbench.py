@@ -884,6 +884,7 @@ class Workbench:
             "run.start", run_id=run["run_id"], command_id=command_id(),
             mode=command.get("mode", "ALL"), target_step_id=command.get("target"),
             retry_step_id=command.get("retry"), start_step_id=command.get("from"),
+            retry_execution_path=command.get("retry_execution_path"),
         )
         await self.paint()
 
@@ -1232,6 +1233,21 @@ class Workbench:
 
     async def choose_run_step(self, run, step):
         current = await self.controller.call('run.get', run_id=run['run_id'])
+        from taskweave.core.task_flow import is_linear_flow
+        definition = json.loads(current['definition_json'])
+        if not is_linear_flow(definition.get('flow', {'version': 2, 'root': {'id': 'root', 'kind': 'sequence', 'children': []}})):
+            failed = next((a for a in reversed(current['attempts'])
+                           if a['valid'] and a['status'] == 'FAILED'), None)
+            if any(a['step_id'] == step['step_id'] and a['valid'] and a['status'] == 'SUCCEEDED'
+                   for a in current['attempts']):
+                ui.notify('已完成的流程实例请新建执行后重做', type='warning')
+                return
+            await self.controller.call('run.start', run_id=run['run_id'], command_id=command_id(),
+                                       mode='UNTIL', target_step_id=step['step_id'],
+                                       retry_execution_path=failed['execution_path'] if failed else None)
+            self.run_signature = self.execution_signature = None
+            await self.refresh_run()
+            return
         succeeded = any(a['step_id'] == step['step_id'] and a['valid'] and a['status'] == 'SUCCEEDED' for a in current['attempts'])
         with ui.dialog() as dialog, ui.card().classes('w-full max-w-xl'):
             ui.label('执行到：' + step['name']).classes('text-lg')

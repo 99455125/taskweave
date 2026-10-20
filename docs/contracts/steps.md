@@ -17,7 +17,9 @@ JSON使用严格序列化，不接受NaN等非JSON值。Schema采用JSON Schema 
 
 ## 绑定与优先级
 
-绑定项为`{"literal": value}`或`{"ref": {...}}`。ref.source取task、step、environment，pointer是JSON Pointer；step引用必须指向同一任务前序步骤，可用output指定输出名，默认data。运行时读取同一运行前序有效输出。
+绑定项为`{"literal": value}`或`{"ref": {...}}`。ref.source取task、step、environment，pointer是JSON Pointer；step引用必须指向同一任务中按流程先执行的步骤，可用output指定输出名，默认data。运行时读取同一运行的有效输出。结构化流程还支持`loop`来源的`item`、`index`、`state`和`branch`来源的公开输出，引用受所在循环和分支作用域约束。
+
+同一步骤位于列表遍历或条件循环内时，每轮产生独立执行实例。循环外读取该步骤默认得到按轮次排列的列表；未执行的分支轮次占位为`null`。循环内读取当前轮结果。`step`引用可用`loop_node_id`和`item_pointer`显式取某个循环的逐项投影；既有`pointer`仍作用于完整结果。列表遍历的`item`与`index`可供当前轮步骤绑定，循环`state`由初始值和每轮更新映射组成。
 
 自动输入合并顺序为环境→任务→步骤默认/显式覆盖，后者覆盖同名字段；显式绑定提供依赖解析。单步调试、流程调试与正式执行入口对覆盖有不同组织方式，应使用既有输入解析实现，不能在UI再次推导一套优先级。false、0、空字符串均不能被通用真值判断视为未提供。
 

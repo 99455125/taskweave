@@ -13,15 +13,17 @@ from taskweave.infrastructure.sqlite_storage import now, uid, valid_id
 from taskweave.infrastructure.privacy import redact
 from taskweave.infrastructure.worker_transport import WorkerTransport
 from taskweave.core.run_ports import RunQueries, RunEvents, RunLeases, RunWrites
+from taskweave.core.task_flow import is_linear_flow
 
 
 class Coordinator:
-    def __init__(self, runs: RunRepository | None, tasks: TaskRepository, steps: StepRepository, environments: EnvironmentRepository, results: ResultRepository, registry, factory, home, recover=True, *, queries: RunQueries | None = None, events: RunEvents | None = None, leases: RunLeases | None = None, writes: RunWrites | None = None):
+    def __init__(self, runs: RunRepository | None, tasks: TaskRepository, steps: StepRepository, environments: EnvironmentRepository, results: ResultRepository, registry, factory, home, recover=True, *, queries: RunQueries | None = None, events: RunEvents | None = None, leases: RunLeases | None = None, writes: RunWrites | None = None, flow_runs=None):
         self.runs, self.tasks, self.steps, self.environments, self.results = runs, tasks, steps, environments, results
         self.queries: RunQueries = queries if queries is not None else runs
         self.events: RunEvents = events if events is not None else runs
         self.leases: RunLeases = leases if leases is not None else runs
         self.writes: RunWrites = writes if writes is not None else runs
+        self.flow_runs = flow_runs
         self.registry, self.factory = registry, factory
         self.home = Path(home).resolve()
         self.task_data_root = self.home / "tasks"
@@ -81,7 +83,8 @@ class Coordinator:
         return self.leases.command_receipt(command_id, run_id, body, operation)
 
     def start(
-        self, run_id, command_id, mode="ALL", target_step_id=None, retry_step_id=None, start_step_id=None
+        self, run_id, command_id, mode="ALL", target_step_id=None, retry_step_id=None, start_step_id=None,
+        retry_execution_path=None,
     ):
         with self.lock:
             started = []
@@ -91,6 +94,8 @@ class Coordinator:
                 "target": target_step_id,
                 "retry": retry_step_id,
             }
+            if retry_execution_path is not None:
+                body["retry_execution_path"] = retry_execution_path
 
             if start_step_id is not None:
                 body['from'] = start_step_id
@@ -116,6 +121,9 @@ class Coordinator:
                 if self.queries.has_unresolved_attempts(run_id):
                     raise TaskError("RECONCILIATION_REQUIRED")
                 steps = self.steps.steps(run["task_id"])
+                frozen_flow = json.loads(run["definition_json"]).get("flow") if run["definition_json"] else None
+                controlled = (frozen_flow is not None and not is_linear_flow(frozen_flow)
+                              and (run["mode"] != "TRIAL" or json.loads(run["request_json"]).get("flow_trial")))
                 if run["trial_step_id"]:
                     if json.loads(run['request_json']).get('flow_trial'):
                         steps = steps[:next(i for i, s in enumerate(steps) if s['step_id'] == run['trial_step_id']) + 1]
@@ -130,7 +138,17 @@ class Coordinator:
                 if mode == "UNTIL" and target_step_id not in ids:
                     raise TaskError("TARGET_INVALID")
                 retry_ids = []
-                if retry_step_id:
+                if controlled:
+                    if retry_step_id or start_step_id:
+                        raise TaskError("FLOW_INSTANCE_REQUIRED")
+                    if run["status"] == "FAILED" and not retry_execution_path:
+                        raise TaskError("EXPLICIT_RETRY_REQUIRED")
+                    if retry_execution_path:
+                        instance = self.flow_runs.instance(run_id, retry_execution_path)
+                        if instance is None or instance["kind"] != "action":
+                            raise TaskError("FLOW_INSTANCE_REQUIRED")
+                        self.flow_runs.retry_instance(run_id, retry_execution_path)
+                elif retry_step_id:
                     if retry_step_id not in ids:
                         raise TaskError("TARGET_INVALID")
                     retry_ids = ids[ids.index(retry_step_id) :]
@@ -238,6 +256,9 @@ class Coordinator:
             if self.leases.has_command_receipt(command_id):
                 return self.start(run_id, command_id, mode='UNTIL', target_step_id=target_step_id, start_step_id=start_step_id)
             run = self.queries.run(run_id)
+            frozen_flow = json.loads(run["definition_json"]).get("flow") if run["definition_json"] else None
+            if frozen_flow is not None and not is_linear_flow(frozen_flow):
+                raise TaskError("FLOW_RESTART_NEW_RUN", "含条件或循环的流程请新建执行后从头运行")
             if run['mode'] != 'EXECUTION' or run['status'] == 'RUNNING' or (self.thread and self.thread.is_alive()):
                 raise TaskError('RUN_BUSY', '请先暂停或结束正在执行的步骤')
             if run['definition_hash'] != self.tasks.definition_hash(run['task_id']):
@@ -325,7 +346,7 @@ class Coordinator:
         values.update(request.get('step_inputs', {}).get(step['step_id'], {}))
         return automatic_inputs(step['input_schema'], environment, task, values)
 
-    def wait_for_inputs(self, run, scope, step, schema, values, missing):
+    def wait_for_inputs(self, run, scope, step, schema, values, missing, execution_path=None):
         request = json.loads(self.queries.run(run['run_id'])['request_json'])
         editable = {key: spec for key, spec in schema.get('properties', {}).items()
                     if scope == 'task' or key not in step['bindings']}
@@ -333,6 +354,8 @@ class Coordinator:
             'schema': {**schema, 'properties': editable,
                        'required': [key for key in schema.get('required', []) if key in editable]},
             'values': {key: values[key] for key in editable if key in values}, 'missing': missing}
+        if execution_path is not None:
+            request['waiting_input']['execution_path'] = execution_path
         self.writes.update_run_request(run['run_id'], dumps(request))
         self.events.event(run['run_id'], 'InputRequested', {'scope': scope, 'step_id': step['step_id'], 'missing': missing})
         self._done(run['run_id'], 'PAUSED')
@@ -358,7 +381,10 @@ class Coordinator:
                     task_inputs_json = dumps(task_values)
                     input_summary_json = dumps(redact(task_values))
                 else:
-                    request.setdefault('step_inputs', {}).setdefault(waiting['step_id'], {}).update(inputs)
+                    if waiting.get('execution_path'):
+                        request.setdefault('instance_inputs', {}).setdefault(waiting['execution_path'], {}).update(inputs)
+                    else:
+                        request.setdefault('step_inputs', {}).setdefault(waiting['step_id'], {}).update(inputs)
                     task_inputs_json = input_summary_json = None
                 if step_inputs is not None:
                     if waiting['scope'] != 'task' or set(step_inputs) != {waiting['step_id']}:
@@ -379,6 +405,12 @@ class Coordinator:
     def _drive(self, run_id, mode, target):
         try:
             run = self.queries.run(run_id)
+            frozen_flow = json.loads(run["definition_json"]).get("flow") if run["definition_json"] else None
+            if (self.flow_runs is not None and frozen_flow is not None and not is_linear_flow(frozen_flow)
+                    and (run["mode"] != "TRIAL" or json.loads(run["request_json"]).get("flow_trial"))):
+                from taskweave.infrastructure.flow_runner import FlowRunner
+                FlowRunner(self).drive(run_id, mode, target)
+                return
             steps = self.steps.steps(run["task_id"])
             if run["trial_step_id"]:
                 if json.loads(run['request_json']).get('flow_trial'):
@@ -490,14 +522,15 @@ class Coordinator:
         self.writes.clear_waiting_step(run_id)
         return True
 
-    def _attempt(self, run, step):
+    def _attempt(self, run, step, execution_path=None, input_resolver=None):
         run_id = run["run_id"]
         attempt_id = uid()
-        self.writes.create_attempt(attempt_id, run["task_id"], run_id, step["step_id"], step["content_hash"], now())
+        self.writes.create_attempt(attempt_id, run["task_id"], run_id, step["step_id"], step["content_hash"], now(), execution_path=execution_path)
         try:
             self.registry.check(step)
             environment, secret_refs = self.environments.environment(run["environment_id"])
-            inputs = self.effective_inputs(self.queries.run(run_id), step)
+            inputs = (input_resolver(self.queries.run(run_id), step)
+                      if input_resolver is not None else self.effective_inputs(self.queries.run(run_id), step))
             validate(inputs, step["input_schema"])
         except TaskError as exc:
             self._fail(attempt_id, run_id, exc.code, "resolve", "NOT_STARTED", str(exc))
@@ -516,6 +549,7 @@ class Coordinator:
                 "run_id": run_id,
                 "step_id": step["step_id"],
                 "attempt_id": attempt_id,
+                "execution_path": execution_path,
             },
             "step": step,
             "inputs": inputs,

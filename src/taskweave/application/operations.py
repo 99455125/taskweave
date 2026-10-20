@@ -21,7 +21,7 @@ LOCK_EXEMPT_OPERATIONS = frozenset({
     "sequence.save", "sequence.delete", "sequence.start", "sequence.run.inputs",
     "sequence.run.retry", "sequence.run.reconcile", "sequence.run.delete",
     "sequence.pause", "sequence.cancel", "sequence.continue",
-    "step.get", "step.list", "task.export", "task.get", "task.list", "organization.category.list",
+    "step.get", "step.list", "task.export", "task.get", "task.list", "task.flow.get", "task.flow.describe", "organization.category.list",
 })
 
 
@@ -53,6 +53,10 @@ def _operation_handlers(app):
         "task.copy": app.tasks.copy,
         "task.clear_runs": app.tasks.clear_runs,
         "task.export": app.tasks.export,
+        "task.flow.get": app.tasks.flow,
+        "task.flow.describe": app.tasks.describe_flow,
+        "task.flow.save": app.tasks.save_flow,
+        "task.flow.confirm": app.tasks.confirm_flow,
         "task.import": app.tasks.import_package,
         "plan.create": app.planning.create,
         "plan.copy": app.planning.copy,

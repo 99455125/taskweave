@@ -78,12 +78,19 @@ class SequenceDriver:
         output_name = source["output"]
         runs = self.use_cases.runs
         if output_name != "data":
-            attempt = runs.runs.latest_attempt(origin["run_id"], source["step_id"])
-            refs = runs.results.receipt(attempt) if attempt else []
-            ref = next((item for item in refs or [] if item.get("name") == output_name), None)
-            if ref is None or ref.get("kind") != "json":
+            attempts = [attempt for attempt in runs.runs.run_details(origin["run_id"])["attempts"]
+                        if attempt["step_id"] == source["step_id"] and attempt["valid"]
+                        and attempt["status"] == "SUCCEEDED"]
+            if not attempts:
                 raise TaskError("SEQUENCE_OUTPUT_NOT_JSON")
-        value = runs.output(origin["run_id"], source["step_id"], output_name)
+            for attempt in attempts:
+                refs = runs.results.receipt(attempt) or []
+                ref = next((item for item in refs if item.get("name") == output_name), None)
+                if ref is None or ref.get("kind") != "json":
+                    raise TaskError("SEQUENCE_OUTPUT_NOT_JSON")
+        value = runs.output(origin["run_id"], source["step_id"], output_name,
+                            item_pointer=source.get("item_pointer"),
+                            loop_node_id=source.get("loop_node_id"))
         return pointer(value, source["pointer"])
 
     def _resolve(self, sequence_run, node):
@@ -142,7 +149,8 @@ class SequenceDriver:
         elif kind in {"retry", "continue"}:
             if child["status"] in {"PAUSED", "READY", "FAILED", "INTERRUPTED"}:
                 app.runs._managed_start(child_id, command_id,
-                                        retry_step_id=payload.get("retry_step_id"))
+                                        retry_step_id=payload.get("retry_step_id"),
+                                        retry_execution_path=payload.get("retry_execution_path"))
         app.repository.finish_command(sequence_run["sequence_run_id"], command_id)
         app.repository.set_node_status(sequence_run["sequence_run_id"], member["node_id"], "RUNNING")
         return True

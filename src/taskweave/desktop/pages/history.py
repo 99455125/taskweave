@@ -7,6 +7,7 @@ from taskweave.presentation.history import HistoryLoadState
 from taskweave.desktop.pages.base import Page
 from taskweave.desktop.display import execution_title, readable_metadata, step_names
 from taskweave.desktop.components.run_logs import render_log_text
+from taskweave.desktop.components.execution_details import round_label
 
 
 STATUS = {
@@ -59,8 +60,19 @@ class HistoryPage(Page):
                         snapshot = json.loads(value["definition_json"]) if value["definition_json"] else None
                         if snapshot:
                             ui.label("执行时任务：" + snapshot["task"]["name"])
+                        controls = [item for item in value.get('flow_instances', [])
+                                    if item['kind'] in {'if', 'loop', 'foreach', 'iteration', 'control'}]
+                        if controls:
+                            with ui.expansion(f"流程决策与轮次 · {len(controls)} 项", icon="account_tree").classes("w-full"):
+                                for item in controls:
+                                    payload = json.loads(item['payload_json'])
+                                    choice = ({'then': '满足条件', 'else': '其他情况'}.get(payload.get('selected'), '')
+                                              if item['kind'] == 'if' else '')
+                                    detail = f" · {choice}" if choice else ''
+                                    ui.label(f"{round_label(item['execution_path'])} · {item['node_id']} · "
+                                             f"{STATUS.get(item['status'], item['status'])}{detail}")
                         for attempt in value["attempts"]:
-                            title = f"{names.get(attempt['step_id'], '未知步骤')} · 尝试 {attempt['attempt_no']} · {STATUS[attempt['status']]}"
+                            title = f"{round_label(attempt.get('execution_path'))} · {names.get(attempt['step_id'], '未知步骤')} · 尝试 {attempt['attempt_no']} · {STATUS[attempt['status']]}"
                             icon = "check_circle" if attempt["status"] == "SUCCEEDED" else "error" if attempt["status"] in {"FAILED", "UNKNOWN"} else "radio_button_unchecked"
                             with ui.expansion(title, icon=icon).classes("w-full"):
                                 with ui.row().classes("w-full justify-end gap-2"):

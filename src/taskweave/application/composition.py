@@ -51,6 +51,7 @@ def compose_application(self, model, registry_factory):
             None, stores.tasks, stores.steps, stores.environments, stores.results,
             self.registry, registry_factory, self.home, recover=False,
             queries=stores.runs, events=stores.runs, leases=stores.runs, writes=stores.runs,
+            flow_runs=stores.flow_runs,
         ),
     )
     stores.runs.finish_pending_deletions()
@@ -64,7 +65,7 @@ def compose_application(self, model, registry_factory):
     self.tasks = TaskUseCases(stores.tasks, stores.steps, stores.step_contexts, self.storage.unit_of_work, self.registry, self.authoring, self.coordinator, self.context_sessions)
     self.steps = StepUseCases(stores.steps, stores.tasks, stores.runs, self.registry, self.authoring, self.coordinator, self.context_sessions)
     self.environments = EnvironmentUseCases(stores.environments, stores.runs, self.coordinator, self.context_sessions, stores.plans)
-    self.runs = RunUseCases(stores.runs, stores.tasks, stores.steps, stores.environments, stores.results, self.registry, self.authoring, self.coordinator, self.context_sessions)
+    self.runs = RunUseCases(stores.runs, stores.tasks, stores.steps, stores.environments, stores.results, self.registry, self.authoring, self.coordinator, self.context_sessions, stores.flow_runs)
     self.runs.sequence_repository = stores.sequences
     self.tasks.sequence_repository = stores.sequences
     self.environments.sequence_repository = stores.sequences

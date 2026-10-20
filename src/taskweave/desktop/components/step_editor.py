@@ -290,16 +290,95 @@ class StepEditor:
         catalog = await ctx.controller.call("capabilities")
         if not editor_is_current():
             return
+        flow_description = await ctx.controller.call("task.flow.describe", task_id=ctx.task_id)
+        flow = flow_description["flow"]
+        from taskweave.core.task_flow import is_linear_flow
+        linear_flow = is_linear_flow(flow)
+        if not editor_is_current():
+            return
+        control_nodes = {}
+        def collect_controls(node):
+            if node["kind"] in {"loop", "foreach", "if"}:
+                control_nodes[node["id"]] = node["kind"]
+            if node["kind"] == "sequence":
+                for child in node["children"]:
+                    collect_controls(child)
+            elif node["kind"] == "if":
+                collect_controls(node["then"])
+                collect_controls(node["else"])
+            elif node["kind"] in {"loop", "foreach"}:
+                collect_controls(node["body"])
+        collect_controls(flow["root"])
+        from taskweave.presentation.flow_editor import (find_node, insert_control, move_node,
+                                                        remove_control, sequence_targets, update_control)
+        from taskweave.desktop.components.flow_controls import edit_control
+        from taskweave.desktop.components.flow_tree import FlowTree
+
+        async def save_flow_tree(updated):
+            await ctx.save_editor()
+            await ctx.controller.call("task.flow.save", task_id=ctx.task_id, flow=updated,
+                                      expected_hash=flow_description["definition_hash"])
+            if editor_is_current():
+                await ctx.paint()
+
+        async def add_control(kind):
+            updated, _ = insert_control(flow, kind)
+            await save_flow_tree(updated)
+
+        async def configure_control(node_id):
+            node, _ = find_node(flow, node_id)
+            changes = await edit_control(node,
+                                         {item["step_id"]: item["name"] for item in steps},
+                                         {key: ("循环 " if kind in {"loop", "foreach"} else "分支 ") + key
+                                          for key, kind in control_nodes.items()})
+            if changes is not None and editor_is_current():
+                await save_flow_tree(update_control(flow, node_id, changes))
+
+        async def move_flow_node(node_id):
+            targets = dict(sequence_targets(flow))
+            with ui.dialog() as dialog, ui.card():
+                ui.label("移动到流程分组").classes("text-lg font-semibold")
+                target = ui.select(targets, value="root", label="目标分组").classes("w-64")
+                with ui.row():
+                    ui.button("取消", on_click=lambda: dialog.submit(None)).props("flat")
+                    ui.button("移动", on_click=lambda: dialog.submit(target.value))
+            dialog.open()
+            selected = await dialog
+            if selected and editor_is_current():
+                await save_flow_tree(move_node(flow, node_id, selected))
+
+        async def delete_control(node_id):
+            await save_flow_tree(remove_control(flow, node_id))
+
+        async def confirm_flow():
+            await ctx.save_editor()
+            current = await ctx.controller.call("task.flow.describe", task_id=ctx.task_id)
+            await ctx.controller.call("task.flow.confirm", task_id=ctx.task_id,
+                                      expected_hash=current["definition_hash"])
+            if editor_is_current():
+                await ctx.paint()
         ctx.selected_step_control = None
         with ui.row().classes("tw-editor-layout w-full items-start flex-wrap lg:flex-nowrap") as editor_layout:
             with ui.column().classes("tw-panel tw-step-sidebar w-full lg:w-56 shrink-0"):
                 with ui.row().classes("tw-step-list-heading w-full items-center justify-between gap-2"):
-                    ui.label("步骤目录").classes("font-semibold")
+                    ui.label("任务流程").classes("font-semibold")
                     ui.label(str(len(steps))).classes("tw-step-count")
                     toolbar = ui.row().classes("tw-step-list-toolbar items-center justify-end shrink-0")
                 with ui.column().classes("w-full overflow-y-auto gap-2").style("max-height: calc(100vh - 330px)") as step_list_area:
-                    pass
-                selected_step_control = await ctx.step_list.render(steps, catalog, toolbar, step_list_area)
+                    FlowTree(steps, ctx.step_id, ctx.step_list.navigate_step,
+                             configure_control, move_flow_node, delete_control).render(flow)
+                with toolbar:
+                    with ui.button(icon="add_circle_outline").props("flat round dense title=添加流程控制"):
+                        with ui.menu():
+                            ui.menu_item("条件分支", lambda: add_control("if"))
+                            ui.menu_item("列表遍历", lambda: add_control("foreach"))
+                            ui.menu_item("条件循环", lambda: add_control("loop"))
+                ui.label("流程已确认" if flow_description["confirmed"] else "流程待确认").classes("text-xs text-gray-500")
+                ctx.button("确认流程", confirm_flow, flat=True)
+                with ui.expansion("步骤工具", value=False).classes("w-full"):
+                    tools_toolbar = ui.row().classes("w-full justify-end")
+                    tools_area = ui.column().classes("w-full gap-2")
+                    selected_step_control = await ctx.step_list.render(steps, catalog, tools_toolbar, tools_area)
                 if not editor_is_current():
                     return
                 ctx.selected_step_control = selected_step_control
@@ -344,11 +423,12 @@ class StepEditor:
                 with ui.row().classes("tw-step-config-heading w-full items-center gap-2"):
                     ui.label("步骤配置").classes("tw-step-config-title text-lg font-semibold grow")
                     ctx.button("保存步骤", ctx.save_editor, primary=True)
+                    ctx.button("确认验证", lambda: ctx.ai_editor.confirm_step(ctx.paint), flat=True)
                     with ui.button("更多", icon="more_horiz").props("flat"):
                         with ui.menu():
                             actions_menu = ctx.step_list.actions
-                            move_up_item = ui.menu_item("上移", actions_menu["move_up"]).set_enabled(actions_menu["can_move_up"])
-                            move_down_item = ui.menu_item("下移", actions_menu["move_down"]).set_enabled(actions_menu["can_move_down"])
+                            move_up_item = ui.menu_item("上移", actions_menu["move_up"]).set_enabled(linear_flow and actions_menu["can_move_up"])
+                            move_down_item = ui.menu_item("下移", actions_menu["move_down"]).set_enabled(linear_flow and actions_menu["can_move_down"])
                             ctx.step_list.bind_move_menu_items(move_up_item, move_down_item)
                             ui.menu_item("删除步骤", actions_menu["delete"])
                             ui.menu_item("确认全部步骤", actions_menu["confirm_all"])
@@ -484,6 +564,8 @@ class StepEditor:
                                                 "step": "前序结果",
                                                 "task": "任务参数",
                                                 "environment": "环境配置",
+                                                "loop": "循环变量",
+                                                "branch": "分支公共输出",
                                             },
                                             label="来源",
                                             value=ref.get("source", "literal"),
@@ -496,18 +578,25 @@ class StepEditor:
                                         )
                                     with ui.row().classes("w-full"):
                                         source_step = ui.select(
-                                            previous,
-                                            label="前序步骤",
-                                            value=ref.get("step_id"),
+                                            {**previous, **{nid: ("循环 " if kind in {"loop", "foreach"} else "分支 ") + nid
+                                                            for nid, kind in control_nodes.items()}},
+                                            label="来源步骤或控制块",
+                                            value=ref.get("step_id", ref.get("node_id")),
                                         ).classes("w-48")
                                         output = ui.input(
-                                            "结果容器（通常为 data）", value=ref.get("output", "data")
+                                            "结果容器、循环变量或公共输出", value=ref.get("field", ref.get("output", "data"))
                                         )
                                         ref_pointer = ui.select(
                                             {ref.get("pointer", ""): ref.get("pointer", "") or "全部结果"},
                                             label="结果字段（可选择或填写 /字段名）",
                                             value=ref.get("pointer", ""), with_input=True, new_value_mode="add-unique",
                                         ).classes("min-w-64")
+                                    with ui.row().classes("w-full"):
+                                        item_pointer = ui.input("逐轮投影字段（可选）", value=ref.get("item_pointer", ""))
+                                        loop_node_id = ui.select(
+                                            {nid: nid for nid, kind in control_nodes.items() if kind in {"loop", "foreach"}},
+                                            label="投影所属循环", value=ref.get("loop_node_id"),
+                                        )
                                     preview = ui.label().classes("text-xs text-gray-500 tw-code w-full")
                                     record = (
                                         key_input,
@@ -516,6 +605,8 @@ class StepEditor:
                                         source_step,
                                         output,
                                         ref_pointer,
+                                        item_pointer,
+                                        loop_node_id,
                                     )
                                     binding_rows.append(record)
                                     if raw is not None:
@@ -528,10 +619,20 @@ class StepEditor:
                                         binding_control.on_value_change(mark_dirty)
                                     mark_dirty()
                                     async def update_fields():
+                                        choices = (previous if source.value == 'step' else
+                                                   {nid: nid for nid, kind in control_nodes.items()
+                                                    if kind in ({'loop', 'foreach'} if source.value == 'loop' else {'if'})})
+                                        if source.value in {'step', 'loop', 'branch'}:
+                                            source_step.options = choices
+                                            if source_step.value not in choices:
+                                                source_step.value = None
+                                            source_step.update()
                                         literal.set_visibility(source.value == 'literal')
-                                        source_step.set_visibility(source.value == 'step')
-                                        output.set_visibility(source.value == 'step')
+                                        source_step.set_visibility(source.value in {'step', 'loop', 'branch'})
+                                        output.set_visibility(source.value in {'step', 'loop', 'branch'})
                                         ref_pointer.set_visibility(source.value != 'literal')
+                                        item_pointer.set_visibility(source.value == 'step')
+                                        loop_node_id.set_visibility(source.value == 'step')
                                         preview.set_visibility(source.value == 'step')
                                         if source.value != 'step' or not source_step.value:
                                             return

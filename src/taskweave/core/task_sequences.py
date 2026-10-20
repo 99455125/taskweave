@@ -18,12 +18,19 @@ def _source(source, preceding):
         dumps(source["value"])
     elif kind == "sequence" and set(source) == {"kind", "pointer"}:
         _pointer(source["pointer"])
-    elif kind == "output" and set(source) == {"kind", "node_id", "step_id", "output", "pointer"}:
+    elif kind == "output" and set(source) in ({"kind", "node_id", "step_id", "output", "pointer"},
+                                              {"kind", "node_id", "step_id", "output", "pointer",
+                                               "item_pointer", "loop_node_id"}):
         if source["node_id"] not in preceding or not isinstance(source["step_id"], str) or not source["step_id"]:
             raise TaskError("SEQUENCE_FORWARD_REFERENCE")
         if not isinstance(source["output"], str) or not source["output"]:
             raise TaskError("SEQUENCE_SOURCE_INVALID")
         _pointer(source["pointer"])
+        if "item_pointer" in source:
+            _pointer(source["item_pointer"])
+            if (source["pointer"] or not isinstance(source["loop_node_id"], str)
+                    or not source["loop_node_id"]):
+                raise TaskError("SEQUENCE_SOURCE_INVALID")
     else:
         raise TaskError("SEQUENCE_SOURCE_INVALID")
 

@@ -114,13 +114,16 @@ class SequenceUseCases:
         self.driver.wake(sequence_run_id)
         return self.run_get(sequence_run_id)
 
-    def run_retry(self, sequence_run_id, command_id, retry_step_id):
+    def run_retry(self, sequence_run_id, command_id, retry_step_id=None, retry_execution_path=None):
+        if bool(retry_step_id) == bool(retry_execution_path):
+            raise TaskError("SEQUENCE_RETRY_TARGET_INVALID")
         with self.driver.guard(sequence_run_id):
             sequence_run, member = self._current_child(sequence_run_id)
             previous = sequence_run["control_command"]
             if sequence_run["status"] != "BLOCKED" and not (previous and previous["id"] == command_id):
                 raise TaskError("SEQUENCE_STATE_INVALID")
-            self.repository.command(sequence_run_id, command_id, "retry", {"retry_step_id": retry_step_id})
+            self.repository.command(sequence_run_id, command_id, "retry", {
+                "retry_step_id": retry_step_id, "retry_execution_path": retry_execution_path})
         self.driver.wake(sequence_run_id)
         return self.run_get(sequence_run_id)
 

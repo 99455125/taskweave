@@ -7,6 +7,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from taskweave.infrastructure.repository import Repository
+from taskweave.core.validation import TaskError
 
 
 STEP = "async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n"
@@ -62,7 +63,7 @@ class TaskRepositoryTests(unittest.TestCase):
         self.assertEqual(
             {
                 "tasks", "steps", "environments", "runs", "results",
-                "step_contexts", "plans", "plan_contexts", "plan_generations", "organization",
+                "step_contexts", "plans", "plan_contexts", "plan_generations", "organization", "sequences", "flow_runs",
             },
             set(vars(repositories)),
         )
@@ -81,6 +82,49 @@ class TaskRepositoryTests(unittest.TestCase):
             self.assertEqual(legacy_task[key], direct_task[key])
         for key in ("name", "step_content", "content_hash", "validation_state", "position", "bindings"):
             self.assertEqual(legacy_step[key], direct_step[key])
+
+    def test_control_flow_save_is_versioned_and_step_edit_preserves_structure(self):
+        steps = self.repo.repositories.steps.steps(self.task_id)
+        first, second = [step["step_id"] for step in steps]
+        flow = {"version": 2, "root": {"id": "root", "kind": "sequence", "children": [
+            {"id": first, "kind": "action", "step_id": first},
+            {"id": "branch", "kind": "if", "condition": {
+                "op": "eq", "left": {"literal": True}, "right": {"literal": True}},
+             "then": {"id": "yes", "kind": "sequence", "children": [
+                 {"id": second, "kind": "action", "step_id": second}]},
+             "else": {"id": "no", "kind": "sequence", "children": []}},
+        ]}}
+        expected = self.repo.repositories.tasks.definition_hash(self.task_id)
+        saved = self.repo.repositories.tasks.save_flow(self.task_id, flow, expected)
+        self.assertEqual(saved["flow_validation_state"], "DRAFT")
+        with self.assertRaises(TaskError) as error:
+            self.repo.repositories.tasks.save_flow(self.task_id, flow, expected)
+        self.assertEqual(error.exception.code, "EDIT_CONFLICT")
+        confirmed = self.repo.repositories.tasks.confirm_flow(
+            self.task_id, self.repo.repositories.tasks.definition_hash(self.task_id))
+        self.assertEqual(confirmed["flow_validation_state"], "VALIDATED")
+        old = self.repo.repositories.steps.step(first)
+        self.repo.save_step(self.task_id, {**old, "name": "edited"}, first, old["content_hash"])
+        current = self.repo.repositories.tasks.task(self.task_id)
+        self.assertEqual(current["graph_json"], confirmed["graph_json"])
+        self.assertEqual(current["flow_validation_state"], "VALIDATED")
+
+    def test_copy_preserves_control_flow_with_new_action_ids(self):
+        tasks = self.repo.repositories.tasks
+        first, second = [step["step_id"] for step in self.repo.repositories.steps.steps(self.task_id)]
+        flow = {"version": 2, "root": {"id": "root", "kind": "sequence", "children": [{
+            "id": "choose", "kind": "if", "condition": {"op": "eq", "left": {"literal": 1}, "right": {"literal": 1}},
+            "then": {"id": "yes", "kind": "sequence", "children": [{"id": first, "kind": "action", "step_id": first}]},
+            "else": {"id": "no", "kind": "sequence", "children": [{"id": second, "kind": "action", "step_id": second}]},
+        }]}}
+        tasks.save_flow(self.task_id, flow, tasks.definition_hash(self.task_id))
+        tasks.confirm_flow(self.task_id, tasks.definition_hash(self.task_id))
+        copied = self.repo.copy_task(self.task_id)
+        copied_flow = tasks.flow(copied["task_id"])
+        copied_ids = {step["step_id"] for step in self.repo.repositories.steps.steps(copied["task_id"])}
+        branch = copied_flow["root"]["children"][0]
+        self.assertEqual({branch["then"]["children"][0]["step_id"], branch["else"]["children"][0]["step_id"]}, copied_ids)
+        self.assertTrue(tasks.flow_is_confirmed(copied["task_id"]))
 
 
 if __name__ == "__main__":

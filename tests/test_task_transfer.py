@@ -10,6 +10,30 @@ from taskweave.infrastructure.storage import uid
 
 
 class TaskTransfer(unittest.TestCase):
+    def test_control_flow_package_round_trip_remaps_step_references(self):
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('分支任务')['task_id']
+            first = app.repo.save_step(task, {'name': '第一支', 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data={"v": 1})'})
+            second = app.repo.save_step(task, {'name': '第二支', 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data={"v": 2})'})
+            flow = {'version': 2, 'root': {'id': 'root', 'kind': 'sequence', 'children': [{
+                'id': 'choose', 'kind': 'if', 'condition': {'op': 'eq', 'left': {'literal': True}, 'right': {'literal': True}},
+                'then': {'id': 'yes', 'kind': 'sequence', 'children': [
+                    {'id': first['step_id'], 'kind': 'action', 'step_id': first['step_id']}]},
+                'else': {'id': 'no', 'kind': 'sequence', 'children': [
+                    {'id': second['step_id'], 'kind': 'action', 'step_id': second['step_id']}]},
+                'outputs': {'chosen': {'then': {'ref': {'source': 'step', 'step_id': first['step_id'], 'pointer': '/v'}},
+                                       'else': {'ref': {'source': 'step', 'step_id': second['step_id'], 'pointer': '/v'}}}},
+            }]}}
+            tasks = app.repo.repositories.tasks
+            tasks.save_flow(task, flow, tasks.definition_hash(task))
+            tasks.confirm_flow(task, tasks.definition_hash(task))
+            package = app.export_task(task)
+            self.assertEqual(package['format'], 'taskweave-task-3')
+            self.assertEqual(package['flow']['root']['children'][0]['then']['children'][0]['step_id'], 'step-1')
+            imported = app.import_task(package)
+            self.assertEqual(app.export_task(imported['task_id']), package)
+            self.assertTrue(tasks.flow_is_confirmed(imported['task_id']))
+
     def test_round_trip_new_ids_dependencies_and_verification(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
             task = app.repo.create_task('通用示例', {'type': 'object', 'properties': {'url': {'type': 'string', 'default': 'local'}}})
