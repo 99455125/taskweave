@@ -1,6 +1,8 @@
 """SQLite persistence for task metadata and task lifecycle."""
 
+import json
 from taskweave.core.validation import TaskError, check_schema, dumps, fingerprint
+from taskweave.core.task_flow import normalize_flow, is_linear_flow, remap_step_ids
 from taskweave.infrastructure.sqlite_storage import SQLiteStorage, now, uid
 
 
@@ -28,6 +30,43 @@ class TaskRepository:
         task = self.task(task_id)
         steps = self.steps.steps(task_id)
         return fingerprint({"input_schema": task["input_schema_json"], "graph": task["graph_json"], "steps": [(step["step_id"], step["content_hash"]) for step in steps]})
+
+    def flow(self, task_id):
+        task = self.task(task_id)
+        return normalize_flow(json.loads(task["graph_json"]), self.steps.steps(task_id))
+
+    def flow_is_confirmed(self, task_id):
+        task = self.task(task_id)
+        if is_linear_flow(self.flow(task_id)):
+            return True
+        return (task["flow_validation_state"] == "VALIDATED"
+                and task["flow_verified_hash"] == fingerprint(json.loads(task["graph_json"])))
+
+    def save_flow(self, task_id, flow, expected_hash):
+        with self.store.transaction() as db:
+            self.assert_unlocked(db, task_id)
+            if self.definition_hash(task_id) != expected_hash:
+                raise TaskError("EDIT_CONFLICT")
+            normalized = normalize_flow(flow, self.steps.steps(task_id))
+            linear = is_linear_flow(normalized)
+            db.execute(
+                "UPDATE tasks SET graph_json=?,flow_validation_state=?,flow_verified_hash=?,updated_at=? WHERE task_id=?",
+                (dumps(normalized), "VALIDATED" if linear else "DRAFT",
+                 fingerprint(normalized) if linear else None, now(), task_id),
+            )
+        return self.task(task_id)
+
+    def confirm_flow(self, task_id, expected_hash):
+        with self.store.transaction() as db:
+            self.assert_unlocked(db, task_id)
+            if self.definition_hash(task_id) != expected_hash:
+                raise TaskError("EDIT_CONFLICT")
+            graph = self.flow(task_id)
+            db.execute(
+                "UPDATE tasks SET flow_validation_state='VALIDATED',flow_verified_hash=?,updated_at=? WHERE task_id=?",
+                (fingerprint(graph), now(), task_id),
+            )
+        return self.task(task_id)
 
     @staticmethod
     def assert_unlocked(db, task_id, allow_idle_trial=False):
@@ -75,6 +114,12 @@ class TaskRepository:
                     ref["step_id"] = mapping[ref["step_id"]]
             saved = self.steps.save_step(target["task_id"], document)
             mapping[step["step_id"]] = saved["step_id"]
+        source_flow = self.flow(task_id)
+        if not is_linear_flow(source_flow):
+            self.save_flow(target["task_id"], remap_step_ids(source_flow, mapping),
+                           self.definition_hash(target["task_id"]))
+            if self.flow_is_confirmed(task_id):
+                self.confirm_flow(target["task_id"], self.definition_hash(target["task_id"]))
         for source_step_id, target_step_id in mapping.items():
             for group in self.step_contexts.list_step_contexts(source_step_id):
                 cloned = self.step_contexts.create_step_context_group(target_step_id, group["provider_id"], group["name"], group.get("context_notes", ""))

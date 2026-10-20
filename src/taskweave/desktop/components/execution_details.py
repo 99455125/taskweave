@@ -10,6 +10,7 @@ from taskweave.presentation.history import HistoryLoadState
 from taskweave.desktop.controller import command_id
 from taskweave.desktop.display import readable_metadata, step_names
 from taskweave.desktop.components.run_logs import LiveRunLogs, render_log_text
+from taskweave.core.task_flow import is_linear_flow
 
 STATUS = {"READY": "就绪", "RUNNING": "执行中", "PAUSED": "已暂停", "FAILED": "失败", "INTERRUPTED": "中断 / 待核对", "SUCCEEDED": "成功", "CANCELLED": "已结束", "UNKNOWN": "结果待核对"}
 
@@ -23,6 +24,37 @@ def local_run_time(value):
     if not value: return "尚未开始"
     try: return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone().strftime("%m-%d %H:%M")
     except (TypeError, ValueError, OSError): return str(value)[:16]
+
+def controlled_run(run):
+    try:
+        flow = json.loads(run.get('definition_json') or '{}').get('flow')
+        return flow is not None and not is_linear_flow(flow)
+    except (TypeError, ValueError, KeyError):
+        return False
+
+def round_label(path):
+    rounds = [int(part) + 1 for part in str(path or '').split('/') if part.isdigit()]
+    return ' / '.join(f'第 {number} 轮' for number in rounds) if rounds else '主流程'
+
+def flow_limits(flow):
+    from taskweave.core.task_flow import DEFAULT_FOREACH_ITEMS, DEFAULT_LOOP_ITERATIONS
+    limits = {}
+    def visit(node):
+        kind = node['kind']
+        if kind == 'foreach':
+            limits[node['id']] = node.get('max_items', DEFAULT_FOREACH_ITEMS)
+            visit(node['body'])
+        elif kind == 'loop':
+            limits[node['id']] = node.get('max_iterations', DEFAULT_LOOP_ITERATIONS)
+            visit(node['body'])
+        elif kind == 'if':
+            visit(node['then'])
+            visit(node['else'])
+        elif kind == 'sequence':
+            for child in node['children']:
+                visit(child)
+    visit(flow['root'])
+    return limits
 
 class ExecutionDetails:
     def __init__(self, controller, state, button, page, page_generation, pending_inputs, choose_run_step, confirm_end, step_error_dialog, step_result_dialog, reconcile_dialog):
@@ -166,8 +198,11 @@ class ExecutionDetails:
                             total_steps = 0
                         completed_steps = sum(attempt.get("valid") and attempt.get("status") == "SUCCEEDED" for attempt in run.get("attempts", []))
                         if total_steps:
-                            ui.linear_progress(min(1, completed_steps / total_steps), show_value=False).props("rounded size=5px color=primary")
-                            ui.label(f"{completed_steps}/{total_steps} 步").classes("text-xs text-gray-500")
+                            if not controlled_run(run):
+                                ui.linear_progress(min(1, completed_steps / total_steps), show_value=False).props("rounded size=5px color=primary")
+                                ui.label(f"{completed_steps}/{total_steps} 步").classes("text-xs text-gray-500")
+                            else:
+                                ui.label(f"已完成 {completed_steps} 次动作").classes("text-xs text-gray-500")
 
         with self.execution_rows:
             if active_run is None:
@@ -211,6 +246,7 @@ class ExecutionDetails:
                     ui.label(f"运行编号 #{short_run_id(run['run_id'])} · 环境 {environments.get(run['environment_id'], '默认环境')} · {local_run_time(run.get('started_at'))}").classes("text-xs text-gray-500 mt-2")
 
                 definition = definition_steps or []
+                controlled = controlled_run(run)
                 total = len(definition)
                 latest_by_step = {}
                 for attempt in run["attempts"]:
@@ -220,9 +256,11 @@ class ExecutionDetails:
                 with ui.card().classes("tw-run-progress-card w-full"):
                     with ui.row().classes("w-full justify-between items-center flex-wrap gap-2"):
                         ui.label("步骤进度").classes("text-lg font-semibold")
-                        ui.label(f"{succeeded_count} / {total} 已完成 · 点击节点查看步骤").classes("text-sm text-gray-500")
+                        ui.label((f"已完成 {sum(a['valid'] and a['status'] == 'SUCCEEDED' for a in run['attempts'])} 次动作 · 点击节点查看步骤"
+                                  if controlled else f"{succeeded_count} / {total} 已完成 · 点击节点查看步骤")).classes("text-sm text-gray-500")
                     with ui.row().classes("w-full items-center gap-3 mt-2"):
-                        ui.linear_progress(min(1, succeeded_count / total) if total else 0, show_value=False).props("rounded size=7px color=primary").classes("grow")
+                        if not controlled:
+                            ui.linear_progress(min(1, succeeded_count / total) if total else 0, show_value=False).props("rounded size=7px color=primary").classes("grow")
                     with ui.row().classes("tw-step-track"):
                         for index, step in enumerate(definition):
                             attempts = [a for a in run["attempts"] if a["step_id"] == step["step_id"] and a["valid"]]
@@ -244,6 +282,37 @@ class ExecutionDetails:
                                 elif step_status in {"FAILED", "UNKNOWN"}:
                                     self.button("查看错误", lambda a=attempts[-1], st=step: self.step_error_dialog(a, st), flat=True)
 
+                if controlled:
+                    with ui.card().classes("w-full tw-flow-history"):
+                        ui.label("流程路径与逐轮结果").classes("text-lg font-semibold")
+                        snapshot = json.loads(run['definition_json'])
+                        limits = flow_limits(snapshot['flow'])
+                        cursor = json.loads(run.get('flow_cursor_json') or '{}')
+                        ui.label(f"动作尝试 {len(run['attempts'])} / 100000 · 控制访问 {cursor.get('control_visits', 0)} / 1000000").classes("text-xs text-gray-500")
+                        for instance in run.get('flow_instances', []):
+                            payload = json.loads(instance.get('payload_json') or '{}')
+                            kind = instance['kind']
+                            if kind == 'action':
+                                step_name = next((item['name'] for item in definition if item['step_id'] == instance['node_id']), instance['node_id'])
+                                title = f"{round_label(instance['execution_path'])} · {step_name} · {STATUS.get(instance['status'], instance['status'])}"
+                            else:
+                                detail = (f"选择 {payload['selected']}" if 'selected' in payload else
+                                          f"{len(payload['items'])} 项" if 'items' in payload else
+                                          f"已执行 {payload['completed']} 轮" if 'completed' in payload else '')
+                                if kind in {'foreach', 'loop'}:
+                                    detail += f" / 上限 {limits.get(instance['node_id'], '?')}"
+                                title = f"{round_label(instance['execution_path'])} · {kind} · {detail} · {STATUS.get(instance['status'], instance['status'])}"
+                            with ui.row().classes("w-full items-center gap-2"):
+                                ui.label(title).classes("text-sm")
+                                if instance.get('error_code'):
+                                    ui.label('超出上限 · 需人工处理' if instance['error_code'] == 'LOOP_LIMIT_EXCEEDED'
+                                             else instance['error_code']).classes("text-sm text-red-700")
+                                if kind == 'action' and instance.get('attempt_id'):
+                                    step = next((item for item in definition if item['step_id'] == instance['node_id']), None)
+                                    if step and instance['status'] == 'SUCCEEDED':
+                                        self.button('查看本轮结果', lambda aid=instance['attempt_id'], st=step, r=run:
+                                                    self.step_result_dialog(r, st, aid), flat=True)
+
                 with ui.tabs().classes("tw-run-tabs") as run_tabs:
                     detail_tab = ui.tab("执行详情")
                     history_tab = ui.tab("历史记录")
@@ -261,7 +330,7 @@ class ExecutionDetails:
                             for attempt in reversed(attempts):
                                 step_name = next((item["name"] for item in definition if item["step_id"] == attempt["step_id"]), attempt["step_id"])
                                 valid_label = "当前有效" if attempt.get("valid") else "已失效"
-                                with ui.expansion(f"尝试 {attempt['attempt_no']} · {step_name} · {STATUS.get(attempt['status'], attempt['status'])} · {valid_label}", icon="history").classes("tw-history-attempt w-full"):
+                                with ui.expansion(f"{round_label(attempt.get('execution_path'))} · 尝试 {attempt['attempt_no']} · {step_name} · {STATUS.get(attempt['status'], attempt['status'])} · {valid_label}", icon="history").classes("tw-history-attempt w-full"):
                                     ui.label(f"开始：{local_run_time(attempt.get('started_at'))} · 结束：{local_run_time(attempt.get('finished_at'))}").classes("text-xs text-gray-500")
                                     ui.label("有效状态：" + valid_label).classes("text-sm text-gray-600")
                                     ui.label("本次输入").classes("font-medium mt-2")

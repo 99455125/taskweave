@@ -4,11 +4,16 @@
     "domain.tasks": {
       "source_globs": [
         "src/taskweave/core/task_package.py",
-        "src/taskweave/core/validation.py"
+        "src/taskweave/core/validation.py",
+        "src/taskweave/core/task_flow.py",
+        "src/taskweave/core/flow_machine.py",
+        "src/taskweave/core/flow_values.py"
       ],
       "targets": [
         "tests.test_task_transfer",
-        "tests.test_task_copy_lifecycle"
+        "tests.test_task_copy_lifecycle",
+        "tests.test_task_flow",
+        "tests.test_flow_machine"
       ],
       "depends_on": [],
       "browser_targets": []
@@ -149,12 +154,15 @@
     },
     "repository.runs": {
       "source_globs": [
-        "src/taskweave/infrastructure/repositories/runs.py"
+        "src/taskweave/infrastructure/repositories/runs.py",
+        "src/taskweave/infrastructure/repositories/flow_runs.py"
       ],
       "targets": [
         "tests.repositories.test_run_repository",
         "tests.test_execution_control",
-        "tests.test_executor_recovery"
+        "tests.test_executor_recovery",
+        "tests.test_flow_storage",
+        "tests.test_control_db_migration"
       ],
       "depends_on": [
         "repository.tasks",
@@ -325,7 +333,8 @@
         "src/taskweave/application/composition.py",
         "src/taskweave/application/organization.py",
         "src/taskweave/infrastructure/resource_sessions.py",
-        "src/taskweave/application/settings.py"
+        "src/taskweave/application/settings.py",
+        "src/taskweave/infrastructure/flow_runner.py"
       ],
       "targets": [
         "tests.application.test_step_run_repository_port",
@@ -335,7 +344,9 @@
         "tests.test_http_task_api",
         "tests.test_context_targets_runtime",
         "tests.test_context_recording_runtime",
-        "tests.test_runtime_architecture"
+        "tests.test_runtime_architecture",
+        "tests.test_flow_execution",
+        "tests.test_flow_recovery"
       ],
       "depends_on": [
         "repository.tasks",
@@ -381,7 +392,10 @@
         "src/taskweave/desktop/components/step_list.py",
         "src/taskweave/desktop/components/step_ai.py",
         "src/taskweave/desktop/dependencies.py",
-        "src/taskweave/desktop/components/debug_drawer.py"
+        "src/taskweave/desktop/components/debug_drawer.py",
+        "src/taskweave/desktop/components/flow_tree.py",
+        "src/taskweave/desktop/components/flow_controls.py",
+        "src/taskweave/presentation/flow_editor.py"
       ],
       "targets": [
         "tests.ui.test_step_editor_state",
@@ -392,7 +406,8 @@
         "tests.test_workbench_changes.WorkbenchChanges.test_reorder_helper_swaps_adjacent_items_and_rejects_boundaries",
         "tests.test_workbench_changes.WorkbenchChanges.test_step_reorder_moves_existing_controls_and_updates_visible_positions",
         "tests.test_workspace_navigation",
-        "tests.presentation.test_step_actions"
+        "tests.presentation.test_step_actions",
+        "tests.ui.test_flow_editor"
       ],
       "depends_on": [
         "application.steps",
@@ -505,7 +520,8 @@
       "source_globs": [
         "src/taskweave/desktop/pages/executions.py",
         "src/taskweave/desktop/pages/history.py",
-        "src/taskweave/desktop/components/execution_details.py"
+        "src/taskweave/desktop/components/execution_details.py",
+        "src/taskweave/desktop/components/run_inputs.py"
       ],
       "targets": [
         "tests.ui.test_executions_page",

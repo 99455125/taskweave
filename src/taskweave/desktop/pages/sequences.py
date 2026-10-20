@@ -22,6 +22,7 @@ class SequencesPage(Page):
         self.draft = SequenceDraft()
         self.tasks = []
         self.steps = {}
+        self.flows = {}
         self.environments = []
         self.definitions = []
         self.progress_area = None
@@ -39,6 +40,8 @@ class SequencesPage(Page):
         self.environments = await self.controller.call("environment.list")
         self.definitions = await self.controller.call("sequence.list")
         self.steps = {task["task_id"]: await self.controller.call("step.list", task_id=task["task_id"])
+                      for task in self.tasks}
+        self.flows = {task["task_id"]: await self.controller.call("task.flow.get", task_id=task["task_id"])
                       for task in self.tasks}
 
     def _task_name(self, task_id):
@@ -188,6 +191,35 @@ class SequencesPage(Page):
                         ui.input("JSON 路径（留空表示整体）", value=source["pointer"],
                                  on_change=lambda event, item=source: item.__setitem__("pointer", event.value or ""))\
                             .classes("grow")
+                    loop_options = {}
+                    def collect_loops(flow_node, task_name):
+                        if flow_node["kind"] in {"foreach", "loop"}:
+                            loop_options[flow_node["id"]] = f"{task_name} · {flow_node['id']}"
+                        children = (flow_node["children"] if flow_node["kind"] == "sequence" else
+                                    [flow_node["then"], flow_node["else"]] if flow_node["kind"] == "if" else
+                                    [flow_node["body"]] if flow_node["kind"] in {"foreach", "loop"} else [])
+                        for child in children:
+                            collect_loops(child, task_name)
+                    for preceding in self.draft.nodes[:index]:
+                        flow = self.flows.get(preceding["task_id"])
+                        if flow:
+                            collect_loops(flow["root"], self._task_name(preceding["task_id"]))
+                    if loop_options:
+                        async def choose_projection_loop(event, item=source):
+                            if event.value:
+                                item.update(loop_node_id=event.value, item_pointer=item.get("item_pointer", ""), pointer="")
+                            else:
+                                item.pop("loop_node_id", None)
+                                item.pop("item_pointer", None)
+                            await self.repaint()
+                        ui.select({"": "使用完整结果"} | loop_options,
+                                  value=source.get("loop_node_id", ""), label="逐轮投影所属循环",
+                                  on_change=choose_projection_loop)\
+                            .classes("w-full")
+                        if source.get("loop_node_id"):
+                            ui.input("每轮结果字段（例如 /id）", value=source.get("item_pointer", ""),
+                                     on_change=lambda event, item=source: item.__setitem__("item_pointer", event.value or ""))\
+                                .classes("w-full")
 
     async def add_node(self, task_id):
         self.draft.add(task_id)
@@ -309,16 +341,31 @@ class SequencesPage(Page):
 
     async def _retry_dialog(self, run, member):
         steps = await self.controller.call("step.list", task_id=member["task_id"])
+        child = await self.controller.call("run.get", run_id=member["run_id"])
+        from taskweave.core.task_flow import is_linear_flow
+        controlled = not is_linear_flow(json.loads(child["definition_json"])["flow"])
         with ui.dialog() as dialog, ui.card():
-            ui.label("从指定步骤重试").classes("text-lg")
-            choice = ui.select({step["step_id"]: step["name"] for step in steps},
-                               value=steps[-1]["step_id"] if steps else None, label="重试步骤")
+            ui.label("重试失败动作" if controlled else "从指定步骤重试").classes("text-lg")
+            if controlled:
+                names = {step["step_id"]: step["name"] for step in steps}
+                failures = {attempt["execution_path"]: (
+                    names.get(attempt["step_id"], attempt["step_id"]) + " · " +
+                    " / ".join(f"第 {int(part)+1} 轮" for part in attempt["execution_path"].split('/') if part.isdigit()))
+                    for attempt in child["attempts"] if attempt["valid"] and attempt["status"] == "FAILED"}
+                if not failures:
+                    ui.label("控制条件或循环上限失败，请修改流程后新建执行。")
+            else:
+                failures = {step["step_id"]: step["name"] for step in steps}
+            choice = ui.select(failures, value=next(reversed(failures), None),
+                               label="失败实例" if controlled else "重试步骤")
             async def submit():
                 await self.controller.call("sequence.run.retry", sequence_run_id=run["sequence_run_id"],
-                    command_id=str(uuid4()), retry_step_id=choice.value)
+                    command_id=str(uuid4()),
+                    **({"retry_execution_path": choice.value} if controlled else {"retry_step_id": choice.value}))
                 dialog.close()
                 await self.refresh_progress()
-            self.button("重试", submit, primary=True)
+            if failures:
+                self.button("重试", submit, primary=True)
         dialog.open()
 
     async def _reconcile_dialog(self, run, member):

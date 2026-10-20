@@ -94,6 +94,24 @@ class RunRepository:
         )
         return rows[0] if rows else None
 
+    def latest_attempt_for_instance(self, run_id, execution_path):
+        rows = self.query(
+            "SELECT * FROM step_attempts WHERE run_id=? AND execution_path=? AND valid=1 "
+            "ORDER BY attempt_no DESC LIMIT 1",
+            (run_id, execution_path),
+        )
+        return rows[0] if rows else None
+
+    def latest_successful_attempt(self, run_id):
+        rows = self.query(
+            "SELECT * FROM step_attempts WHERE run_id=? AND valid=1 AND status='SUCCEEDED' "
+            "ORDER BY attempt_no DESC LIMIT 1", (run_id,),
+        )
+        return rows[0] if rows else None
+
+    def attempt_count(self, run_id):
+        return self.query("SELECT COUNT(*) AS total FROM step_attempts WHERE run_id=?", (run_id,), True)["total"]
+
     def attempts_with_status(self, run_id, status):
         return self.query(
             "SELECT * FROM step_attempts WHERE run_id=? AND status=? ORDER BY attempt_no",
@@ -238,16 +256,17 @@ class RunRepository:
     def heartbeat(self, run_id, stamp):
         return self.store.execute("UPDATE runtime_lease SET heartbeat_at=? WHERE run_id=?", (stamp, run_id))
 
-    def create_attempt(self, attempt_id, task_id, run_id, step_id, content_hash, stamp):
+    def create_attempt(self, attempt_id, task_id, run_id, step_id, content_hash, stamp, execution_path=None):
+        execution_path = execution_path or "/main/" + step_id
         with self.transaction() as db:
             number = db.execute(
-                "SELECT COALESCE(MAX(attempt_no),0)+1 FROM step_attempts WHERE run_id=? AND step_id=?",
-                (run_id, step_id),
+                "SELECT COALESCE(MAX(attempt_no),0)+1 FROM step_attempts WHERE run_id=? AND execution_path=?",
+                (run_id, execution_path),
             ).fetchone()[0]
             db.execute(
                 "INSERT INTO step_attempts(attempt_id,task_id,run_id,step_id,execution_path,attempt_no,content_hash,status,effect_state,started_at) "
                 "VALUES(?,?,?,?,?,?,?,?,?,?)",
-                (attempt_id, task_id, run_id, step_id, "/main/" + step_id, number,
+                (attempt_id, task_id, run_id, step_id, execution_path, number,
                  content_hash, "RUNNING", "NOT_STARTED", stamp),
             )
 
@@ -342,6 +361,8 @@ class RunRepository:
             validation_inputs = inputs if flow_trial else automatic_inputs(input_schema, environment, inputs, inputs)
             validate({key: value for key, value in validation_inputs.items() if key not in input_schema.get('required', []) or (value is not None and value != '')} if defer_inputs else validation_inputs, {**input_schema, 'required': []} if defer_inputs else input_schema)
         else:
+            if not self.tasks.flow_is_confirmed(task_id):
+                raise TaskError('FLOW_NOT_CONFIRMED', '请先确认当前任务流程')
             task_schema = json.loads(task['input_schema_json'])
             validate({key: value for key, value in inputs.items() if key not in task_schema.get('required', []) or (value is not None and value != '')} if defer_inputs else inputs, {**task_schema, 'required': []} if defer_inputs else task_schema)
             for step in steps:
@@ -350,7 +371,7 @@ class RunRepository:
         step_inputs = self.normalize_step_inputs(task_id, step_inputs)
         run_id = uid()
         self.execute('INSERT INTO task_runs(run_id,task_id,environment_id,mode,status,definition_hash,plugin_versions_json,input_summary_json,inputs_json,trial_step_id,request_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (run_id, task_id, environment_id, 'TRIAL' if trial_step_id else 'EXECUTION', 'READY', self.definition_hash(task_id), dumps(versions), dumps(redact(inputs)), dumps(inputs), trial_step_id, dumps({'environment_hash': fingerprint(self.environment(environment_id)), 'flow_trial': flow_trial, 'step_inputs': step_inputs or {}, 'initial_step_inputs': step_inputs or {}, 'initial_inputs': original_inputs})))
-        self.execute('UPDATE task_runs SET definition_json=? WHERE run_id=?', (dumps({'task': task, 'steps': steps}), run_id))
+        self.execute('UPDATE task_runs SET definition_json=? WHERE run_id=?', (dumps({'task': task, 'steps': steps, 'flow': self.tasks.flow(task_id)}), run_id))
         return self.run(run_id)
 
     def run_details(self, run_id):
@@ -358,6 +379,8 @@ class RunRepository:
         run.pop('inputs_json')
         run['attempts'] = self.query('SELECT * FROM step_attempts WHERE run_id=? ORDER BY started_at,attempt_no', (run_id,))
         run['results'] = self.query('SELECT * FROM result_refs WHERE run_id=?', (run_id,))
+        run['flow_instances'] = [dict(row) for row in self.query(
+            'SELECT * FROM flow_instances WHERE run_id=? ORDER BY instance_no', (run_id,))]
         return run
 
     def list_runs(self, task_id=None):
@@ -462,10 +485,11 @@ class RunRepository:
         with self.transaction() as db:
             for table in ('result_refs', 'step_attempts', 'run_events', 'command_receipts'):
                 db.execute(f'DELETE FROM {table} WHERE run_id=?', (run_id,))
+            db.execute('DELETE FROM flow_instances WHERE run_id=?', (run_id,))
             request = json.loads(run['request_json'])
             request.pop('waiting_input', None)
             request.pop('step_inputs', None)
-            db.execute("UPDATE task_runs SET status='READY',started_at=NULL,finished_at=NULL,waiting_step_id=NULL,wait_until=NULL,request_json=? WHERE run_id=?", (dumps(request), run_id))
+            db.execute("UPDATE task_runs SET status='READY',started_at=NULL,finished_at=NULL,waiting_step_id=NULL,wait_until=NULL,flow_cursor_json=NULL,request_json=? WHERE run_id=?", (dumps(request), run_id))
 
     def finish_pending_deletions(self):
         for task in self.query("SELECT task_id FROM tasks WHERE lifecycle='DELETING'"):

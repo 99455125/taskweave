@@ -73,8 +73,12 @@ body { background:var(--tw-bg); color:var(--tw-ink); font-family:Inter,-apple-sy
 .tw-step-node.is-selected .tw-step-dot { outline:3px solid #dbe8ff; outline-offset:2px; }
 .tw-step-name { padding:0 4px!important; border:0!important; background:transparent!important; color:#526174!important; font-size:13px; min-height:38px; width:100%; }
 .tw-step-node .tw-step-name .q-btn__content { color:#526174!important; white-space:normal; overflow-wrap:anywhere; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
-.tw-editor-layout { display:grid!important; grid-template-columns:174px minmax(0,1fr); gap:16px; flex-wrap:nowrap!important; align-items:stretch!important; }
-.tw-editor-layout > .tw-step-sidebar { width:174px!important; min-width:0; padding:12px; }
+.tw-editor-layout { display:grid!important; grid-template-columns:300px minmax(0,1fr); gap:16px; flex-wrap:nowrap!important; align-items:stretch!important; }
+.tw-editor-layout > .tw-step-sidebar { width:300px!important; min-width:0; padding:12px; }
+.tw-flow-control { min-width:0; }
+.tw-flow-control .q-item__label { white-space:normal; overflow-wrap:anywhere; }
+.tw-flow-control .q-item { padding:6px 4px; }
+.tw-flow-control .q-expansion-item__content { padding-left:4px; }
 .tw-editor-panel { padding:16px; }
 .tw-editor-body { min-width:0; }
 .tw-debug-drawer { border:1px solid var(--tw-line)!important; border-radius:10px; box-shadow:-6px 0 24px #22365508; background:white; }
@@ -110,7 +114,7 @@ body { background:var(--tw-bg); color:var(--tw-ink); font-family:Inter,-apple-sy
 .tw-plan-prompt textarea,.tw-plan-response textarea { height:clamp(150px, 24vh, 280px)!important; max-height:32vh!important; overflow:auto!important; }
 .tw-plan-web-dialog .q-field { margin:0; }
 .tw-editor-panel { display:grid!important; grid-template-columns:minmax(0,1fr); column-gap:16px; }
-.tw-editor-layout.tw-debug-open { grid-template-columns:174px minmax(0,1fr) 320px; }
+.tw-editor-layout.tw-debug-open { grid-template-columns:220px minmax(0,1fr) 320px; }
 .tw-step-config-heading { grid-column:1; grid-row:1; }
 .tw-editor-body { grid-column:1; grid-row:2; min-width:0; }
 .tw-debug-column { grid-column:3; grid-row:1; min-width:0; }
@@ -354,12 +358,13 @@ body { background:var(--tw-bg); color:var(--tw-ink); font-family:-apple-system,B
 @media(max-width:850px) { .tw-market-hero { min-height:0; padding:28px; } }
 @media(max-width:1390px) { .tw-plan-layout { grid-template-columns:minmax(0,1fr); } }
 @media(max-width:1390px) {
- .tw-editor-layout { grid-template-columns:140px minmax(0,1fr); }
- .tw-editor-layout > .tw-step-sidebar { width:140px!important; }
- .tw-editor-layout.tw-debug-open { grid-template-columns:140px minmax(0,1fr) 280px; column-gap:12px; }
+ .tw-task-workspace:has(.tw-editor-layout) > .tw-task-sidebar { width:200px; }
+ .tw-editor-layout { grid-template-columns:280px minmax(0,1fr); }
+ .tw-editor-layout > .tw-step-sidebar { width:280px!important; }
+ .tw-editor-layout.tw-debug-open { grid-template-columns:190px minmax(0,1fr) 280px; column-gap:12px; }
 }
 @media(max-width:900px) {
- .tw-editor-layout.tw-debug-open { grid-template-columns:140px minmax(0,1fr); }
+ .tw-editor-layout.tw-debug-open { grid-template-columns:180px minmax(0,1fr); }
  .tw-editor-panel { min-height:0!important; height:auto!important; overflow:visible!important; }
  .tw-editor-body { width:100%!important; height:auto!important; }
  .tw-debug-column { grid-column:2; grid-row:2; }
@@ -367,8 +372,8 @@ body { background:var(--tw-bg); color:var(--tw-ink); font-family:-apple-system,B
 }
 @media(min-width:901px) and (max-width:1199px) {
  .tw-task-workspace:has(.tw-editor-layout.tw-debug-open) > .tw-task-sidebar { width:170px!important; padding:16px; }
- .tw-editor-layout.tw-debug-open { grid-template-columns:110px minmax(0,1fr) 260px; }
- .tw-editor-layout.tw-debug-open > .tw-step-sidebar { width:110px!important; padding:10px; }
+ .tw-editor-layout.tw-debug-open { grid-template-columns:170px minmax(0,1fr) 260px; }
+ .tw-editor-layout.tw-debug-open > .tw-step-sidebar { width:170px!important; padding:10px; }
  .tw-editor-layout.tw-debug-open > .tw-editor-panel { padding:16px; }
  .tw-editor-layout.tw-debug-open .tw-debug-drawer { padding:14px; }
 }

@@ -45,15 +45,21 @@ class ResultRepository:
         return self.query("SELECT * FROM result_refs WHERE attempt_id=? ORDER BY result_id", (attempt_id,))
 
     def read_output(self, run_id, step_id, output="data", registry=None):
-        run = self.run(run_id)
         attempts = self.query(
             "SELECT * FROM step_attempts WHERE run_id=? AND step_id=? AND valid=1 ORDER BY attempt_no DESC LIMIT 1",
             (run_id, step_id),
         )
         if not attempts or attempts[0]["status"] != "SUCCEEDED":
             raise TaskError("OUTPUT_NOT_AVAILABLE")
+        return self.read_attempt_output(attempts[0]["attempt_id"], output, registry)
+
+    def read_attempt_output(self, attempt_id, output="data", registry=None):
+        attempts = self.query("SELECT * FROM step_attempts WHERE attempt_id=? AND valid=1", (attempt_id,))
+        if not attempts or attempts[0]["status"] != "SUCCEEDED":
+            raise TaskError("OUTPUT_NOT_AVAILABLE")
+        attempt = attempts[0]
         if output != "data":
-            refs = self.receipt(attempts[0]) or []
+            refs = self.receipt(attempt) or []
             ref = next((item for item in refs if item.get("name") == output), None)
             if ref is None:
                 raise TaskError("OUTPUT_NOT_AVAILABLE")
@@ -62,13 +68,13 @@ class ResultRepository:
             if ref["handler_id"] != "core.json" and ref["handler_id"] not in registry.handlers:
                 raise TaskError("HANDLER_UNAVAILABLE")
             return self.read_result(ref["result_id"], registry)["data"]
-        path = self.task_path(run["task_id"])
+        path = self.task_path(attempt["task_id"])
         if not path.exists():
             raise TaskError("OUTPUT_NOT_AVAILABLE")
         with connect(path) as db:
             row = db.execute(
                 "SELECT payload_json FROM step_outputs WHERE run_id=? AND step_id=? AND attempt_id=? AND name='data'",
-                (run_id, step_id, attempts[0]["attempt_id"]),
+                (attempt["run_id"], attempt["step_id"], attempt_id),
             ).fetchone()
         if row is None:
             raise TaskError("OUTPUT_NOT_AVAILABLE")

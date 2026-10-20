@@ -58,6 +58,39 @@ class TaskSequenceTests(CoreFixture):
         self.assertEqual(self.app.sequences.start(saved["sequence_id"], "request-chain", {})["sequence_run_id"], started["sequence_run_id"])
         self.assertEqual(len(self.app.sequences.run_list()), 1)
 
+    def test_controlled_child_projects_each_iteration_into_next_task(self):
+        first = self.task()
+        source = self.step(first, bindings={"items": {"literal": [1, 2]}})
+        visit = self.step(first, bindings={"value": {"ref": {"source": "loop", "node_id": "each",
+                                                              "field": "item", "pointer": ""}}})
+        for step in (source, visit):
+            self.app.confirm_step_manual(step["step_id"], step["content_hash"])
+        flow = {"version": 2, "root": {"id": "root", "kind": "sequence", "children": [
+            {"id": source["step_id"], "kind": "action", "step_id": source["step_id"]},
+            {"id": "each", "kind": "foreach", "items": {"ref": {"source": "step",
+                "step_id": source["step_id"], "pointer": "/items"}},
+             "body": {"id": "body", "kind": "sequence", "children": [
+                 {"id": visit["step_id"], "kind": "action", "step_id": visit["step_id"]}]}}
+        ]}}
+        self.app.repo.tasks.save_flow(first, flow, self.app.repo.tasks.definition_hash(first))
+        self.app.repo.tasks.confirm_flow(first, self.app.repo.tasks.definition_hash(first))
+        second = self.app.repo.create_task("Receiver", {"type": "object", "properties": {
+            "items": {"type": "array", "items": {"type": "integer"}}}, "required": ["items"]})["task_id"]
+        receive = self.step(second, bindings={"items": {"ref": {"source": "task", "pointer": "/items"}}})
+        self.app.confirm_step_manual(receive["step_id"], receive["content_hash"])
+        nodes = [
+            {"node_id": "a", "task_id": first, "environment_id": None, "inputs": {}, "step_inputs": {}},
+            {"node_id": "b", "task_id": second, "environment_id": None,
+             "inputs": {"items": {"kind": "output", "node_id": "a", "step_id": visit["step_id"],
+                                  "output": "data", "pointer": "", "loop_node_id": "each",
+                                  "item_pointer": "/value"}}, "step_inputs": {}},
+        ]
+        saved = self.app.sequences.save("Controlled source", nodes, {"type": "object"})
+        done = self._wait(self.app.sequences.start(saved["sequence_id"], "controlled-child", {})["sequence_run_id"])
+        self.assertEqual(done["status"], "SUCCEEDED", done)
+        self.assertEqual(self.app.runs.output(done["nodes"][1]["run_id"], receive["step_id"]),
+                         {"items": [1, 2]})
+
     def test_missing_output_blocks_without_creating_next_child(self):
         first, first_step = self._task("First")
         second, _ = self._task("Second")

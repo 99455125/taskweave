@@ -26,6 +26,15 @@ class TaskUseCases:
         return self.tasks.create_task(name, input_schema, description)
 
     def get(self, task_id) -> TaskRecord: return self.tasks.task(task_id)
+    def flow(self, task_id): return self.tasks.flow(task_id)
+    def describe_flow(self, task_id):
+        return {"flow": self.tasks.flow(task_id),
+                "definition_hash": self.tasks.definition_hash(task_id),
+                "confirmed": self.tasks.flow_is_confirmed(task_id)}
+    def save_flow(self, task_id, flow, expected_hash):
+        return self.tasks.save_flow(task_id, flow, expected_hash)
+    def confirm_flow(self, task_id, expected_hash):
+        return self.tasks.confirm_flow(task_id, expected_hash)
     def list(self) -> list[TaskRecord]: return self.tasks.list_tasks()
     def update(self, task_id, name, input_schema, description=""):
         return self.tasks.update_task(task_id, name, input_schema, description)

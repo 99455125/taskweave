@@ -301,6 +301,25 @@ CREATE INDEX sequence_nodes_task ON sequence_run_nodes(task_id);
 
 CONTROL_V19 = "ALTER TABLE sequence_runs ADD COLUMN cleanup_json TEXT;"
 CONTROL_V20 = "ALTER TABLE sequence_runs ADD COLUMN control_command_json TEXT;"
+CONTROL_V21 = """
+ALTER TABLE tasks ADD COLUMN flow_validation_state TEXT NOT NULL DEFAULT 'VALIDATED'
+ CHECK(flow_validation_state IN ('DRAFT','VALIDATED'));
+ALTER TABLE tasks ADD COLUMN flow_verified_hash TEXT;
+"""
+CONTROL_V22 = """
+ALTER TABLE task_runs ADD COLUMN flow_cursor_json TEXT;
+CREATE TABLE flow_instances (
+ instance_no INTEGER PRIMARY KEY AUTOINCREMENT,
+ run_id TEXT NOT NULL REFERENCES task_runs(run_id) ON DELETE CASCADE,
+ execution_path TEXT NOT NULL, node_id TEXT NOT NULL,
+ kind TEXT NOT NULL CHECK(kind IN ('sequence','action','if','foreach','loop','iteration','control')),
+ status TEXT NOT NULL, parent_path TEXT,
+ payload_json TEXT NOT NULL DEFAULT '{}', attempt_id TEXT,
+ error_code TEXT, created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+ UNIQUE(run_id,execution_path)
+);
+CREATE INDEX flow_instances_run_order ON flow_instances(run_id,instance_no);
+"""
 
 
 def migrate(db, path, target, migrations):
@@ -341,8 +360,8 @@ def initialize(path, name):
         migrate(
             db,
             path,
-            20 if name == "control" else 2,
-            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8, 9: CONTROL_V9, 10: CONTROL_V10, 11: CONTROL_V11, 12: CONTROL_V12, 13: CONTROL_V13, 14: CONTROL_V14, 15: CONTROL_V15, 16: CONTROL_V16, 17: CONTROL_V17, 18: CONTROL_V18, 19: CONTROL_V19, 20: CONTROL_V20},
+            22 if name == "control" else 2,
+            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8, 9: CONTROL_V9, 10: CONTROL_V10, 11: CONTROL_V11, 12: CONTROL_V12, 13: CONTROL_V13, 14: CONTROL_V14, 15: CONTROL_V15, 16: CONTROL_V16, 17: CONTROL_V17, 18: CONTROL_V18, 19: CONTROL_V19, 20: CONTROL_V20, 21: CONTROL_V21, 22: CONTROL_V22},
         )
 
 

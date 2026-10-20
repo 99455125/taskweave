@@ -3,7 +3,8 @@
 import asyncio
 import json
 
-from taskweave.core.task_package import FORMAT, ORIGINS, VALIDATION_STATES, TASK_PACKAGE_SCHEMA
+from taskweave.core.task_package import FORMAT, FORMAT_V3, ORIGINS, VALIDATION_STATES, TASK_PACKAGE_SCHEMA, TASK_PACKAGE_SCHEMA_V3
+from taskweave.core.task_flow import is_linear_flow, normalize_flow, remap_step_ids
 from taskweave.core.validation import (
     TaskError, check_bindings, check_schema, normalize_step,
 )
@@ -53,22 +54,30 @@ def export_task(tasks, steps_repository, step_contexts, task_id):
         "steps": entries,
         "contexts": context_groups,
     }
+    flow = tasks.flow(task_id)
+    if not is_linear_flow(flow):
+        result["format"] = FORMAT_V3
+        result["flow"] = remap_step_ids(flow, keys)
+        result["flow_validation_state"] = task["flow_validation_state"]
     return result
 
 
 def validate_task_package(registry, authoring, package, *, expected_origin=None):
     """Validate and normalize a package without writing or executing anything."""
-    if not isinstance(package, dict) or package.get("format") != FORMAT:
+    if not isinstance(package, dict) or package.get("format") not in {FORMAT, FORMAT_V3}:
         if isinstance(package, dict) and package.get("format") == "taskweave-task-1":
             raise TaskError("TASK_PACKAGE_INVALID", "旧任务包不再兼容，请使用当前版本重新导出")
-        raise TaskError("TASK_PACKAGE_INVALID", f"需要 {FORMAT} 任务 JSON")
-    if set(package) not in ({"format", "origin", "task", "steps"}, {"format", "origin", "task", "steps", "contexts"}):
+        raise TaskError("TASK_PACKAGE_INVALID", f"需要 {FORMAT} 或 {FORMAT_V3} 任务 JSON")
+    expected_keys = {"format", "origin", "task", "steps"}
+    if package["format"] == FORMAT_V3:
+        expected_keys |= {"flow", "flow_validation_state"}
+    if set(package) not in (expected_keys, expected_keys | {"contexts"}):
         raise TaskError("TASK_PACKAGE_INVALID", "任务包顶层字段无效")
     if package.get('contexts') and package.get('origin') != 'task_export':
         raise TaskError('TASK_PACKAGE_INVALID', '只有任务导出包可以包含上下文组')
     from taskweave.core.validation import validate
     try:
-        validate(package, TASK_PACKAGE_SCHEMA)
+        validate(package, TASK_PACKAGE_SCHEMA_V3 if package["format"] == FORMAT_V3 else TASK_PACKAGE_SCHEMA)
     except TaskError as exc:
         raise TaskError("TASK_PACKAGE_INVALID", str(exc)) from exc
     origin = package.get("origin")
@@ -126,6 +135,14 @@ def validate_task_package(registry, authoring, package, *, expected_origin=None)
         })
         preceding.add(entry["key"])
     normalized_contexts=[]
+    normalized_flow = None
+    if package["format"] == FORMAT_V3:
+        if origin == "ai_generated" and package["flow_validation_state"] != "DRAFT":
+            raise TaskError("TASK_PACKAGE_INVALID", "AI 生成流程只能为 DRAFT")
+        try:
+            normalized_flow = normalize_flow(package["flow"], [{"step_id": entry["key"]} for entry in normalized])
+        except TaskError as exc:
+            raise TaskError("TASK_PACKAGE_INVALID", f"流程定义无效：{exc}") from exc
     for index, group in enumerate(package.get('contexts', [])):
         if not isinstance(group,dict) or set(group)!={'step_key','provider_id','name','context_notes','order_index','captures'} or group['step_key'] not in preceding or not isinstance(group['captures'],list):
             raise TaskError('TASK_PACKAGE_INVALID',f'contexts[{index}] 结构无效')
@@ -138,7 +155,7 @@ def validate_task_package(registry, authoring, package, *, expected_origin=None)
             captures.append({key:capture[key] for key in ('label','request','items','views','include_view','captured_at','source_page','operation_notes','send_preview') if key in capture})
         normalized_contexts.append({**group,'captures':captures})
     result = {
-        "format": FORMAT,
+        "format": package["format"],
         "origin": origin,
         "task": {
             "name": task["name"].strip(),
@@ -150,6 +167,9 @@ def validate_task_package(registry, authoring, package, *, expected_origin=None)
     }
     if 'contexts' in package:
         result['contexts'] = normalized_contexts
+    if normalized_flow is not None:
+        result['flow'] = normalized_flow
+        result['flow_validation_state'] = package['flow_validation_state']
     return result
 
 
@@ -171,6 +191,11 @@ def import_task(tasks, steps_repository, step_contexts, uow, registry, authoring
                 mapping[entry["key"]] = saved["step_id"]
                 saved_steps.append((entry, saved))
             step_ids={entry['key']:saved['step_id'] for entry,saved in saved_steps}
+            if checked['format'] == FORMAT_V3:
+                flow = remap_step_ids(checked['flow'], step_ids)
+                tasks.save_flow(created['task_id'], flow, tasks.definition_hash(created['task_id']))
+                if checked['flow_validation_state'] == 'VALIDATED':
+                    tasks.confirm_flow(created['task_id'], tasks.definition_hash(created['task_id']))
             for group in checked.get('contexts',[]):
                 target_step=step_ids[group['step_key']]
                 saved_group=step_contexts.create_step_context_group(target_step,group['provider_id'],group['name'],group['context_notes'])

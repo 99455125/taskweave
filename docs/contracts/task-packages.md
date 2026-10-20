@@ -1,22 +1,23 @@
 # 任务包
 
-现行格式为`taskweave-task-2`，Schema在[core/task_package.py](../../src/taskweave/core/task_package.py)，规范化、验证与导入在[application/task_transfer.py](../../src/taskweave/application/task_transfer.py)。
+线性任务导出`taskweave-task-2`，包含控制节点的任务导出`taskweave-task-3`。Schema在[core/task_package.py](../../src/taskweave/core/task_package.py)，规范化、验证与导入在[application/task_transfer.py](../../src/taskweave/application/task_transfer.py)。两种格式均可导入。
 
 ## 外层结构
 
 | 字段 | 约束 |
 | --- | --- |
-| format | 固定taskweave-task-2 |
+| format | 线性任务为taskweave-task-2；结构化流程为taskweave-task-3 |
 | origin | task_export或ai_generated |
 | task | name、description、input_schema |
 | steps | 最多1000项；每项key、validation_state、document |
+| flow、flow_validation_state | 仅v3；流程树动作通过步骤key关联，导入时映射为新身份 |
 | contexts | 可选；只有task_export来源可以携带上下文组 |
 
 步骤document遵守[步骤契约](steps.md)，导出包包含完整字段；validation_state取DRAFT或VALIDATED，实际确认还须依据内容、来源和运行时验证规则。顶层和步骤定义不接纳任意未知字段。
 
 ## 身份与材料
 
-导出把真实步骤ID改成包内key，步骤绑定同步改写；导入建立新任务/步骤ID，再映射前序引用。不能保留指向原任务的运行身份。上下文组通过step_key关联，保留有序采集项、request、items/views、操作说明和send_preview；旧包缺可选材料字段按实现默认值处理。
+导出把真实步骤ID改成包内key，步骤绑定及v3流程树引用同步改写；导入建立新任务/步骤ID，再映射引用。不能保留指向原任务的运行身份。上下文组通过step_key关联，保留有序采集项、request、items/views、操作说明和send_preview；旧包缺可选材料字段按实现默认值处理。
 
 任务包不包含本地环境、秘密引用配置、运行/尝试历史或活跃资源。AI生成包不能冒充带原始采集材料的完整导出包。v1包明确拒绝，需要用现行版本重新导出，不静默猜测转换。
 

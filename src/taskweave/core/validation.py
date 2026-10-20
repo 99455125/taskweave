@@ -238,7 +238,7 @@ def check_bindings(bindings, preceding):
         if set(binding) != {"ref"} or not isinstance(binding["ref"], dict):
             raise TaskError("BINDING_INVALID")
         ref = binding["ref"]
-        if ref.get("source") not in {"task", "step", "environment"}:
+        if ref.get("source") not in {"task", "step", "environment", "loop", "branch"}:
             raise TaskError("BINDING_INVALID")
         p = ref.get("pointer")
         if (
@@ -251,6 +251,12 @@ def check_bindings(bindings, preceding):
             raise TaskError(
                 "FORWARD_REFERENCE", "References must target preceding steps"
             )
+        if ref["source"] == "loop" and (not isinstance(ref.get("node_id"), str)
+                                            or ref.get("field") not in {"item", "index", "state"}):
+            raise TaskError("BINDING_INVALID")
+        if ref["source"] == "branch" and (not isinstance(ref.get("node_id"), str)
+                                              or not isinstance(ref.get("output"), str)):
+            raise TaskError("BINDING_INVALID")
 
 
 def resolve(bindings, task_inputs, environment, read_output):
