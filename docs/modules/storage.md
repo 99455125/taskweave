@@ -1,31 +1,36 @@
-# 存储、事务与环境
+# 存储、环境与设置
 
-本地 SQLite 与任务文件管理；环境为用户配置来源，不写操作系统环境变量。
+## 持久化布局
 
-## 当前行为与约束
+工作空间由CLI --home、TASKWEAVE_HOME或平台默认位置选择；默认路径见[运行指南](../deployment.md)。
 
-- 工作空间总库为 `taskweave.db`，任务业务库为 `tasks/<task_id>/data.db`；文件按任务/运行作用域管理。路径以 Store 与相关仓储实现为准，不沿用旧项目路径。
-- 控制库当前 v17；v15 为规划生成到任务的导入收据并回填旧 `imported_task_id`，v16 为任务/规划本地收藏与共享单层分类。迁移与备份在 sqlite_storage.py，当前建表资源在 infrastructure/sql/。旧历史设计 DDL 不能直接当作现行 schema。
-- 仓储分别管理任务、步骤、环境、运行、结果、步骤上下文、规划、规划上下文、生成记录及本地收藏分类；共同使用 SQLite UoW，组合操作绑定同一事务，线程间不能串用连接。
-- 嵌套异常与复制/导入失败不得留下部分记录。任务库、控制库及文件系统不具备跨介质原子事务，恢复须按尝试标记与结果证据处理，不推断外部动作必然失败。
-- 环境可设默认，可保存变量与说明，也允许本地普通密钥值；env: 引用仍兼容。模型提示与日志的隐私处理另有边界。
-- 输入优先级为环境 < 任务默认/运行输入 < 步骤 schema 默认 < 显式步骤绑定或独立试跑输入 < 本次 step_inputs；封闭 schema 过滤未声明变量。
-- 删除环境保留运行历史的展示信息；正在使用的资源/运行须遵守占用检查。删除默认环境需清除默认设置。
-- 清理只作用于指定任务/运行；不得顺带删除其他任务、用户配置或公共服务日志。
-- 导入收据的 `task_id` 保留为历史文本而不外键到任务；删任务不删收据。分类外键删除时仅置空关联。
+| 路径 | 数据归属 |
+| --- | --- |
+| `taskweave.db` | 控制库：任务/步骤、环境、运行/尝试、引用/事件/回执/租约、规划/采集/生成、分类收藏 |
+| `tasks/<task_id>/data.db` | 任务业务数据、输出与结果回执、插件表结构版本 |
+| `tasks/<task_id>/` | 该任务的文件结果及相关本地文件 |
+| `plans/` | 规划请求、回复与冻结材料等本地文件 |
+| `plugins.json` | 当前工作空间显式启用的插件 |
+| `workbench.json` | 工作台、模型请求预算、默认环境、隐私及执行容量等设置 |
+| `model.json` | 桌面模型连接配置 |
+| `exports/` | 用户显式导出的任务包和规划提示 |
 
-低层 `SQLiteStorage` 不构造仓储；组合入口只装配一套仓储与共享UoW。`Repository.from_storage` 和 `PlanRepository(repositories=...)` 复用该集合；旧Store与旧导入路径保留显式兼容，正常用例通过语义仓储端口访问。
+数据库名/路径由[SQLiteStorage](../../src/taskweave/infrastructure/sqlite_storage.py)及对应结果/规划实现确定。控制库现行17、任务库2；sql/中的文件是初始DDL，最新结构还必须叠加sqlite_storage.py迁移，不能把初始user_version当作现行版本。
 
-环境界面的编辑草稿和离开决策位于presentation/environment.py；保存仍通过既有environment.save用例，环境秘密引用和默认选择语义保持。
+## 边界与一致性
 
-## 代码入口
+SQLiteStorage提供连接、迁移、路径及SQLiteUnitOfWork，不构造领域仓储。build_sqlite_repositories装配十个语义仓储；同一UoW事务中的组合操作共享连接。跨控制库、任务库与文件不能假定全局原子性，必须保留回执、引用、恢复和文件清理规则。
 
-[仓储端口](../../src/taskweave/core/repositories.py)、[SQLite 装配](../../src/taskweave/infrastructure/repositories/__init__.py)、[UoW](../../src/taskweave/infrastructure/unit_of_work.py)、[存储与迁移](../../src/taskweave/infrastructure/sqlite_storage.py)、[旧Store兼容](../../src/taskweave/infrastructure/storage.py)、[控制库 SQL](../../src/taskweave/infrastructure/sql/control.sql)、[任务库 SQL](../../src/taskweave/infrastructure/sql/task-data.sql)、[环境用例](../../src/taskweave/application/environments.py)。
+迁移对已识别版本先备份再事务升级，更新PRAGMA user_version；过新或未知数据库报错。Store、Repository、PlanRepository是兼容适配，正常新消费者直接依赖规范存储/仓储接口，不通过通用SQL绕开用例。
 
-## 验证入口
+## 环境与设置
 
-`shared.storage`、相应 `repository.*`、`application.environments`、`ui.environments`。共享 SQL/UoW 变化用 changed dry-run 检查消费者；关注回滚、线程隔离、外键、旧库迁移和清理边界。只用临时数据库验证，不修改用户真实数据。关联：[执行](execution.md)、[上下文](contexts.md)。
+EnvironmentUseCases管理公共配置、`env:NAME`秘密引用及变量说明；秘密在本机解析。保存入口不保证普通字符串秘密自动加密，隐私脱敏与本地存储是不同机制。环境被运行、规划或资源会话使用时，删除需服从依赖约束。
 
-## 按需深入
+ApplicationSettings管理默认环境、模型、隐私、执行容量和工作空间迁移；迁移校验目标并遵守实例占用条件。工作空间位置切换与源数据移除有既定顺序，不能用复制文件代替正式用例。桌面环境/设置草稿分别由EnvironmentSession和SettingsSession拥有，平台窗口/文件动作仍在desktop。
 
-[存储迁移与结果](../reference/persistence-results.md)、[API与本地配置](../reference/api-and-configuration.md)。只在本次修改涉及相应契约时阅读。
+## 代码与验证
+
+[装配](../../src/taskweave/infrastructure/repositories/__init__.py)、[UoW](../../src/taskweave/infrastructure/unit_of_work.py)、[环境](../../src/taskweave/application/environments.py)、[设置](../../src/taskweave/application/settings.py)。
+
+测试键shared.storage、repository.environments、application.environments、ui.settings；检查迁移版本、事务回滚、孤立结果/文件清理、环境秘密引用、活动依赖、迁移失败与原配置保护。配置字段见[配置契约](../contracts/configuration.md)。

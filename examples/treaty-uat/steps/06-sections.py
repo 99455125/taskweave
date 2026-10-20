@@ -1,0 +1,100 @@
+async def run(ctx, inputs):
+    async def field(field_id):
+        snapshot = await ctx.call("playwright.page_inspect", {"scope": "full_page", "role": "operator"})
+        matches = [e for e in snapshot["elements"] if e.get("id") == field_id and e.get("visible")]
+        if len(matches) != 1 or not matches[0].get("preferred_selector"):
+            raise ValueError("当前页面字段不唯一或没有验证过的定位器：" + field_id)
+        return matches[0]
+
+    async def fill_field(field_id, value):
+        element = await field(field_id)
+        selector = element["preferred_selector"]
+        await ctx.call("playwright.page_fill", {"selector": selector, "value": str(value), "role": "operator"})
+        await ctx.call("playwright.page_press", {"selector": selector, "key": "Tab", "role": "operator"})
+        if isinstance(value, (int, float)):
+            actual = await ctx.call("playwright.page_input_value", {"selector": selector, "role": "operator"})
+            if float(actual["value"].replace(",", "")) != float(value):
+                raise ValueError("数值字段回读不一致：" + field_id)
+        else:
+            await ctx.call("playwright.page_assert_value", {"selector": selector, "value": str(value), "role": "operator"})
+
+    async def select_field(field_id, value):
+        element = await field(field_id)
+        selector = element["preferred_selector"]
+        if field_id == "insuranceTypeCodes":
+            selected = await ctx.call("playwright.page_text", {"selector": element["ancestor_chain"][3]["selector"], "role": "operator"})
+            if str(value) in selected["text"]:
+                return
+        controls = element.get("attributes", {}).get("aria-controls")
+        if not controls:
+            raise ValueError("字段未提供下拉列表标识：" + field_id)
+        ancestors = element.get("ancestor_chain", [])
+        if len(ancestors) < 2:
+            raise ValueError("字段缺少实际选择控件范围：" + field_id)
+        if element.get("attributes", {}).get("aria-expanded") != "true":
+            await ctx.call("playwright.page_click", {"selector": ancestors[3 if field_id == "insuranceTypeCodes" else 1]["selector"], "role": "operator"})
+        root_selector = "[id='" + controls + "']"
+        root_state = await ctx.call("playwright.page_state", {"selector": root_selector, "role": "operator"})
+        matches = []
+        for root_index in range(root_state["match_count"]):
+            observed = await ctx.call("playwright.page_inspect", {"selector": {"kind": "css", "value": root_selector, "nth": root_index}, "include_ancestors": True, "include_descendants": True, "depth": 6, "max_nodes": 100, "role": "operator"})
+            for ancestor in observed["dom"]["ancestors"][:3]:
+                tree = await ctx.call("playwright.page_inspect", {"selector": ancestor["selector"], "include_descendants": True, "depth": 6, "max_nodes": 300, "role": "operator"})
+                queue = [tree["dom"]["root"]]
+                while queue:
+                    node = queue.pop(0)
+                    queue.extend(node.get("children", []))
+                    if node.get("visible") and "ant-select-item-option" in node.get("attributes", {}).get("class", "") and "ant-select-item-option-content" not in node.get("attributes", {}).get("class", "") and node.get("name") == str(value):
+                        matches.append(node)
+                if matches:
+                    break
+            if matches:
+                break
+        if len(matches) != 1 or not matches[0].get("preferred_selector"):
+            raise ValueError("没有唯一实际下拉选项：" + str(value))
+        await ctx.call("playwright.page_click", {"selector": matches[0]["preferred_selector"], "role": "operator"})
+        current = await field(field_id)
+        await ctx.call("playwright.page_press", {"selector": current["preferred_selector"], "key": "Escape", "role": "operator"})
+        current = await field(field_id)
+        displayed = await ctx.call("playwright.page_text", {"selector": current["ancestor_chain"][3 if field_id == "insuranceTypeCodes" else 1]["selector"], "role": "operator"})
+        if str(value) not in displayed["text"]:
+            raise ValueError("下拉字段没有显示所选值：" + field_id)
+
+    sections = inputs["sections"]
+    if len(sections) != 2:
+        raise ValueError("本 Demo 须录入两个分项")
+    categories = []
+    for index, section in enumerate(sections):
+        tabs = await ctx.call("playwright.page_list", {"selector": {"kind": "role", "value": "tab"}, "role": "operator"})
+        if tabs["total_count"] > len(sections) or tabs["truncated"]:
+            raise ValueError("已有分项数量超出本次录入范围")
+        if tabs["total_count"] == index:
+            await ctx.call("playwright.page_click", {"selector": {"kind": "role", "value": "button", "name": "Add tab", "exact": True}, "role": "operator"})
+        await ctx.call("playwright.page_assert_state", {"selector": {"kind": "role", "value": "tab", "nth": index}, "expected": {"count": 1, "visible": True}, "role": "operator"})
+        await ctx.call("playwright.page_click", {"selector": {"kind": "role", "value": "tab", "nth": index}, "role": "operator"})
+        await fill_field("sectionType", section["category"])
+        for insurance_type in section["insurance_types"]:
+            await select_field("insuranceTypeCodes", insurance_type)
+        await select_field("sumInsuredCurrency", section["currency"])
+        await fill_field("maxLimits", section["maximum_limit"])
+        await select_field("commissionType", section["commission_type"])
+        if section["commission_type"] == "固定费率":
+            await fill_field("commisionRate", section["fixed_commission_rate"])
+        elif section["commission_type"] == "浮动费率":
+            await fill_field("commisionRate", section["advance_commission_rate"])
+            await fill_field("maxCommissionRate", section["commission_upper_limit"])
+            await fill_field("minCommissionRate", section["commission_lower_limit"])
+        else:
+            raise ValueError("未观察到的手续费类型")
+        if inputs["treaty_type"] != "成数合约":
+            for field_id, key in [("lines", "surplus_lines"), ("maxNetRetention", "maximum_net_retention"), ("maxGrossRetention", "maximum_gross_retention"), ("cessionShareRate", "quota_ceded_share_percent"), ("cessionCapacity", "ceded_underwriting_capacity")]:
+                await fill_field(field_id, section[key])
+        snapshot = await ctx.call("playwright.page_inspect", {"scope": "full_page", "role": "operator"})
+        radios = [e for e in snapshot["elements"] if e.get("type") == "radio" and e.get("name") == ("是" if section["loss_sharing"] else "否") and any(a.get("id") == "lossSharingFlag" for a in e.get("ancestor_chain", []))]
+        if len(radios) != 1 or not radios[0].get("preferred_selector"):
+            raise ValueError("当前分项损失分摊选项不唯一")
+        await ctx.call("playwright.page_check", {"selector": radios[0]["preferred_selector"], "checked": True, "role": "operator"})
+        await ctx.call("playwright.page_assert_checked", {"selector": radios[0]["preferred_selector"], "checked": True, "role": "operator"})
+        actual = await ctx.call("playwright.page_input_value", {"selector": (await field("sectionType"))["preferred_selector"], "role": "operator"})
+        categories.append(actual["value"])
+    return ctx.result(data={"section_count": len(categories), "section_categories": categories})

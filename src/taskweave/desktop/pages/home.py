@@ -287,8 +287,6 @@ class HomePage(Page):
                     {"name": "summary", "label": "结果摘要", "field": "summary", "align": "left"},
                 ]
                 ui.table(columns=columns, rows=result_rows, row_key="run_id").props("flat").classes("tw-home-results w-full")
-                latest = recent_results[0]
-                self.button("查看查询结果", lambda rid=latest["run_id"]: self.actions.open_execution(rid), flat=True, icon="open_in_new")
             else:
                 ui.label("暂无已完成结果").classes("tw-home-empty")
 

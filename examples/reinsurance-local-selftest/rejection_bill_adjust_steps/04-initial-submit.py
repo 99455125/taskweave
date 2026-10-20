@@ -1,0 +1,128 @@
+async def run(ctx, inputs):
+    async def authenticate(role, account_key, expected_account):
+        # Existing local credentials stay outside portable task packages and outputs.
+        credentials = await ctx.call("file.read", {
+            "path": inputs["credentials_path"], "format": "json", "max_bytes": 65536
+        })
+        ui = credentials["content"]["ui"]
+        if ui["url"] != "http://localhost:9877/login":
+            raise ValueError("凭据仅允许用于交接指定的本地登录地址")
+        account = ui["accounts"][account_key]
+        if account != expected_account or not ui["sharedPassword"]:
+            raise ValueError("交接账号或已有密码不完整")
+        current=await ctx.call("playwright.page_inspect",{"role":role})
+        if current["url"].startswith("http://localhost:9877/") and not current["url"].endswith("/login"):
+            await ctx.call("playwright.page_assert_text",{"selector":"body","text":"用户名称"+account,"role":role})
+            await ctx.call("playwright.page_assert_text",{"selector":"body","text":"中文","role":role})
+            return
+        await ctx.call("playwright.page_open", {"url": ui["url"], "role": role})
+        await ctx.call("playwright.page_assert_state", {
+            "selector": "#username", "expected": {"count": 1, "visible": True}, "role": role
+        })
+        placeholder=await ctx.call("playwright.page_attribute",{"selector":"#username","name":"placeholder","role":role})
+        if placeholder["value"]!="请输入用户名":
+            await ctx.call("playwright.page_click",{"selector":"#root > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1) > div:nth-of-type(1)","role":role})
+            option={"kind":"role","value":"option","name":"中文","exact":True}
+            await ctx.call("playwright.page_assert_state",{"selector":option,"expected":{"count":1,"visible":True},"role":role})
+            await ctx.call("playwright.page_click",{"selector":option,"role":role})
+        placeholder=await ctx.call("playwright.page_attribute",{"selector":"#username","name":"placeholder","role":role})
+        if placeholder["value"]!="请输入用户名":raise ValueError("登录页尚未切换中文")
+        await ctx.call("playwright.page_fill", {"selector": "#username", "value": account, "role": role})
+        await ctx.call("playwright.page_fill", {"selector": "#password", "value": ui["sharedPassword"], "role": role})
+        # Local handoff explicitly disables image verification; never reuse this for UAT.
+        await ctx.call("playwright.page_fill", {"selector": "#verifyCode", "value": str(ui["captcha"]), "role": role})
+        await ctx.call("playwright.page_click", {
+            "selector": {"kind": "role", "value": "button", "name": "登 录", "exact": True}, "role": role
+        })
+        await ctx.call("playwright.page_assert_state", {
+            "selector": "#emailOrTokenVerifyCode", "expected": {"count": 1, "visible": True}, "role": role
+        })
+        await ctx.call("playwright.page_fill", {
+            "selector": "#emailOrTokenVerifyCode", "value": str(ui["emailCode"]), "role": role
+        })
+        await ctx.call("playwright.page_click", {
+            "selector": {"kind": "role", "value": "button", "name": "确 认", "exact": True}, "role": role
+        })
+        await ctx.call("playwright.page_assert_url", {"url": "http://localhost:9877/Home", "role": role})
+        await ctx.call("playwright.page_assert_text", {"selector": "body", "text": "用户名称" + account, "role": role})
+    async def choose_payment_date(value):
+        stable=".ant-picker-dropdown:not(.ant-picker-dropdown-hidden):not([class*='-appear']):not([class*='-enter']):not([class*='-leave'])"
+        await ctx.call("playwright.page_click",{"selector":"#paymentDate","role":"cedant"})
+        target=int(value[:4])*12+int(value[5:7])
+        cell=stable+" td.ant-picker-cell-in-view[title='"+value+"']"
+        for calendar_attempt in range(24):
+            await ctx.call("playwright.page_wait",{"selector":stable,"state":"visible","role":"cedant"})
+            state=await ctx.call("playwright.page_state",{"selector":cell,"role":"cedant"})
+            if state["match_count"]==1 and state["visible"]:
+                await ctx.call("playwright.page_click",{"selector":cell,"role":"cedant"})
+                await ctx.call("playwright.page_assert_value",{"selector":"#paymentDate","value":value,"role":"cedant"})
+                return
+            years=await ctx.call("playwright.page_list",{"selector":stable+" .ant-picker-year-btn","role":"cedant"})
+            months=await ctx.call("playwright.page_list",{"selector":stable+" .ant-picker-month-btn","role":"cedant"})
+            if years["total_count"]!=1 or months["total_count"]!=1:raise ValueError("计划结付日期不是实际单月日历，停止观察")
+            shown=int(years["items"][0]["text"].replace("年",""))*12+int(months["items"][0]["text"].replace("月",""))
+            if shown==target:raise ValueError("计划结付日当前月份目标日期不存在，停止观察")
+            button=".ant-picker-header-prev-btn" if target<shown else ".ant-picker-header-next-btn"
+            await ctx.call("playwright.page_click",{"selector":stable+" "+button+":visible","role":"cedant"})
+        raise ValueError("计划结付日期超出有界翻页范围")
+    role="cedant"
+    master=await ctx.call("tidb.query",{"sql":"SELECT id,treaty_id,record_no,treaty_statement_type,former_platform_statement_no,statement_status,comment FROM ri_statement WHERE id=%s AND input_org_code='000050' AND is_deleted='N'","params":[inputs["statement_id"]],"max_rows":2,"title":"本轮账单主表提交防重"})
+    if master["truncated"] or master["row_count"]!=1 or master["rows"][0]["comment"]!="仅供本地自测 "+inputs["bill_label"]:raise ValueError("本轮账单主表或备注标识不符")
+    if (master["rows"][0]["treaty_statement_type"],master["rows"][0]["former_platform_statement_no"])!=("31","000050-2026PT00011-SOA0001"):raise ValueError("本轮31原AB引用不符")
+    if master["rows"][0]["treaty_id"]!=325094:raise ValueError("本笔31基础合约归属不符")
+    master_status=master["rows"][0]["statement_status"]
+    if master_status!=0:raise ValueError("本笔账单已经提交或离开草稿，先只读核对原运行，禁止重复提交")
+    if master["rows"][0]["record_no"] is not None:raise ValueError("本笔31主表record_no应为空，先核对当前版本")
+    async def current(check_draft_ids):
+        data=await ctx.call("tidb.query",{"sql":"SELECT id,statement_id,platform_statement_no,statement_status,net_balance,input_org_code,enter_org_code,biz_id,parent_id,treaty_reinsurer_id,former_statement_normal_id,currency,cedent_statement_no FROM ri_statement_normal WHERE statement_id=%s AND is_deleted='N' ORDER BY id","params":[inputs["statement_id"]],"max_rows":10,"title":"本轮账单提交状态"})
+        rows=data["rows"]
+        if data["truncated"] or data["row_count"]!=2 or (check_draft_ids and [r["id"] for r in rows]!=[r["id"] for r in inputs["expected_normals"]]):raise ValueError("总账单明细版本变化，重新核对当前记录，不重复提交")
+        if [(r["input_org_code"],r["enter_org_code"]) for r in rows]!=[("000050","000053"),("000053","000045")]:raise ValueError("账单上下游关系不符")
+        if any(str(row["net_balance"])!=str(expected["net_balance"]) for row,expected in zip(rows,inputs["expected_normals"])):raise ValueError("本轮提交前后总账单金额变化")
+        if rows[0]["parent_id"] is not None or rows[1]["parent_id"]!=rows[0]["id"] or [r["treaty_reinsurer_id"] for r in rows]!=[10925281,10925282] or [str(r["former_statement_normal_id"]) for r in rows]!=["257312","257313"]:raise ValueError("本轮新旧总账单父子关系不符")
+        if any(r['currency']!='CNY' for r in rows) or [r['platform_statement_no'] for r in rows]!=['000050-2026PT00011-A001','000050-2026PT00011-A002'] or [r['cedent_statement_no'] for r in rows]!=[inputs['bill_label']+'-AB',inputs['bill_label']+'-BC']:raise ValueError('本轮31币种/平台号/机构编号变化，不提交')
+        return rows
+    async def verified_items(rows):
+        items=await ctx.call("tidb.query",{"sql":"SELECT object_id,item_code,item_amount,version FROM ri_statement_section_item WHERE object_type=0 AND object_id IN (%s,%s) AND is_deleted='N' ORDER BY object_id,item_code","params":[r["id"] for r in rows],"max_rows":20,"title":"本轮已保存科目和金额"})
+        expected=[(r["id"],i["code"],i["amount"]) for r in rows for i in inputs["expected_items"]]
+        if items["truncated"] or any(r["version"]!=1 for r in items["rows"]) or [(r["object_id"],r["item_code"],str(r["item_amount"])) for r in items["rows"]]!=expected:raise ValueError("已保存科目与本轮预期不符")
+        return items["rows"]
+    before=await current(master_status==0)
+    await verified_items(before)
+    resumed=False
+    recovery=None
+    jobs=await ctx.call("tidb.query",{"sql":"SELECT id,status FROM onchain_biz_job_info WHERE group_id=%s AND biz_no=%s AND job_task='TREATY_BILL_PROCESS' AND is_deleted='N' ORDER BY id","params":[inputs["statement_id"],inputs["initial_job_biz_no"]],"max_rows":2,"title":"本笔账单首次提交避免重复异步任务"})
+    if jobs["truncated"] or jobs["row_count"]:raise ValueError("本笔初始任务已存在，不重复提交")
+    watermark=await ctx.call("tidb.query",{"sql":"SELECT MAX(id) AS max_id FROM t_ri_gsc_onchain_record","max_rows":1,"title":"本笔账单初始提交前record水位"})
+    if watermark["truncated"] or watermark["row_count"]!=1:raise ValueError("本笔账单record水位读取不唯一")
+    ctx.log("本笔账单初始提交前record水位="+str(watermark["rows"][0]["max_id"]))
+    if not resumed:
+        await authenticate("cedant","cedent","000050")
+        await ctx.call("playwright.page_open",{"url":"http://localhost:9877/ContractBill/list/adjustBill_add?id="+str(inputs["statement_id"])+"&treatyCode="+inputs["platform_treaty_no"]+"&operation=add","role":role})
+        await ctx.call("playwright.page_assert_text",{"selector":"body","text":"用户名称000050","role":role})
+        await ctx.call("playwright.page_assert_url",{"url":"**/ContractBill/list/adjustBill_add?**id="+str(inputs["statement_id"])+"&**","role":role})
+        await ctx.call("playwright.page_assert_value",{"selector":"#cedentTreatyNo","value":inputs["platform_treaty_no"],"role":role})
+        await ctx.call("playwright.page_assert_value",{"selector":"#comment","value":"仅供本地自测 "+inputs["bill_label"],"role":role})
+        await choose_payment_date(inputs["payment_date"])
+        choice={"kind":"label","value":"本公司确认并提交至对手方","exact":True}
+        await ctx.call("playwright.page_assert_state",{"selector":choice,"expected":{"count":1,"visible":True,"enabled":True},"role":role,"timeout_ms":20000})
+        await ctx.call("playwright.page_check",{"selector":choice,"checked":True,"role":role})
+        await ctx.call("playwright.page_fill",{"selector":"#comments","value":"仅供本地自测 "+inputs["bill_label"]+" 分出方31首次提交","role":role})
+        await ctx.call("playwright.page_click",{"selector":{"kind":"role","value":"button","name":"提 交","exact":True},"role":role})
+        await ctx.call("playwright.page_assert_url",{"url":"http://localhost:9877/ContractBill/list","role":role,"timeout_ms":20000})
+    waiting=await ctx.call("process.run",{"executable":"/Users/xiaojuju/Projects/company/bjs/dev-environment/imports/verify-venv/bin/python","args":[inputs["wait_helper_path"],"--phase","initial","--before-job","0"],"timeout_seconds":45,"max_output_bytes":65536})
+    ctx.log("本笔首次账单上链只读等待="+waiting["stdout"])
+    if waiting["exit_code"]!=0 or waiting["stdout_truncated"] or waiting["stderr_truncated"]:raise ValueError("本笔初始任务尚未完成或回调不符；保留原任务，不重复提交或回放")
+    after=await current(False)
+    items=await verified_items(after)
+    role_states=await ctx.call("tidb.query",{"sql":"SELECT statement_normal_id,reinsurance_role,statement_status,org_code,first_operator FROM ri_statement_normal_state WHERE statement_normal_id IN (%s,%s) AND is_deleted='N' ORDER BY statement_normal_id,org_code","params":[r["id"] for r in after],"max_rows":10,"title":"本轮账单实际角色待确认状态"})
+    expected_states=[(after[0]["id"],"000050","01",3),(after[0]["id"],"000053","02",3),(after[1]["id"],"000045","02",0),(after[1]["id"],"000053","01",0)]
+    if role_states["truncated"] or [(r["statement_normal_id"],r["org_code"],r["reinsurance_role"],r["statement_status"]) for r in role_states["rows"]]!=expected_states:raise ValueError("实际角色状态尚未到修正经纪待确认；normal表状态不能代替角色状态")
+    if not after[0]["biz_id"] or not after[0]["platform_statement_no"]:raise ValueError("账单尚未进入修正经纪人待确认，保留当前提交结果继续核对")
+    core=await ctx.call("tidb.query",{"sql":"SELECT b.id AS parent_id,b.group_id AS parent_group,b.status AS parent_status,d.id AS detail_id,d.group_id AS detail_group,d.status,d.biz_no,d.onchain_business_id,d.biz_id,d.callback_result,d.onchain_times FROM onchain_biz_job_info b JOIN onchain_job_detail_info d ON d.biz_job_id=b.id AND d.is_deleted='N' WHERE b.group_id=%s AND b.biz_no=%s AND b.job_task='TREATY_BILL_PROCESS' AND b.is_deleted='N' ORDER BY b.id,d.id","params":[inputs["statement_id"],inputs["initial_job_biz_no"]],"max_rows":2,"title":"本笔唯一首次账单异步任务及实际回调"})
+    if core["truncated"] or core["row_count"]!=1:raise ValueError("本笔初始任务不唯一")
+    job=core["rows"][0]
+    if job["parent_group"]!=inputs["statement_id"] or job["detail_group"]!=inputs["statement_id"] or job["onchain_times"]!=1 or job["parent_status"]!=8 or job["status"]!=8 or job["callback_result"] not in ["成功","Success"] or job["onchain_business_id"]!=after[0]["id"] or job["biz_no"]!=after[0]["platform_statement_no"] or job["biz_id"]!=inputs["expected_biz_id"]:raise ValueError("本笔初始账单任务或实际成功回调不符")
+    payment=await ctx.call("tidb.query",{"sql":"SELECT payment_date FROM ri_statement WHERE id=%s AND is_deleted='N'","params":[inputs["statement_id"]],"max_rows":2,"title":"31提交后计划结付日期保存核对"})
+    if payment["truncated"] or payment["row_count"]!=1 or str(payment["rows"][0]["payment_date"])[:10]!=inputs["payment_date"]:raise ValueError("31计划结付日期未正确保存")
+    return ctx.result(data={"payment_date":inputs["payment_date"],"statement_id":inputs["statement_id"],"source_id":after[0]["id"],"platform_treaty_no":inputs["platform_treaty_no"],"bill_label":inputs["bill_label"],"normals":after,"role_states":role_states["rows"],"items":items,"initial_core_mock_job":job,"after_record_id":watermark["rows"][0]["max_id"],"scoped_recovery":recovery,"resumed_existing_submission":resumed,"cedant_review_levels":0,"boundary":"本地31业务Mock直接成功，分出方正常提交到经纪人待确认，BC仍草稿；不证明pangu record、真实上链或支付。"})

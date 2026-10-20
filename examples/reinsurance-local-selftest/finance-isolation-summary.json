@@ -1,0 +1,28 @@
+{
+  "scope": "固定本轮结算174791，本地数据接收Mock；不代表真实资金或链record",
+  "finance_loopback": "http://127.0.0.1:9706/",
+  "synthetic_balance": "CNY70000，仅050本轮付款账户，非真实余额",
+  "receipt_code": "0001",
+  "payment_completed": false,
+  "fx_limitation": "本地FX查询403；BJS现有逻辑回退1，非真实汇率",
+  "submit_tx_limitation": "旧Mock返回txId，消费者读取tx；历史已完成发起job/master tx_id为空，保留，不重放",
+  "confirm_tx": "owned-local-settlement-mock-709d055cd53e48fba29170f07503cd04",
+  "callback_wait": "只读固定夹具，30秒预算、1秒间隔；父/明细10继续等，8/8且code0完成；超时不重提",
+  "evidence_sources": [
+    {
+      "path": "/Users/xiaojuju/Projects/company/bjs/dev-environment/SELFTEST-HANDOFF-20261016-finance-isolation-runtime.json",
+      "sha256": "d3a2a21a11842826fab26b65726c89c88a1dedc23cc47311f3a757990119bc43",
+      "representation": "脱敏摘要；原完整文件在本机保留"
+    },
+    {
+      "path": "/Users/xiaojuju/Projects/company/bjs/dev-environment/SELFTEST-HANDOFF-20261016-synthetic-balance-verification.json",
+      "sha256": "c8aabd6934899476b47d58c0c853a7a7d0daeef2602f268749de440e145566ae",
+      "representation": "脱敏摘要；原完整文件在本机保留"
+    },
+    {
+      "path": "/Users/xiaojuju/Projects/company/bjs/dev-environment/SELFTEST-HANDOFF-20261016-settlement-tx-contract.json",
+      "sha256": "82f9ff755314384cde1705a25c7c200fc107bea407a21d8fadaa1fb5828715d6",
+      "representation": "脱敏摘要；原完整文件在本机保留"
+    }
+  ]
+}

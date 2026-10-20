@@ -1,0 +1,165 @@
+{
+  "platform_contract_number": "000050-2026PT00011",
+  "master_id": 325094,
+  "contract_suffix": "TW-LOCAL-QS-20261016013740",
+  "participants": [
+    10925280,
+    10925281,
+    10925282
+  ],
+  "actual_effect_runs": {
+    "cedant_submit": "6581e7ba-36b0-4eec-b5f3-54531657f212",
+    "broker_entry_submit": "bf5f6c32-f766-4f3f-95a2-aba240e07ae2",
+    "broker_audit_1": "4a047765-318d-4f91-b3b5-cdb23d31627c",
+    "broker_audit_2": "541f6ad7-1008-4afe-ba2b-ac3ac6d8e93b",
+    "reinsurer_confirm": "523b0a89-8faa-41a5-b1ed-7da0867b60e7",
+    "broker_secondary": "b70d7337-ea94-44dd-b2ca-dfc1d78f61f8",
+    "broker_secondary_audit_1": "aee1c1b7-e7e6-44f7-9a25-c5ae048d6bba",
+    "broker_secondary_audit_2": "169a4088-284d-46f5-93dc-6bdc8d3162bc"
+  },
+  "final_verification": {
+    "key": "TREATY-01",
+    "step_number": 11,
+    "step_id": "11f9f9ee-0359-42c8-9767-88dc561d444d",
+    "run_id": "9e857dcc-9ff2-4149-8a85-f834531e6dee",
+    "status": "SUCCEEDED",
+    "current_content_hash": "8e3dd26c2c0a64d471d08820538f934986caa6ef215b29bba9f9749b4f9368ff",
+    "output": {
+      "attachments": [
+        {
+          "attachment_hash": "owned-local-pdf-ddfdea6f235bacf52923b856cda024c9e5b15fc8f5cb397135a109e522b3e662",
+          "attachment_name": "tw-local-treaty-demo.pdf",
+          "attachment_type": "8",
+          "business_type": "01",
+          "object_id": 10925281
+        },
+        {
+          "attachment_hash": "owned-local-pdf-ddfdea6f235bacf52923b856cda024c9e5b15fc8f5cb397135a109e522b3e662",
+          "attachment_name": "tw-local-treaty-demo.pdf",
+          "attachment_type": "8",
+          "business_type": "01",
+          "object_id": 10925282
+        }
+      ],
+      "boundary": "业务Mock直接成功，仅证明本地业务/审核/附件/核心任务完成；未验证真实provider、pangu record来源或链节点，使用CHAIN任务另行验收。",
+      "core_jobs": [
+        {
+          "biz_no": "000050-2026PT00011",
+          "id": 1768115023432721896,
+          "job_task": "TREATY_PROCESS",
+          "operation_type": "confirm_and_submit_to_opponent",
+          "status": 8
+        },
+        {
+          "biz_no": "000050-2026PT00011",
+          "id": 1768115023432721897,
+          "job_task": "TREATY_PROCESS",
+          "operation_type": "confirm_and_submit_to_reinsurer",
+          "status": 8
+        }
+      ],
+      "local_business_completed": true,
+      "master": {
+        "cedent_treaty_no": "000050-2026PT00011",
+        "id": 325094,
+        "org_business_code": "TW-LOCAL-QS-20261016013740"
+      },
+      "mock_details": [
+        {
+          "biz_id": "owned-local-treaty-tw-20261016013740",
+          "biz_no": "000050-2026PT00011",
+          "from": "000050",
+          "id": 1768114586986032179,
+          "onchain_business_id": 10925281,
+          "onchain_times": 1,
+          "status": 8,
+          "to": "000053"
+        },
+        {
+          "biz_id": "owned-local-treaty-tw-20261016013740",
+          "biz_no": "000050-2026PT00011",
+          "from": "000053",
+          "id": 1768114586986032180,
+          "onchain_business_id": 10925282,
+          "onchain_times": 1,
+          "status": 8,
+          "to": "000045"
+        }
+      ],
+      "participants": [
+        {
+          "amount": null,
+          "biz_id": null,
+          "broker_rate": null,
+          "file_status": null,
+          "from_id": null,
+          "id": 10925280,
+          "org_business_code": "TW-LOCAL-QS-20261016013740",
+          "org_code": "000050",
+          "reinsurance_role": "01",
+          "status": "8"
+        },
+        {
+          "amount": "1.00000000",
+          "biz_id": "owned-local-treaty-tw-20261016013740",
+          "broker_rate": null,
+          "file_status": "2",
+          "from_id": 10925280,
+          "id": 10925281,
+          "org_business_code": "BR-TW-LOCAL-QS-20261016013740",
+          "org_code": "000053",
+          "reinsurance_role": "03",
+          "status": "8"
+        },
+        {
+          "amount": "1.00000000",
+          "biz_id": "owned-local-treaty-tw-20261016013740",
+          "broker_rate": "0.02500000",
+          "file_status": "2",
+          "from_id": 10925281,
+          "id": 10925282,
+          "org_business_code": "RE-TW-LOCAL-QS-20261016013740",
+          "org_code": "000045",
+          "reinsurance_role": "02",
+          "status": "8"
+        }
+      ],
+      "real_record_source_verified": false,
+      "role_views": [
+        {
+          "account": "000050",
+          "platform_contract_number": "000050-2026PT00011",
+          "role": "cedant"
+        },
+        {
+          "account": "000053",
+          "platform_contract_number": "000050-2026PT00011",
+          "role": "broker"
+        },
+        {
+          "account": "000045",
+          "platform_contract_number": "000050-2026PT00011",
+          "role": "reinsurer"
+        }
+      ],
+      "sections": [
+        {
+          "commision_rate": "0.20000000",
+          "insurance_type_codes": "04000,01000",
+          "max_limits": "10000000.00",
+          "section_no": "1",
+          "section_type": "本地分项一"
+        },
+        {
+          "commision_rate": "0.20000000",
+          "insurance_type_codes": "04000,01000",
+          "max_limits": "20000000.00",
+          "section_no": "2",
+          "section_type": "本地分项二"
+        }
+      ]
+    },
+    "purpose": "本轮二次确认/机构审核/三方最终核对；完整链由逐段真实运行构成，不是全新会话无人干预整段通过"
+  },
+  "boundary": "部分实际动作run最终断言失败，已发生效果先回读再继续，没有重复提交；对应当前代码成功记录见runtime-verification.json。"
+}

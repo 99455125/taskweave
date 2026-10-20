@@ -108,14 +108,19 @@ def dialog_prop_violations(source):
 def main():
     errors = []
     required = (
-        "pyproject.toml", "README.md", "AGENTS.md", "AI_GUIDE.md", "CLAUDE.md",
-        "TASK_TEMPLATE.md", "src/taskweave/core", "src/taskweave/plugins",
-        "src/taskweave/application", "src/taskweave/infrastructure",
-        "plugins/playwright", "plugins/ocr", "plugins/tidb", "plugins/utility", "apps", "config", "examples", "tests",
-        "docs/architecture.md", "docs/progress.md", "docs/project-plan.md",
-        "docs/ai-operating-model.md", "docs/engineering-playbook.md",
-        "docs/testing.md", "docs/deployment.md", "docs/migration.md",
-        "docs/requirements/REQ-001-requirement-pool/validation.md",
+        "pyproject.toml", "README.md", "AGENTS.md",
+        "src/taskweave/core", "src/taskweave/plugins", "src/taskweave/presentation",
+        "src/taskweave/application", "src/taskweave/infrastructure", "src/taskweave/desktop",
+        "plugins/playwright", "plugins/ocr", "plugins/tidb", "plugins/utility",
+        "apps", "config", "examples", "tests",
+        "docs/README.md", "docs/domain.md", "docs/architecture.md", "docs/maintenance.md",
+        "docs/development.md", "docs/testing.md", "docs/deployment.md", "docs/limitations.md",
+        "docs/contracts/README.md", "docs/contracts/steps.md", "docs/contracts/task-packages.md",
+        "docs/contracts/plugins.md", "docs/contracts/operations.md", "docs/contracts/results.md",
+        "docs/contracts/configuration.md",
+        "docs/modules/tasks.md", "docs/modules/planning.md", "docs/modules/authoring.md",
+        "docs/modules/contexts.md", "docs/modules/execution.md", "docs/modules/storage.md",
+        "docs/modules/desktop.md", "docs/modules/plugins.md",
     )
     for name in required:
         if not (ROOT / name).exists():

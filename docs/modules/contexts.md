@@ -1,50 +1,28 @@
-# 上下文与采集会话
+# 上下文与资源会话
 
-为步骤、规划及调试提供插件证据与用户预览。业务持久化上下文与内存中的活跃资源会话必须分清。
+## 职责
 
-## 当前行为与约束
+为步骤编写、规划及调试提供结构化证据和可选预览，管理有序采集项与可选录制。持久化材料与活跃资源会话分开；材料存在不能证明浏览器或连接仍存活。
 
-- 持久化结构为“上下文组 + 有序采集项”，分别保留名称、说明、采集 request、时间、来源和预览；不是离页就丢失的纯内存列表。
-- `ContextCollection(items, views)` 区分 AI 证据和用户预览；预览不自动并入模型证据。核心按注册 renderer 渲染，不按插件名硬编码。
-- 步骤上下文属于确定步骤；修改会使确认失效。规划更新还要核对 revision；批量操作保持事务一致性。
-- 取消采集不写入，失败保留旧记录或待编辑草稿。旧弹窗提交前核对捕获的目标与页面代次，不能写到后来选择的步骤。
-- 目标列表只枚举当前实例已有资源，打开列表不能偷偷新建浏览器。采集携带 expected_session_id 时，资源实例变化必须拒绝旧请求。
-- 调试/正式执行可提供本进程仍存活的保留会话；历史数据库记录不代表资源仍存在。规划、调试、正式运行不能合并所有权。
-- 复制、导入必须保留组项顺序和完整证据；规划生成导入使用冻结快照而非最新记录。
-- 步骤和规划共享分组卡片、暂存采集行和内容预览组件；预览和编辑采集作为主要操作，移动/删除收进更多菜单，暂存删除仍可撤销。隐私脱敏规则同样应用于卡片摘要和预览。
-- 内容预览优先呈现插件注册的展示结果，图片等比例完整显示；长图在独立内容区域滚动，标题和关闭操作保持可达。原始采集数据可展开查看，没有展示结果时默认展开；不更改采集内容或持久化格式。
-- 采集对话框保留插件动态请求表单、目标选择、可选高级参数、观察会话、采集顺序和删除暂存标记；保存时整组一次提交，取消不写入，失败时保留可重试草稿。
+## 数据和选择
 
-- 组卡片默认折叠，局部更新保留展开状态。每项独立维护标题、长操作说明与 `send_preview`；说明在弹窗编辑，列表只显示摘要。
-- `send_preview` 默认 false，与 `include_view` 独立。勾选后按插件预览携带图片或结构化数据；标题、说明始终随该项发送。API 图片使用多模态消息，网页 Chat 导出图片附件供上传，提示词引用附件名称。未勾选的预览不发送。
-- 新字段随任务包、复制与规划冻结导入保留；旧包缺字段使用空说明、关闭预览的默认值。
+上下文组归属步骤或规划，拥有provider_id、名称、说明与顺序；组内采集项保存request、items、views、时间、来源、操作说明和send_preview。ContextCollection以items表示证据、views表示用户预览；include_view决定是否采集预览，send_preview另行决定是否将其发给模型。
 
-## 可选录制与采集界面
+目标枚举只列出现存资源，不因打开选择器新建浏览器。请求带expected_session_id时必须匹配原资源身份。独立步骤会话、规划会话和保留运行worker会话分开，历史运行记录不能替代活跃会话。
 
-SDK 新增独立 `ContextRecordingProvider` 可选协议，不给旧 Plugin 强加方法；未实现钩子的提供器仍可采集快照，录制请求明确报不支持。命令包括 start/pause/resume/stop/read/ack/discard，录制身份与采集实例身份分开。批次采用现有 ContextCollection，因此不引入任务包或数据库格式迁移。
+CollectionForm持有提供器、运行选择、动态Schema原始输入和高级参数；TargetSelection持有目标/session选择及请求代次。步骤与规划UI共用这些状态，采集和录制读取普通草稿。ContextCaptureDraft负责暂存；整组保存成功才持久化，取消不写入，失败保留重试内容。
 
-规划会话已提供 `plan.context.record`：非 start 命令必须携带原 session_id 与 recording_id；read 不写库或自动消费，ack 不得超过已读取游标。未确认缓冲或活跃录制阻止配置变更和结束实例，discard 才显式丢弃；应用退出释放临时会话，录制缓冲不是持久化记录。每次读取默认最多100条、返回最多2MB，明确游标、可用起点、丢弃数量和是否还有后续。
+## 录制生命周期
 
-Playwright 提供器已接入真实浏览器事件：记录可信 click/input/change 的实际目标、字段组、捕获时描述及操作后状态；密码/敏感输入在浏览器发送前遮蔽，候选 CSS 核对实际元素身份。首次录制保留有界页面基线，后续新文档首次操作时观察页面并明确标注观察时机，不声称是操作前快照。缓冲有界且读取不消费，可选预览沿用 playwright.screenshot。保留的调试/运行会话已提供 context.record，非 start 命令强制核对 session_id，身份按步骤/提供器/录制 ID 隔离；未处理缓冲阻止开始、重跑、结束、删除和实例池清理。规划和步骤的采集弹窗共用录制控制条，具体生命周期见下文。
+ContextRecordingProvider是可选扩展，旧插件无需实现。命令为start/pause/resume/stop/read/ack/discard，非start命令须绑定原session_id和recording_id。read不消费缓冲；持久化成功后才ack；ack失败重试确认，不重复保存已提交组。
 
-步骤独立观察通过同一 ContextSessions 管理资源，context.read 不再每次关闭浏览器，返回形状仍为 items/views；context.targets 可选择该步骤保留的页面。context.record 未指定 run_id 时使用独立步骤会话，指定时仍使用原运行 worker，两者不混用，不新建执行记录。独立会话的 Scope 保留真实 task_id/step_id，并使用任务输入默认值；插件、能力或环境变化要求核对会话身份，未处理录制的收尾仍使用原能力范围。实例列表以 step 类型展示，instance.end 可显式结束；未保存录制或在途采集阻止删除所属步骤/任务，所用环境在实例结束前不可删除。退出释放资源并取消该会话事件循环的残留任务；内存缓冲不跨进程重启保存。
+录制期间锁定提供器、目标与请求参数，关闭弹窗暂停并保留暂存。页面重载重建控件，不向旧客户端打开对话框；旧hide不能覆盖新草稿。在途采集、活跃录制或未保存缓冲限制结束实例、删除所属对象等破坏性动作。缓冲只在当前服务/资源进程中存在，不承诺重启恢复。
 
-采集暂存与取消/提交决策位于presentation/context_collection.py；步骤素材的保存、重排、删除和过期结果保护位于presentation/step_contexts.py。desktop/contexts.py与context_recording.py保留控件、预览和旧导出，CollectionWorkspace通过session引用普通状态，控件不进入交互快照。
+## 代码与验证
 
-采集表单的名称、说明、提供器、运行选择、高级参数及动态schema原值归presentation/collection_form.py的CollectionForm；TargetSelection负责目标列表、原会话恢复和过期列表接纳。步骤及规划实际共用，快照采集和录制提交读取普通草稿，ValueForm仅负责控件适配。采集数据类位于core/context_contracts.py，core/ports.py及插件SDK保留同一类的公开导出。
+- [契约](../../src/taskweave/core/context_contracts.py)、[证据与录制规则](../../src/taskweave/core/context_recording.py)。
+- [ContextUseCases](../../src/taskweave/application/contexts.py)、[ContextSessions](../../src/taskweave/infrastructure/context_sessions.py)。
+- [普通表单/目标](../../src/taskweave/presentation/collection_form.py)、[暂存/录制](../../src/taskweave/presentation/context_collection.py)、[步骤材料](../../src/taskweave/presentation/step_contexts.py)。
+- [步骤仓储](../../src/taskweave/infrastructure/repositories/step_contexts.py)、[规划仓储](../../src/taskweave/infrastructure/repositories/plan_contexts.py)；UI在desktop/contexts.py、context_recording.py及采集组件。
 
-## 代码入口
-
-[数据契约](../../src/taskweave/core/context_collection.py)、[步骤上下文用例](../../src/taskweave/application/contexts.py)、[会话协调](../../src/taskweave/infrastructure/context_sessions.py)、[步骤上下文仓储](../../src/taskweave/infrastructure/repositories/step_contexts.py)、[规划上下文仓储](../../src/taskweave/infrastructure/repositories/plan_contexts.py)、[共享采集 UI](../../src/taskweave/desktop/contexts.py)、[步骤上下文组件](../../src/taskweave/desktop/components/step_contexts.py)。
-
-## 验证入口
-
-`domain.contexts`、`repository.contexts`、`ui.contexts`；共享 session 变更通过 changed dry-run 覆盖真实消费者。重点检查组项顺序、目标会话过期、事务失败、离页迟到写入和草稿保留。关联：[规划](planning.md)、[执行](execution.md)、[插件](plugins.md)。
-
-## 按需深入
-
-[连续采集与会话](../reference/contexts.md)。只在本次修改涉及相应契约时阅读。
-
-共享 RecordingDraft 已提供暂存与提交顺序：停止后分批读取、末批只生成一次可选预览，发送预览仍默认关闭；整组持久化成功后才 ack。持久化失败或保存回调没有返回提交结果时不确认缓冲；ack 失败再次调用只重试确认，不重复新增已提交组，也不能以丢弃撤销已提交内容。已删除的录制项不能伪作保存成功消费，必须明确丢弃。保留 worker 中已有录制的收尾命令沿用开始时的步骤能力，步骤后续编辑不影响停止、读取或确认；新录制仍校验当前步骤能力。规划和步骤采集弹窗已复用 RecordingControls，提供开始、暂停/继续、停止并暂存及明确丢弃；提供器在采集 schema 中声明 `x-taskweave-context-recording: true` 才显示入口，旧插件快照保持原流程。录制期间冻结提供器、观察会话、目标和请求参数。ESC 关闭会暂停并保留草稿；重开或同一服务内页面重载重新装配控件，保留标题、说明、表单原值和录制身份，不复用旧客户端弹窗。在途操作不能被新客户端重绑；旧弹窗迟到的 hide 事件不能覆盖新草稿。进程退出仍会释放未持久化缓冲，不承诺跨服务重启恢复。
-
-步骤移除原插件能力后，重开采集弹窗仍保留原录制的停止、丢弃入口和会话身份；不重新查询已移除提供器的目标，也不开放新快照或新录制。保存素材仍要求当前步骤拥有相应能力，失败保留未确认证据，恢复能力后可重试。丢弃后不再显示已移除提供器的录制入口。
+测试键domain.contexts、repository.contexts、ui.contexts；检查组项顺序、过期session、目标恢复、提供器撤销、保存失败、ack重试、关闭恢复与迟到响应。

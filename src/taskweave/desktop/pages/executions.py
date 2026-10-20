@@ -121,56 +121,59 @@ class RunPage(Page):
     @run_area.setter
     def run_area(self, value): self.state.run_area = value
 
+    async def open_create(self, initial_task_id=None, *, on_created=None):
+        flow = self.creation
+        await flow.load()
+        warning = flow.open(initial_task_id)
+        if warning:
+            ui.notify(warning, type="warning")
+            return
+        with ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
+            ui.label("新建执行").classes("text-lg")
+            task_select = ui.select(
+                {task["task_id"]: task["name"] for task in flow.eligible},
+                value=flow.task_id,
+                label="选择任务",
+            ).props("use-input input-debounce=0").classes("w-full")
+            environment = await self.environment_select()
+            steps = flow.steps
+            start = ui.select({step['step_id']: f"{i + 1}. {step['name']}" for i, step in enumerate(steps)}, value=flow.start_step_id, label='开始步骤').classes('w-full')
+            input_area = ui.column().classes('w-full')
+            async def render_inputs():
+                input_area.clear()
+                start.options = {step['step_id']: f"{i + 1}. {step['name']}" for i, step in enumerate(flow.steps)}
+                start.value = flow.start_step_id
+                start.update()
+                with input_area:
+                    form = await self.trial_variables(flow.selected_step, environment, task_id=flow.task_id)
+                    flow.input_draft = form.input_draft
+
+            async def select_start(event):
+                flow.select_start(event.value)
+                await render_inputs()
+
+            async def select_task(event):
+                flow.select_task(event.value)
+                await render_inputs()
+
+            start.on_value_change(select_start)
+            task_select.on_value_change(select_task)
+            await render_inputs()
+            async def save():
+                await flow.submit()
+                dialog.close()
+                await (on_created or self.paint)()
+            with ui.row().classes("w-full items-center gap-2 flex-wrap"):
+                self.button("创建并执行", save, primary=True)
+                ui.button("取消", on_click=dialog.close).props("outline")
+        dialog.open()
+
     async def render(self):
         flow = self.creation
         await flow.load()
         with ui.row().classes("tw-executions-toolbar w-full justify-between items-center"):
             ui.label("执行列表").classes("text-xl font-medium")
-            async def create(initial_task_id=None):
-                warning = flow.open(initial_task_id)
-                if warning:
-                    ui.notify(warning, type="warning")
-                    return
-                with ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
-                    ui.label("新建执行").classes("text-lg")
-                    task_select = ui.select(
-                        {task["task_id"]: task["name"] for task in flow.eligible},
-                        value=flow.task_id,
-                        label="选择任务",
-                    ).props("use-input input-debounce=0").classes("w-full")
-                    environment = await self.environment_select()
-                    steps = flow.steps
-                    start = ui.select({step['step_id']: f"{i + 1}. {step['name']}" for i, step in enumerate(steps)}, value=flow.start_step_id, label='开始步骤').classes('w-full')
-                    input_area = ui.column().classes('w-full')
-                    async def render_inputs():
-                        input_area.clear()
-                        start.options = {step['step_id']: f"{i + 1}. {step['name']}" for i, step in enumerate(flow.steps)}
-                        start.value = flow.start_step_id
-                        start.update()
-                        with input_area:
-                            form = await self.trial_variables(flow.selected_step, environment, task_id=flow.task_id)
-                            flow.input_draft = form.input_draft
-
-                    async def select_start(event):
-                        flow.select_start(event.value)
-                        await render_inputs()
-
-                    async def select_task(event):
-                        flow.select_task(event.value)
-                        await render_inputs()
-
-                    start.on_value_change(select_start)
-                    task_select.on_value_change(select_task)
-                    await render_inputs()
-                    async def save():
-                        await flow.submit()
-                        dialog.close()
-                        await self.paint()
-                    with ui.row().classes("w-full items-center gap-2 flex-wrap"):
-                        self.button("创建并执行", save, primary=True)
-                        ui.button("取消", on_click=dialog.close).props("outline")
-                dialog.open()
-            self.button("新建执行", create, primary=True)
+            self.button("新建执行", self.open_create, primary=True)
         self.execution_rows = ui.column().classes("tw-execution-rows tw-run-detail-area w-full gap-3")
         self.execution_signature = None
         self.run_area = None
@@ -182,4 +185,4 @@ class RunPage(Page):
         await self.execution_details.refresh()
         requested, task_id = flow.consume_pending()
         if requested:
-            await create(task_id)
+            await self.open_create(task_id)

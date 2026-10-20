@@ -1,0 +1,854 @@
+[
+  {
+    "step_number": 1,
+    "name": "选择可结算的已确认账单",
+    "source": "01-select-owned-bill.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "cedent",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000050",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "京东安联",
+          "type": "string"
+        },
+        "from_task_id": {
+          "const": 175581,
+          "default": 175581,
+          "type": "integer"
+        },
+        "normal_id": {
+          "const": 257312,
+          "default": 257312,
+          "type": "integer"
+        },
+        "platform_statement_no": {
+          "const": "000050-2026PT00011-SOA0001",
+          "default": "000050-2026PT00011-SOA0001",
+          "type": "string"
+        },
+        "role": {
+          "default": "cedant",
+          "type": "string"
+        },
+        "run_label": {
+          "default": "TW-LOCAL-SETTLE-20261016040330",
+          "type": "string"
+        },
+        "settlement_id": {
+          "const": 174791,
+          "default": 174791,
+          "type": "integer"
+        },
+        "settlement_no": {
+          "const": "000050-20261016CNY0000018",
+          "default": "000050-20261016CNY0000018",
+          "type": "string"
+        },
+        "to_task_id": {
+          "const": 175582,
+          "default": 175582,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "expected_org_text",
+        "role",
+        "settlement_no",
+        "platform_statement_no",
+        "run_label",
+        "settlement_id",
+        "from_task_id",
+        "to_task_id",
+        "normal_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  },
+  {
+    "step_number": 2,
+    "name": "填写结算信息与账单明细",
+    "source": "02-fill-and-add.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "cedent",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000050",
+          "type": "string"
+        },
+        "expected_amount": {
+          "default": "70000.00",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "京东安联",
+          "type": "string"
+        },
+        "from_task_id": {
+          "const": 175581,
+          "default": 175581,
+          "type": "integer"
+        },
+        "normal_id": {
+          "const": 257312,
+          "default": 257312,
+          "type": "integer"
+        },
+        "platform_statement_no": {
+          "const": "000050-2026PT00011-SOA0001",
+          "default": "000050-2026PT00011-SOA0001",
+          "type": "string"
+        },
+        "role": {
+          "default": "cedant",
+          "type": "string"
+        },
+        "run_label": {
+          "default": "TW-LOCAL-SETTLE-20261016040330",
+          "type": "string"
+        },
+        "settlement_id": {
+          "const": 174791,
+          "default": 174791,
+          "type": "integer"
+        },
+        "settlement_no": {
+          "const": "000050-20261016CNY0000018",
+          "default": "000050-20261016CNY0000018",
+          "type": "string"
+        },
+        "to_task_id": {
+          "const": 175582,
+          "default": 175582,
+          "type": "integer"
+        },
+        "verify_saved_only": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "expected_org_text",
+        "from_task_id",
+        "normal_id",
+        "platform_statement_no",
+        "role",
+        "run_label",
+        "settlement_id",
+        "settlement_no",
+        "to_task_id",
+        "expected_amount",
+        "verify_saved_only"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "expected_amount": {
+        "ref": {
+          "output": "data",
+          "pointer": "/expected_amount",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "from_task_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/from_task_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normal_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "platform_statement_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_statement_no",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "run_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/run_label",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "settlement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/settlement_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "settlement_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/settlement_no",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "to_task_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/to_task_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 3,
+    "name": "保存和重新打开核对",
+    "source": "03-save-reopen.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "cedent",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000050",
+          "type": "string"
+        },
+        "expected_amount": {
+          "default": "70000.00",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "京东安联",
+          "type": "string"
+        },
+        "from_task_id": {
+          "const": 175581,
+          "default": 175581,
+          "type": "integer"
+        },
+        "normal_id": {
+          "const": 257312,
+          "default": 257312,
+          "type": "integer"
+        },
+        "platform_statement_no": {
+          "const": "000050-2026PT00011-SOA0001",
+          "default": "000050-2026PT00011-SOA0001",
+          "type": "string"
+        },
+        "role": {
+          "default": "cedant",
+          "type": "string"
+        },
+        "run_label": {
+          "default": "TW-LOCAL-SETTLE-20261016040330",
+          "type": "string"
+        },
+        "settlement_id": {
+          "const": 174791,
+          "default": 174791,
+          "type": "integer"
+        },
+        "settlement_no": {
+          "const": "000050-20261016CNY0000018",
+          "default": "000050-20261016CNY0000018",
+          "type": "string"
+        },
+        "to_task_id": {
+          "const": 175582,
+          "default": 175582,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "expected_amount",
+        "expected_org_text",
+        "from_task_id",
+        "normal_id",
+        "platform_statement_no",
+        "role",
+        "run_label",
+        "settlement_id",
+        "settlement_no",
+        "to_task_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "expected_amount": {
+        "ref": {
+          "output": "data",
+          "pointer": "/expected_amount",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "from_task_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/from_task_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normal_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "platform_statement_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_statement_no",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "run_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/run_label",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "settlement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/settlement_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "settlement_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/settlement_no",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "to_task_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/to_task_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 4,
+    "name": "提交结算单并进入发起方审核",
+    "source": "04-submit-to-review.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "cedent",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000050",
+          "type": "string"
+        },
+        "expected_amount": {
+          "default": "70000.00",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "京东安联",
+          "type": "string"
+        },
+        "from_task_id": {
+          "const": 175581,
+          "default": 175581,
+          "type": "integer"
+        },
+        "normal_id": {
+          "const": 257312,
+          "default": 257312,
+          "type": "integer"
+        },
+        "platform_statement_no": {
+          "const": "000050-2026PT00011-SOA0001",
+          "default": "000050-2026PT00011-SOA0001",
+          "type": "string"
+        },
+        "recovery_after_record_id": {
+          "const": 2110651223716827136,
+          "default": 2110651223716827136,
+          "description": "仅原始提交run日志水位；只读恢复使用，不可猜测0。",
+          "type": "integer"
+        },
+        "role": {
+          "default": "cedant",
+          "type": "string"
+        },
+        "run_label": {
+          "default": "TW-LOCAL-SETTLE-20261016040330",
+          "type": "string"
+        },
+        "settlement_id": {
+          "const": 174791,
+          "default": 174791,
+          "type": "integer"
+        },
+        "settlement_no": {
+          "const": "000050-20261016CNY0000018",
+          "default": "000050-20261016CNY0000018",
+          "type": "string"
+        },
+        "to_task_id": {
+          "const": 175582,
+          "default": 175582,
+          "type": "integer"
+        },
+        "verify_submitted_only": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "expected_amount",
+        "expected_org_text",
+        "from_task_id",
+        "normal_id",
+        "platform_statement_no",
+        "role",
+        "run_label",
+        "settlement_id",
+        "settlement_no",
+        "to_task_id",
+        "verify_submitted_only",
+        "recovery_after_record_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "expected_amount": {
+        "ref": {
+          "output": "data",
+          "pointer": "/expected_amount",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "from_task_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/from_task_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normal_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "platform_statement_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_statement_no",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "run_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/run_label",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "settlement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/settlement_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "settlement_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/settlement_no",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "to_task_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/to_task_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 5,
+    "name": "发起方一级审核",
+    "source": "05-sender-audit1.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "cedent",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000050",
+          "type": "string"
+        },
+        "expected_amount": {
+          "default": "70000.00",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "京东安联",
+          "type": "string"
+        },
+        "from_task_id": {
+          "const": 175581,
+          "default": 175581,
+          "type": "integer"
+        },
+        "normal_id": {
+          "const": 257312,
+          "default": 257312,
+          "type": "integer"
+        },
+        "platform_statement_no": {
+          "const": "000050-2026PT00011-SOA0001",
+          "default": "000050-2026PT00011-SOA0001",
+          "type": "string"
+        },
+        "role": {
+          "default": "cedant",
+          "type": "string"
+        },
+        "run_label": {
+          "default": "TW-LOCAL-SETTLE-20261016040330",
+          "type": "string"
+        },
+        "settlement_id": {
+          "const": 174791,
+          "default": 174791,
+          "type": "integer"
+        },
+        "settlement_no": {
+          "const": "000050-20261016CNY0000018",
+          "default": "000050-20261016CNY0000018",
+          "type": "string"
+        },
+        "to_task_id": {
+          "const": 175582,
+          "default": 175582,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "expected_amount",
+        "expected_org_text",
+        "from_task_id",
+        "normal_id",
+        "platform_statement_no",
+        "role",
+        "run_label",
+        "settlement_id",
+        "settlement_no",
+        "to_task_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "expected_amount": {
+        "ref": {
+          "output": "data",
+          "pointer": "/expected_amount",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "from_task_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/from_task_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normal_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "platform_statement_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_statement_no",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "run_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/run_label",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "settlement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/settlement_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "settlement_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/settlement_no",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "to_task_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/to_task_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 6,
+    "name": "完成后续发起方审核并核对待确认",
+    "source": "06-sender-final-audit.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "cedent",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000050",
+          "type": "string"
+        },
+        "expected_amount": {
+          "default": "70000.00",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "京东安联",
+          "type": "string"
+        },
+        "from_task_id": {
+          "const": 175581,
+          "default": 175581,
+          "type": "integer"
+        },
+        "normal_id": {
+          "const": 257312,
+          "default": 257312,
+          "type": "integer"
+        },
+        "platform_statement_no": {
+          "const": "000050-2026PT00011-SOA0001",
+          "default": "000050-2026PT00011-SOA0001",
+          "type": "string"
+        },
+        "role": {
+          "default": "cedant",
+          "type": "string"
+        },
+        "run_label": {
+          "default": "TW-LOCAL-SETTLE-20261016040330",
+          "type": "string"
+        },
+        "settlement_id": {
+          "const": 174791,
+          "default": 174791,
+          "type": "integer"
+        },
+        "settlement_no": {
+          "const": "000050-20261016CNY0000018",
+          "default": "000050-20261016CNY0000018",
+          "type": "string"
+        },
+        "to_task_id": {
+          "const": 175582,
+          "default": 175582,
+          "type": "integer"
+        },
+        "verify_audited_only": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "expected_amount",
+        "expected_org_text",
+        "from_task_id",
+        "normal_id",
+        "platform_statement_no",
+        "role",
+        "run_label",
+        "settlement_id",
+        "settlement_no",
+        "to_task_id",
+        "verify_audited_only"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "expected_amount": {
+        "ref": {
+          "output": "data",
+          "pointer": "/expected_amount",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "from_task_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/from_task_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normal_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "platform_statement_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_statement_no",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "run_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/run_label",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "settlement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/settlement_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "settlement_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/settlement_no",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "to_task_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/to_task_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      }
+    }
+  }
+]

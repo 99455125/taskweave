@@ -1,0 +1,43 @@
+{
+  "participants": [
+    {
+      "organization_code": "000053",
+      "organization_name": "日本财产保险（中国）有限公司",
+      "share_percent": 70,
+      "is_lead": false
+    },
+    {
+      "organization_code": "000050",
+      "organization_name": "京东安联财产保险有限公司",
+      "share_percent": 30,
+      "is_lead": false
+    }
+  ],
+  "sections": [
+    {
+      "category": "TW-UAT-分项1",
+      "insurance_types": [
+        "家庭财产保险",
+        "机动车辆保险"
+      ],
+      "currency": "CNY",
+      "maximum_limit": 10000000,
+      "commission_type": "固定费率",
+      "fixed_commission_rate": 20,
+      "loss_sharing": false
+    },
+    {
+      "category": "TW-UAT-分项2",
+      "insurance_types": [
+        "家庭财产保险",
+        "机动车辆保险"
+      ],
+      "currency": "CNY",
+      "maximum_limit": 20000000,
+      "commission_type": "固定费率",
+      "fixed_commission_rate": 20,
+      "loss_sharing": false
+    }
+  ],
+  "file_root": "/Users/xiaojuju/Projects/personal/private/taskweave/output/pdf"
+}

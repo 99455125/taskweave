@@ -1,0 +1,598 @@
+{
+  "checked_at": "2026-10-13",
+  "source_candidate": {
+    "steps": 9,
+    "nonempty_code": 1,
+    "empty_code": 8
+  },
+  "refined_candidate": {
+    "steps": 9,
+    "nonempty_code": 9,
+    "static_valid": 9
+  },
+  "actual_trials": [
+    {
+      "step": 1,
+      "run_id": "cc6b87b4-0159-4897-a167-321f40a61af6",
+      "status": "FAILED",
+      "source_sha256": "386e507a65b7114a64dad9c320f463dc57ef7297f2059e1e9b6a363c470d8231",
+      "attempts": [
+        {
+          "attempt_id": "13552e95-a47e-446e-89da-f9feeb2e2226",
+          "status": "FAILED",
+          "error_code": "BROWSER_TIMEOUT",
+          "error_summary": "Browser action timed out; inspect locator and page state"
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "run_id": "57bb96bf-0bde-4b19-8221-f9d6b111c4fd",
+      "status": "FAILED",
+      "source_sha256": "83f6c1414a393ea4f2aaf480ba6b57b30b14b2cb556d7712260106a517bcc60f",
+      "attempts": [
+        {
+          "attempt_id": "117c6466-cc59-4bb9-8f01-e8a8d3a4ac6f",
+          "status": "FAILED",
+          "error_code": "LOCATOR_NOT_FOUND",
+          "error_summary": "No element matches the requested locator"
+        }
+      ]
+    },
+    {
+      "step": 1,
+      "run_id": "471ddb02-cf84-4725-a2db-869c992efbfe",
+      "status": "SUCCEEDED",
+      "source_sha256": "3b3004ba563d75d0b5ae8f41c1823b3d7793fc1980f6d206056fe74033bdbf75",
+      "attempts": [
+        {
+          "attempt_id": "69807695-ea22-4b08-8dea-c3f25e578c29",
+          "status": "SUCCEEDED",
+          "error_code": null,
+          "error_summary": null
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "run_id": "58dfa735-9443-437e-9e1d-0ac6e59b79a2",
+      "status": "FAILED",
+      "source_sha256": "fa385cfd68e30f8d8205dce0a19e85ae2028d66ef28a20e34acf467c35120b18",
+      "attempts": [
+        {
+          "attempt_id": "d4d5053d-6597-41b8-a5ff-d5d8be220859",
+          "status": "FAILED",
+          "error_code": "BUSINESS_ASSERTION_FAILED",
+          "error_summary": "Expected element count or state was not observed"
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "run_id": "1e746410-1039-40c1-b4ad-02b0cf2a41c0",
+      "status": "FAILED",
+      "source_sha256": "fa385cfd68e30f8d8205dce0a19e85ae2028d66ef28a20e34acf467c35120b18",
+      "attempts": [
+        {
+          "attempt_id": "89eeb554-af56-4d4a-98de-aac919e49a4a",
+          "status": "FAILED",
+          "error_code": "LOCATOR_NOT_FOUND",
+          "error_summary": "No control matches the requested locator"
+        }
+      ]
+    },
+    {
+      "step": 2,
+      "run_id": "f0d697d3-525c-4f70-a00c-8a0f853a4e15",
+      "status": "SUCCEEDED",
+      "source_sha256": "87a07483cece1a5d63911952448806f180bc853a057d5cf34599b28e388e2474",
+      "attempts": [
+        {
+          "attempt_id": "2350c296-ed86-4a10-84df-a86f46f1a2ea",
+          "status": "SUCCEEDED",
+          "error_code": null,
+          "error_summary": null
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "run_id": "0b7ea0d5-509a-40cf-aa9c-09b1e31e69e1",
+      "status": "FAILED",
+      "source_sha256": "6f23212e3d3b1b577beefcfd5346f6644584141801a41c04ad3a6fc5217f5021",
+      "attempts": [
+        {
+          "attempt_id": "91159ade-e26a-4703-ac0d-fb669fc121c2",
+          "status": "FAILED",
+          "error_code": "LOCATOR_DISABLED",
+          "error_summary": "Target control is disabled"
+        }
+      ]
+    },
+    {
+      "step": 3,
+      "run_id": "baf5a1d2-2971-44c7-8c1d-9e0220127d46",
+      "status": "SUCCEEDED",
+      "source_sha256": "e35361048c178b697d3d9a79b4abf1ca15ef1f9f4184830d4b8cf4976682b9c1",
+      "attempts": [
+        {
+          "attempt_id": "374a4fe3-4403-4fa9-97b9-a6a80f5de7dd",
+          "status": "SUCCEEDED",
+          "error_code": null,
+          "error_summary": null
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "run_id": "c0b6bc25-6597-4f83-aa5a-be7181df8f9c",
+      "status": "FAILED",
+      "source_sha256": "60510343aeeeeceb3352092d87e0f1892e7ae78f53b4037c2c2199107109f605",
+      "attempts": [
+        {
+          "attempt_id": "2e61928f-f282-4c6f-b8fb-1e54f54bcdc9",
+          "status": "FAILED",
+          "error_code": "BROWSER_TIMEOUT",
+          "error_summary": "Browser action timed out; inspect locator and page state"
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "run_id": "422861f6-0732-4867-8182-d908b2e19544",
+      "status": "FAILED",
+      "source_sha256": "33668353ba46a335b161a21f6fa1d3bafb81cadb29649cba1e1a71ee4737e16e",
+      "attempts": [
+        {
+          "attempt_id": "b7054d64-3967-4bac-8ae8-a423198aa17c",
+          "status": "FAILED",
+          "error_code": "LOCATOR_NOT_EDITABLE",
+          "error_summary": "Target control is not editable"
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "run_id": "79836a2f-3d2c-47cc-b1e1-c17240b6c8e2",
+      "status": "FAILED",
+      "source_sha256": "b756dba2bd88276f33367725f745b8d1f551112c8fa87ae27ac37adafc99aff8",
+      "attempts": [
+        {
+          "attempt_id": "9a59f32a-15b5-415c-80b0-71b8376d819b",
+          "status": "FAILED",
+          "error_code": "BUSINESS_ASSERTION_FAILED",
+          "error_summary": "Expected control value was not observed"
+        }
+      ]
+    },
+    {
+      "step": 4,
+      "run_id": "af2dbe0f-c99c-4038-a885-72381c9cdc27",
+      "status": "SUCCEEDED",
+      "source_sha256": "f575069c753c7da0e2ba52abb25f24ce64fd32737029cf9a259d5cfbc9cc6d1f",
+      "attempts": [
+        {
+          "attempt_id": "09774e4b-c852-44a6-a000-e78e2232c91c",
+          "status": "SUCCEEDED",
+          "error_code": null,
+          "error_summary": null
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "run_id": "8508f01a-3173-4958-9cfb-f99c9cf003d0",
+      "status": "FAILED",
+      "source_sha256": "70f8c8d2e486b04e36552ba4b335b01871c42ed76cf0b101ac3d8906006a3a31",
+      "attempts": [
+        {
+          "attempt_id": "7302898d-9927-461a-a6a4-90a58b0b5638",
+          "status": "FAILED",
+          "error_code": "ValueError",
+          "error_summary": "没有唯一实际下拉选项：000053-日本财产保险（中国）有限公司"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "run_id": "093271ef-e4fb-4be6-b603-37dac337ba88",
+      "status": "FAILED",
+      "source_sha256": "47006b0c6368d09577b52b05a45130feee4c25b823534f45db1b5c46ef882a8e",
+      "attempts": [
+        {
+          "attempt_id": "3620267e-8f80-4803-91f7-bd340ac54bd2",
+          "status": "FAILED",
+          "error_code": "SCHEMA_MISMATCH",
+          "error_summary": "Invalid value at /key: enum"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "run_id": "514cc078-f83a-49ae-86ab-cd59e9319864",
+      "status": "FAILED",
+      "source_sha256": "efc8b664b193c0ae86ad2079355cbe7a53042f6bb8f352a4d3c7ea16702dde77",
+      "attempts": [
+        {
+          "attempt_id": "2389eaec-245a-4e85-962d-ccc2051f6d30",
+          "status": "FAILED",
+          "error_code": "LOCATOR_DISABLED",
+          "error_summary": "Target control is disabled"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "run_id": "f5ce6742-ba1c-444f-bf5f-78171d502849",
+      "status": "FAILED",
+      "source_sha256": "76bef9fd58e49a250fcc12832c243e0ac2556d6ff8f8764ec372acd67e441ec1",
+      "attempts": [
+        {
+          "attempt_id": "c1849f15-4497-4452-b2d0-21afcb079f0f",
+          "status": "FAILED",
+          "error_code": "LOCATOR_DISABLED",
+          "error_summary": "Target control is disabled"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "run_id": "2dcaf131-1aa4-4076-9e9b-13333399ab61",
+      "status": "FAILED",
+      "source_sha256": "82f3c84097f9798ebe320cb7bfc2007581bd88fb08d8b1f308592722eea1d8cb",
+      "attempts": [
+        {
+          "attempt_id": "5ee1f059-baf5-4904-a97b-7923de47e1e4",
+          "status": "FAILED",
+          "error_code": "BUSINESS_ASSERTION_FAILED",
+          "error_summary": "Expected page text was not observed; use page_assert_value for input values"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "run_id": "399a4df3-245d-489d-91ac-69cad9e60047",
+      "status": "FAILED",
+      "source_sha256": "b11997d9106e8233c548956f8f7252a9257a287ddc85729913b614b101fe6e50",
+      "attempts": [
+        {
+          "attempt_id": "a69bc761-5ec1-4b68-9b9f-acae58004aaa",
+          "status": "FAILED",
+          "error_code": "BUSINESS_ASSERTION_FAILED",
+          "error_summary": "Expected page text was not observed; use page_assert_value for input values"
+        }
+      ]
+    },
+    {
+      "step": 5,
+      "run_id": "c113e11a-7f9e-416f-996d-af22fb86c690",
+      "status": "SUCCEEDED",
+      "source_sha256": "9448abb60f299cc39a606c8ff9a6d7e674f81ceb761b1c8d2816951bb36a8597",
+      "attempts": [
+        {
+          "attempt_id": "460bd1b6-181f-48bd-97fa-380ebdb6fddf",
+          "status": "SUCCEEDED",
+          "error_code": null,
+          "error_summary": null
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "run_id": "6133c8fd-04ca-4076-a119-64d555f4c2f5",
+      "status": "FAILED",
+      "source_sha256": "c350837614473efce5fdff66bb070e71638d0945390df367f47ec32e9f47cd10",
+      "attempts": [
+        {
+          "attempt_id": "32c6940b-e218-405d-be88-47c02bb01181",
+          "status": "FAILED",
+          "error_code": "ValueError",
+          "error_summary": "下拉字段没有显示所选值：insuranceTypeCodes"
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "run_id": "77b8cd27-eae7-4202-9c36-004d924cafe5",
+      "status": "FAILED",
+      "source_sha256": "fd0d4d1c809ac32a23e931e49dc603368844e12d520b7beeb5e3ca78b9a43a48",
+      "attempts": [
+        {
+          "attempt_id": "e30b2e23-b88b-4b7b-a525-89bffc8ab9e9",
+          "status": "FAILED",
+          "error_code": "LOCATOR_HIDDEN",
+          "error_summary": "Target control is hidden"
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "run_id": "55e3157c-0d86-4481-80fe-dbec279bdb1e",
+      "status": "FAILED",
+      "source_sha256": "efcb631ea46df5f3769157df53758786fa26f142e15b3fa2fcbda5411e130c66",
+      "attempts": [
+        {
+          "attempt_id": "ec2cc328-6f41-49c3-a8b1-7cace9281016",
+          "status": "FAILED",
+          "error_code": "ValueError",
+          "error_summary": "当前分项损失分摊选项不唯一"
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "run_id": "3974dca7-bb6c-4afb-b670-aa906023efbe",
+      "status": "FAILED",
+      "source_sha256": "0eca956f57c7918822e17f5ec788bcbe223b961537d986487226044fcc8c2e78",
+      "attempts": [
+        {
+          "attempt_id": "0d64a115-413a-47a6-987c-38bfbbbf32f5",
+          "status": "FAILED",
+          "error_code": "LOCATOR_AMBIGUOUS",
+          "error_summary": "Local DOM inspection requires exactly one root"
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "run_id": "dca7c8c1-2b1c-4224-bd4c-cf270178c0ca",
+      "status": "FAILED",
+      "source_sha256": "5e37cd727c1e6fef3a764ccb6d29bba1bd930ea5577cea906f949b505086b99b",
+      "attempts": [
+        {
+          "attempt_id": "312b854d-0c98-4f4c-9ba3-afa85b71eaba",
+          "status": "FAILED",
+          "error_code": "LOCATOR_NOT_FOUND",
+          "error_summary": "No control matches the requested locator"
+        }
+      ]
+    },
+    {
+      "step": 6,
+      "run_id": "72591ba9-676e-421f-ba87-54961fb75a38",
+      "status": "SUCCEEDED",
+      "source_sha256": "ff2ef12c2a870f514ea083e2d3853f871dc2a42a8d4179dea064731011a08b24",
+      "attempts": [
+        {
+          "attempt_id": "b3b10017-c7b7-4b6f-baa7-85d3d5cb3628",
+          "status": "SUCCEEDED",
+          "error_code": null,
+          "error_summary": null
+        }
+      ]
+    },
+    {
+      "step": 7,
+      "run_id": "b7d5c439-7b4d-4442-b1a7-d767b2504113",
+      "status": "FAILED",
+      "source_sha256": "174de1552d45fa4b4f08e3071cf040a3a125a5ed2c76d3a22b6fb3cba479e83d",
+      "attempts": [
+        {
+          "attempt_id": "8fed14b6-5f42-42dd-b285-d277c097f4b7",
+          "status": "FAILED",
+          "error_code": "BUSINESS_ASSERTION_FAILED",
+          "error_summary": "Expected URL was not observed"
+        }
+      ]
+    },
+    {
+      "step": 7,
+      "run_id": "230858bf-5b61-4358-95a2-3975c574519e",
+      "status": "FAILED",
+      "source_sha256": "3e757f1b659afb6fcc661c0ec9ba7bd228c7c0341ceb0ec3ea89c5d70173d612",
+      "attempts": [
+        {
+          "attempt_id": "d19da206-5b84-41fc-861e-ee761e19b3cb",
+          "status": "FAILED",
+          "error_code": "ValueError",
+          "error_summary": "保存后页面未显示唯一的本机构平台合约编号"
+        }
+      ]
+    },
+    {
+      "step": 7,
+      "run_id": "507627fe-2ab4-4892-bbe5-b6f3250d447a",
+      "status": "SUCCEEDED",
+      "source_sha256": "0f1c2fe8de503e6c1779caa6ca2cf37ed6aec0b3ccb19855a59738548ea3ff1f",
+      "attempts": [
+        {
+          "attempt_id": "5b675158-0185-48a8-b8f2-1e6393486a41",
+          "status": "SUCCEEDED",
+          "error_code": null,
+          "error_summary": null
+        }
+      ]
+    },
+    {
+      "step": 8,
+      "run_id": "501437bb-ae04-4f5f-b292-ed8e5dd5cbed",
+      "status": "SUCCEEDED",
+      "source_sha256": "81693ead0f9c59aae1f0ca5f4abf17aa626428c66f454959c32220636f831589",
+      "attempts": [
+        {
+          "attempt_id": "b249aaaf-e3af-45b1-a536-29a2ca61ad94",
+          "status": "SUCCEEDED",
+          "error_code": null,
+          "error_summary": null
+        }
+      ]
+    },
+    {
+      "step": 9,
+      "run_id": "b2f2962c-e927-42a5-aa01-7bc4183faf71",
+      "status": "FAILED",
+      "source_sha256": "69b1a7cf0973efe4981e0f66ddc928b49c4b5bebadb7c945c73683347f624fa8",
+      "attempts": [
+        {
+          "attempt_id": "2473b897-6885-4935-ae95-6657104873b9",
+          "status": "FAILED",
+          "error_code": "LOCATOR_NOT_FOUND",
+          "error_summary": "No control matches the requested locator"
+        }
+      ]
+    },
+    {
+      "step": 9,
+      "run_id": "50c1a327-e56e-40fe-82f5-06840615df71",
+      "status": "FAILED",
+      "source_sha256": "9e02f4d54d952053dca9e60cfaee40bd692dac334878e0486977cef69ef673a6",
+      "attempts": [
+        {
+          "attempt_id": "7d610c3b-f214-4f33-9c52-32ff9249bea1",
+          "status": "FAILED",
+          "error_code": "LOCATOR_DISABLED",
+          "error_summary": "Target control is disabled"
+        }
+      ]
+    },
+    {
+      "step": 9,
+      "run_id": "d9da0473-377a-4733-957b-7da6b94cd687",
+      "status": "SUCCEEDED",
+      "source_sha256": "6ac7ae5cd3756a45b3d1d641bebaeda4a8edf82a4965186ddd5dd936f8d0c936",
+      "attempts": [
+        {
+          "attempt_id": "d988646f-9803-49de-83ac-93c0534ab245",
+          "status": "SUCCEEDED",
+          "error_code": null,
+          "error_summary": null
+        }
+      ]
+    }
+  ],
+  "remaining": "9步当前源代码均有真实成功试跑记录；同一保留浏览器中逐步调试完成，尚未重新从头无人干预整段运行。溢额、混合比例与浮动手续费未实跑。补写任务保持草稿，未自动人工确认。",
+  "debug_workspace": "/Users/xiaojuju/taskweave/uat-debug-20261013",
+  "task_id": "cda29f48-0fa7-4122-b418-e579620ee316",
+  "additional_imported_draft_task_id": "50339461-b638-4b94-b9b0-6591ab390886",
+  "current_test_identifier": "TW-UAT-QS-20261013105337",
+  "original_workspace_synced": false,
+  "actual_passed_steps": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8,
+    9
+  ],
+  "verified_current_sources": [
+    {
+      "step": 1,
+      "sha256": "3b3004ba563d75d0b5ae8f41c1823b3d7793fc1980f6d206056fe74033bdbf75",
+      "successful_runs": [
+        "471ddb02-cf84-4725-a2db-869c992efbfe"
+      ]
+    },
+    {
+      "step": 2,
+      "sha256": "87a07483cece1a5d63911952448806f180bc853a057d5cf34599b28e388e2474",
+      "successful_runs": [
+        "f0d697d3-525c-4f70-a00c-8a0f853a4e15"
+      ]
+    },
+    {
+      "step": 3,
+      "sha256": "e35361048c178b697d3d9a79b4abf1ca15ef1f9f4184830d4b8cf4976682b9c1",
+      "successful_runs": [
+        "baf5a1d2-2971-44c7-8c1d-9e0220127d46"
+      ]
+    },
+    {
+      "step": 4,
+      "sha256": "f575069c753c7da0e2ba52abb25f24ce64fd32737029cf9a259d5cfbc9cc6d1f",
+      "successful_runs": [
+        "af2dbe0f-c99c-4038-a885-72381c9cdc27"
+      ]
+    },
+    {
+      "step": 5,
+      "sha256": "9448abb60f299cc39a606c8ff9a6d7e674f81ceb761b1c8d2816951bb36a8597",
+      "successful_runs": [
+        "c113e11a-7f9e-416f-996d-af22fb86c690"
+      ]
+    },
+    {
+      "step": 6,
+      "sha256": "ff2ef12c2a870f514ea083e2d3853f871dc2a42a8d4179dea064731011a08b24",
+      "successful_runs": [
+        "72591ba9-676e-421f-ba87-54961fb75a38"
+      ]
+    },
+    {
+      "step": 7,
+      "sha256": "0f1c2fe8de503e6c1779caa6ca2cf37ed6aec0b3ccb19855a59738548ea3ff1f",
+      "successful_runs": [
+        "507627fe-2ab4-4892-bbe5-b6f3250d447a"
+      ]
+    },
+    {
+      "step": 8,
+      "sha256": "81693ead0f9c59aae1f0ca5f4abf17aa626428c66f454959c32220636f831589",
+      "successful_runs": [
+        "501437bb-ae04-4f5f-b292-ed8e5dd5cbed"
+      ]
+    },
+    {
+      "step": 9,
+      "sha256": "6ac7ae5cd3756a45b3d1d641bebaeda4a8edf82a4965186ddd5dd936f8d0c936",
+      "successful_runs": [
+        "d9da0473-377a-4733-957b-7da6b94cd687"
+      ]
+    }
+  ],
+  "final_output": {
+    "audit_stage": "合约审核",
+    "contract_suffix": "TW-UAT-QS-20261013105337",
+    "matched_contract_count": 1,
+    "participant_contract_statuses": [
+      {
+        "contract_status": "合同待确认",
+        "organization_code": "000053"
+      },
+      {
+        "contract_status": "合同待确认",
+        "organization_code": "000050"
+      }
+    ],
+    "platform_contract_number": "000027-2026PT00035"
+  },
+  "platform_contract_number": "000027-2026PT00035",
+  "homepage_fix": {
+    "status": "fixed_and_verified",
+    "tests": "tests.ui.test_workbench_home: 7 passed",
+    "real_ui": "隔离工作空间Chrome首页新建规划实际创建1条并进入基础配置编辑页",
+    "test_plan_id": "4f26ba1c-622b-494b-9d90-34ef54cf1aba",
+    "original_running_app_requires_restart": false
+  },
+  "original_workspace_import": {
+    "task_id": "323157f6-2efa-4a33-9a7b-5727c0fc69fc",
+    "name": "再保平台 UAT · 合约录入 Demo（逐步调试版）",
+    "step_count": 9,
+    "code_and_remapped_bindings_verified": true,
+    "original_candidate_preserved": true,
+    "method": "TaskWeave GUI 导入为新任务"
+  },
+  "project_checks": {
+    "git_diff_check": "passed",
+    "check_project": "failed: 3 pre-existing missing historical UI evidence links",
+    "full_suite": "not run"
+  },
+  "context_repair": {
+    "original_task_restored": true,
+    "groups": 14,
+    "captures": 70,
+    "official_export": true,
+    "roundtrip_evidence": "context-repair-results.json",
+    "user_code_and_configuration_preserved": true,
+    "confirmation_invalidated_by_context_change": [
+      1,
+      2,
+      7,
+      9
+    ],
+    "tests": "tests.ui.test_tasks_page + tests.test_task_transfer: 22 passed",
+    "original_ui_verified": "第1步登录组6项、第5步参与方与合同附件6项已在原任务界面显示"
+  }
+}

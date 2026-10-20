@@ -1,0 +1,310 @@
+{
+  "case": "BILL-05",
+  "runs": {
+    "1": "7556e4d0-406e-4884-8160-532457439142",
+    "2": "32c8eab9-e35c-4333-acdc-00e3b4dd8d81",
+    "3": "7c6a23d0-7d8f-426a-9374-ad08fa65c001",
+    "4": "ed322023-2899-4867-91c1-992762596a7e",
+    "5": "55979ebe-e528-459c-a15b-4d1da89b2d1d",
+    "6": "671d8703-f77b-4ab9-800c-891b90ab4cf1",
+    "7": "43e6646f-fa02-4460-bcfe-9eac169b030e"
+  },
+  "failed_attempts": [
+    {
+      "run_id": "7a063ff3-3b9d-46a2-a925-e24005f725a4",
+      "status": "ABANDONED",
+      "business_action": false,
+      "reason": "任务schema过早要求尚未创建的source_id；进入动作前暂停，修正required后显式放弃此运行。"
+    },
+    {
+      "run_id": "2c00100b-0db4-4749-b3b5-59db7b06c0ed",
+      "status": "FAILED",
+      "business_action": false,
+      "reason": "React尚未挂载时瞬时观察高级查询返回0，跳过展开后字段等待失败。改为等待实际高级查询控件，生成器同步。"
+    },
+    {
+      "run_id": "a1259860-8807-4180-8c5a-3ab6815677fa",
+      "status": "FAILED",
+      "business_action": false,
+      "reason": "已实际展开并过滤源平台账单编号，全部显示0条；后台code=-1，SQL1815 No access path t2，强制TiFlash但本地无组件/副本。"
+    },
+    {
+      "run_id": "6d1e0bd4-4b33-4c10-b50d-31ecdd7d2560",
+      "status": "FAILED",
+      "business_action": true,
+      "created_draft_id": 544944,
+      "reason": "正常创建和跳转成功；SQL former_statement_normal_id为VARCHAR，代码与int比较失败，未保存/提交。原引用实际257312/257313正确；修正为精确字符串比较，之后只读恢复同一草稿。"
+    },
+    {
+      "run_id": "b07ab4c8-e838-4bc5-9f65-ed2678606a2c",
+      "status": "FAILED",
+      "business_action": "正常点击提交但表单必填校验阻止",
+      "reason": "计划结付日期为空，页面该项必填；只读确认主表/四角色仍0，活动257326/27未重建，初始job0。补日期日历选择并持久回读，再正常提交。"
+    },
+    {
+      "run_id": "a7345703-0d20-4be1-93af-643264e8fa60",
+      "status": "ABANDONED",
+      "business_action": false,
+      "reason": "required record_no默认NULL触发补参、无动作；31案卷号是内部已知可空值，移除该外部输入并在代码核对NULL。"
+    },
+    {
+      "run_id": "a0fed731-fc16-42ff-b2ca-fd0beafa32b4",
+      "status": "FAILED",
+      "business_action": "正常领取API成功",
+      "reason": "helper正常鉴权领取且回读成功，紧接ctx SQL归属断言失败，原值未记录，原因未定。独立SELECT确认reviewer000053；补原回读日志后当前成功55979跳过领取，不再次claim。"
+    }
+  ],
+  "status": "前五步分段成功：31正常提交后AB3/3 BC0/0，053已领取并进入中文退回处理页；尚未执行首次退回",
+  "source_statement_id": 544940,
+  "source_normal_id": 257312,
+  "source_platform_no": "000050-2026PT00011-SOA0001",
+  "new_adjust_created": true,
+  "next": "从当前053已领取的adjustBill_confirm页面正常首次退050；新source3=AB257328，记录BC实际状态，不能套普通账单子段先退要求。之后两轮V1/V2快照及只读隔离、31同步重提；原单/174791保持。",
+  "boundaries": [
+    "当前原AB角色8/8、原主表6聚合问题、原结算174791保持；S01只读前置与正常页面过滤，没有修正创建。",
+    "本例采用实际可修正原AB050→053并复制AB+BC；退回主体拟053→050，不能套用原草稿直连045→050。",
+    "31录入为本次调整贡献额，不是自动计算新总额减原总额；初次克隆item_amount为空，实际保存后核对金额。",
+    "修正新的source3快照以新normal为source_id；同步重发和经纪31分支不能套普通账单新增异步父任务规则。",
+    "TiFlash已实际恢复，原hint/API及正常UI入口通过；原单、角色及结算保护基线未变。"
+  ],
+  "environment_handoffs": [
+    "/Users/xiaojuju/Projects/company/bjs/dev-environment/SELFTEST-HANDOFF-20261016-adjust-bill-readonly.json",
+    "/Users/xiaojuju/Projects/company/bjs/dev-environment/SELFTEST-HANDOFF-20261016-adjust-list-tiflash-readonly.json"
+  ],
+  "step_count": 13,
+  "creation_step_id": "df3c0d45-2be9-4344-a5e7-d8cd9827141c",
+  "creation_guard_tests": 17,
+  "prerequisite_output": {
+    "adjust_entry_observed": true,
+    "bill_label": "TW-LOCAL-BILL-ADJ-20261016080007",
+    "boundary": "本轮正常050中文全部账单列表观察原AB修正按钮；原主表6/角色8及结算6保持，尚未发起创建，复制范围由后续实际新单核验；原合约/账单属本地业务Mock",
+    "new_adjust_created": false,
+    "platform_treaty_no": "000050-2026PT00011",
+    "source_master": {
+      "comment": "仅供本地自测 TW-LOCAL-BILL-20261016025047",
+      "id": 544940,
+      "record_no": "000050-2026PT00011-SOAP0001",
+      "statement_status": 6,
+      "treaty_id": 325094
+    },
+    "source_normal": {
+      "currency": "CNY",
+      "enter_org_code": "000053",
+      "extra_info": "{\"accountPeriod\":\"2026Q4\",\"comment\":\"仅供本地自测 TW-LOCAL-BILL-20261016025047\",\"normalIndex\":\"17920904766320632\",\"statementEndDate\":\"2026-12-31 00:00:00\",\"statementStartDate\":\"2026-10-16 00:00:00\",\"taxFreeFlag\":\"1\"}",
+      "id": 257312,
+      "input_org_code": "000050",
+      "net_balance": "70000.00",
+      "parent_id": null,
+      "platform_statement_no": "000050-2026PT00011-SOA0001",
+      "settlement_status": "6",
+      "sign_file_id": "owned-local-pdf-ddfdea6f235bacf52923b856cda024c9e5b15fc8f5cb397135a109e522b3e662",
+      "statement_id": 544940,
+      "treaty_reinsurer_id": 10925281
+    },
+    "source_normal_id": 257312,
+    "source_platform_no": "000050-2026PT00011-SOA0001",
+    "source_row": {
+      "text": "1\n\t\n000050-2026PT00011-SOAP0001\n\t\n000050-2026PT00011-SOA0001\n\t\nCNY\n\t70,000.00\t\n000050-2026PT00011\n\t\n2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-QS-20261016013740\n\t已完成\t\n京东安联财产保险有限公司\n\t\n日本财产保险（中国）有限公司\n\t\n2026\n\t\n用户名称000050\n\t查看修正回复Ta"
+    },
+    "source_statement_id": 544940,
+    "source_states": [
+      {
+        "org_code": "000050",
+        "reinsurance_role": "01",
+        "statement_status": 8
+      },
+      {
+        "org_code": "000053",
+        "reinsurance_role": "02",
+        "statement_status": 8
+      }
+    ],
+    "treaty_master_id": 325094,
+    "v1_comment": "仅供本地自测 TW-LOCAL-BILL-ADJ-20261016080007"
+  },
+  "prerequisite_actual_success": "7556e4d0-406e-4884-8160-532457439142",
+  "creation_code_review": "限定复核无重要问题；10项离线守卫通过，未执行业务。",
+  "statement_id": 544944,
+  "ab_normal_id": 257328,
+  "bc_normal_id": 257329,
+  "creation_run": "6d1e0bd4-4b33-4c10-b50d-31ecdd7d2560",
+  "bill_label": "TW-LOCAL-BILL-ADJ-20261016080007",
+  "creation_verification_run": "32c8eab9-e35c-4333-acdc-00e3b4dd8d81",
+  "creation_new_branch_after_varchar_fix_rerun": false,
+  "ab_platform_no": "000050-2026PT00011-A001",
+  "bc_platform_no": "000050-2026PT00011-A002",
+  "record_no": null,
+  "saved_output": {
+    "bill_label": "TW-LOCAL-BILL-ADJ-20261016080007",
+    "boundary": "正常中文31编辑器，两段均录入本次保费调整+1000及其余三科目0；实际保存后核对贡献额1000及重建ID，不等同原总额或原总额20%试算。尚未提交/上链/支付。",
+    "items": [
+      {
+        "item_amount": "1000.00",
+        "item_code": "01",
+        "object_id": 257326,
+        "version": 1
+      },
+      {
+        "item_amount": "0.00",
+        "item_code": "02",
+        "object_id": 257326,
+        "version": 1
+      },
+      {
+        "item_amount": "0.00",
+        "item_code": "21",
+        "object_id": 257326,
+        "version": 1
+      },
+      {
+        "item_amount": "0.00",
+        "item_code": "60",
+        "object_id": 257326,
+        "version": 1
+      },
+      {
+        "item_amount": "1000.00",
+        "item_code": "01",
+        "object_id": 257327,
+        "version": 1
+      },
+      {
+        "item_amount": "0.00",
+        "item_code": "02",
+        "object_id": 257327,
+        "version": 1
+      },
+      {
+        "item_amount": "0.00",
+        "item_code": "21",
+        "object_id": 257327,
+        "version": 1
+      },
+      {
+        "item_amount": "0.00",
+        "item_code": "60",
+        "object_id": 257327,
+        "version": 1
+      }
+    ],
+    "master": {
+      "comment": "仅供本地自测 TW-LOCAL-BILL-ADJ-20261016080007",
+      "former_platform_statement_no": "000050-2026PT00011-SOA0001",
+      "former_treaty_statement_type": "01",
+      "id": 544944,
+      "record_no": null,
+      "statement_status": 0,
+      "treaty_id": 325094,
+      "treaty_statement_type": "31"
+    },
+    "new_adjust_saved_by_user": true,
+    "new_adjust_submitted": false,
+    "normals": [
+      {
+        "biz_id": null,
+        "cedent_statement_no": "TW-LOCAL-BILL-ADJ-20261016080007-AB",
+        "currency": "CNY",
+        "enter_org_code": "000053",
+        "former_platform_statement_no": "000050-2026PT00011-SOA0001",
+        "former_statement_normal_id": "257312",
+        "id": 257326,
+        "input_org_code": "000050",
+        "net_balance": "1000.00",
+        "parent_biz_id": null,
+        "parent_id": null,
+        "platform_statement_no": "000050-2026PT00011-A001",
+        "settlement_id": null,
+        "settlement_status": null,
+        "sign_biz_id": null,
+        "sign_file_id": null,
+        "statement_id": 544944,
+        "treaty_reinsurer_id": 10925281
+      },
+      {
+        "biz_id": null,
+        "cedent_statement_no": "TW-LOCAL-BILL-ADJ-20261016080007-BC",
+        "currency": "CNY",
+        "enter_org_code": "000045",
+        "former_platform_statement_no": "000050-2026PT00011-SOA0002",
+        "former_statement_normal_id": "257313",
+        "id": 257327,
+        "input_org_code": "000053",
+        "net_balance": "1000.00",
+        "parent_biz_id": null,
+        "parent_id": 257326,
+        "platform_statement_no": "000050-2026PT00011-A002",
+        "settlement_id": null,
+        "settlement_status": null,
+        "sign_biz_id": null,
+        "sign_file_id": null,
+        "statement_id": 544944,
+        "treaty_reinsurer_id": 10925282
+      }
+    ],
+    "record_no": null,
+    "source_id": 257326,
+    "statement_id": 544944,
+    "states": [
+      {
+        "net_balance": "1000.00",
+        "org_code": "000050",
+        "reinsurance_role": "01",
+        "statement_normal_id": 257326,
+        "statement_status": 0
+      },
+      {
+        "net_balance": "1000.00",
+        "org_code": "000053",
+        "reinsurance_role": "02",
+        "statement_normal_id": 257326,
+        "statement_status": 0
+      },
+      {
+        "net_balance": "1000.00",
+        "org_code": "000045",
+        "reinsurance_role": "02",
+        "statement_normal_id": 257327,
+        "statement_status": 0
+      },
+      {
+        "net_balance": "1000.00",
+        "org_code": "000053",
+        "reinsurance_role": "01",
+        "statement_normal_id": 257327,
+        "statement_status": 0
+      }
+    ],
+    "v1_comment": "仅供本地自测 TW-LOCAL-BILL-ADJ-20261016080007"
+  },
+  "source_id": 257328,
+  "new_adjust_saved_by_user": true,
+  "new_adjust_submitted": true,
+  "browser_session_released_after_saved_capture": false,
+  "next_step": 6,
+  "initial_submit_failed_no_job": true,
+  "initial_submit_run": "ed322023-2899-4867-91c1-992762596a7e",
+  "initial_core_mock_job": {
+    "biz_id": "owned-local-bill-adj-20261016080007",
+    "biz_no": "000050-2026PT00011-A001",
+    "callback_result": "成功",
+    "detail_group": 544944,
+    "detail_id": 1768114586986032197,
+    "onchain_business_id": 257328,
+    "onchain_times": 1,
+    "parent_group": 544944,
+    "parent_id": 1768115023432721914,
+    "parent_status": 8,
+    "status": 8
+  },
+  "broker_reviewer": "000053",
+  "broker_claim_run": "a0fed731-fc16-42ff-b2ca-fd0beafa32b4",
+  "broker_pending_run": "55979ebe-e528-459c-a15b-4d1da89b2d1d",
+  "mock": {
+    "url": "http://127.0.0.1:9703",
+    "pid": 92825,
+    "boundary": "严格本笔ADJUST_BILL050→053/REJECT053→050；不PASS、不真实链或资金"
+  },
+  "initial_submission_guard_tests": 6,
+  "claim_guard_tests": 4,
+  "owner_new_tool_tests_root_ran": 19
+}

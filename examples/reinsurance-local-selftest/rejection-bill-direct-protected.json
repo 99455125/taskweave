@@ -1,0 +1,111 @@
+{
+  "purpose": "本笔直连账单两轮操作后，root独立SELECT核对owner明确保护的原三账单/三normal/四快照；非TaskWeave业务执行证明。",
+  "handoff_path": "/Users/xiaojuju/Projects/company/bjs/dev-environment/imports/runtime/selftest-handoff/taskweave-direct-bill-base.json",
+  "handoff_sha256": "7f530f8d8705330b88008dd7df59b11c9a56cd7f99c9f8b1da0ec547142df14a",
+  "checks": [
+    {
+      "source": "existingBillsProtected",
+      "table": "ri_statement",
+      "unchanged": true,
+      "rows": [
+        {
+          "id": 536940,
+          "record_no": "000050-2026PTSELFTESTBILL001-SOAP0001",
+          "treaty_statement_type": "01",
+          "statement_flag": 1,
+          "statement_status": 3,
+          "is_deleted": "N"
+        },
+        {
+          "id": 536942,
+          "record_no": "000050-2026PTSELFTESTBILL001-ADJSELFTEST001",
+          "treaty_statement_type": "31",
+          "statement_flag": 1,
+          "statement_status": 3,
+          "is_deleted": "N"
+        },
+        {
+          "id": 540946,
+          "record_no": "000050-2026PTSELFTESTBILL001-SOAP0002",
+          "treaty_statement_type": "01",
+          "statement_flag": 1,
+          "statement_status": 3,
+          "is_deleted": "N"
+        }
+      ]
+    },
+    {
+      "source": "existingNormalsProtected",
+      "table": "ri_statement_normal",
+      "unchanged": true,
+      "rows": [
+        {
+          "id": 249309,
+          "statement_id": 536940,
+          "input_org_code": "000050",
+          "enter_org_code": "000045",
+          "parent_id": null,
+          "upper_enter_org_code": null,
+          "treaty_reinsurer_id": 10947283,
+          "platform_statement_no": "000050-2026PTSELFTESTBILL001-SOA0001"
+        },
+        {
+          "id": 249311,
+          "statement_id": 536942,
+          "input_org_code": "000050",
+          "enter_org_code": "000045",
+          "parent_id": null,
+          "upper_enter_org_code": null,
+          "treaty_reinsurer_id": 10947283,
+          "platform_statement_no": "000050-2026PTSELFTESTBILL001-ADJSELFTEST001"
+        },
+        {
+          "id": 253320,
+          "statement_id": 540946,
+          "input_org_code": "000050",
+          "enter_org_code": "000045",
+          "parent_id": null,
+          "upper_enter_org_code": null,
+          "treaty_reinsurer_id": 10947283,
+          "platform_statement_no": "000050-2026PTSELFTESTBILL001-SOA0002"
+        }
+      ]
+    },
+    {
+      "source": "existingSnapshotHashesProtected",
+      "table": "t_business_back_up_data",
+      "unchanged": true,
+      "rows": [
+        {
+          "id": 1748,
+          "source_table": 3,
+          "source_id": 249309,
+          "is_deleted": "Y",
+          "sha256": "daa46c5d982ff3469220c0977cd28317caeb78e022a7c6cb3b735c8e8b195372"
+        },
+        {
+          "id": 1749,
+          "source_table": 3,
+          "source_id": 249309,
+          "is_deleted": "N",
+          "sha256": "05c0d3af47667170251c2cc71f956ca519df5149d342979c65bf15abecced936"
+        },
+        {
+          "id": 1750,
+          "source_table": 3,
+          "source_id": 249311,
+          "is_deleted": "Y",
+          "sha256": "ba70f03f6089b1dc2ef23f5c49a118beff13b99bf855f10869c9ce9ab0918580"
+        },
+        {
+          "id": 1751,
+          "source_table": 3,
+          "source_id": 249311,
+          "is_deleted": "N",
+          "sha256": "40a1ccf5b81c653ab14b2d69e09bcee91c14f7b11c2a8830e95140ed1eff5cd1"
+        }
+      ]
+    }
+  ],
+  "all_unchanged": true
+}

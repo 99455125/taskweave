@@ -1,0 +1,406 @@
+[
+  {
+    "step_number": 1,
+    "name": "切换实际接收方并领取",
+    "source": "01-login-and-claim.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "broker",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000053",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "日本财产",
+          "type": "string"
+        },
+        "from_task_id": {
+          "const": 175581,
+          "default": 175581,
+          "type": "integer"
+        },
+        "normal_id": {
+          "const": 257312,
+          "default": 257312,
+          "type": "integer"
+        },
+        "role": {
+          "default": "broker",
+          "type": "string"
+        },
+        "run_label": {
+          "default": "TW-LOCAL-SETTLE-20261016040330",
+          "type": "string"
+        },
+        "settlement_id": {
+          "const": 174791,
+          "default": 174791,
+          "type": "integer"
+        },
+        "settlement_no": {
+          "const": "000050-20261016CNY0000018",
+          "default": "000050-20261016CNY0000018",
+          "type": "string"
+        },
+        "to_task_id": {
+          "const": 175582,
+          "default": 175582,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "role",
+        "account_key",
+        "expected_account",
+        "expected_org_text",
+        "credentials_path",
+        "run_label",
+        "settlement_no",
+        "settlement_id",
+        "from_task_id",
+        "to_task_id",
+        "normal_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  },
+  {
+    "step_number": 2,
+    "name": "核对结算明细并提交接收方审核",
+    "source": "02-confirm-to-review.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "broker",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000053",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "日本财产",
+          "type": "string"
+        },
+        "from_task_id": {
+          "const": 175581,
+          "default": 175581,
+          "type": "integer"
+        },
+        "normal_id": {
+          "const": 257312,
+          "default": 257312,
+          "type": "integer"
+        },
+        "role": {
+          "default": "broker",
+          "type": "string"
+        },
+        "run_label": {
+          "default": "TW-LOCAL-SETTLE-20261016040330",
+          "type": "string"
+        },
+        "settlement_id": {
+          "const": 174791,
+          "default": 174791,
+          "type": "integer"
+        },
+        "settlement_no": {
+          "const": "000050-20261016CNY0000018",
+          "default": "000050-20261016CNY0000018",
+          "type": "string"
+        },
+        "to_task_id": {
+          "const": 175582,
+          "default": 175582,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "role",
+        "account_key",
+        "expected_account",
+        "expected_org_text",
+        "credentials_path",
+        "run_label",
+        "settlement_no",
+        "settlement_id",
+        "from_task_id",
+        "to_task_id",
+        "normal_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  },
+  {
+    "step_number": 3,
+    "name": "接收方一级审核",
+    "source": "03-receiver-audit1.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "broker",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000053",
+          "type": "string"
+        },
+        "expected_amount": {
+          "const": "70000.00",
+          "default": "70000.00",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "日本财产",
+          "type": "string"
+        },
+        "from_task_id": {
+          "const": 175581,
+          "default": 175581,
+          "type": "integer"
+        },
+        "normal_id": {
+          "const": 257312,
+          "default": 257312,
+          "type": "integer"
+        },
+        "role": {
+          "default": "broker",
+          "type": "string"
+        },
+        "run_label": {
+          "default": "TW-LOCAL-SETTLE-20261016040330",
+          "type": "string"
+        },
+        "settlement_id": {
+          "const": 174791,
+          "default": 174791,
+          "type": "integer"
+        },
+        "settlement_no": {
+          "const": "000050-20261016CNY0000018",
+          "default": "000050-20261016CNY0000018",
+          "type": "string"
+        },
+        "to_task_id": {
+          "const": 175582,
+          "default": 175582,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "expected_org_text",
+        "from_task_id",
+        "normal_id",
+        "role",
+        "run_label",
+        "settlement_id",
+        "settlement_no",
+        "to_task_id",
+        "expected_amount"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  },
+  {
+    "step_number": 4,
+    "name": "接收方最终审核并核对待结算",
+    "source": "04-receiver-final-audit.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "broker",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000053",
+          "type": "string"
+        },
+        "expected_amount": {
+          "const": "70000.00",
+          "default": "70000.00",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "日本财产",
+          "type": "string"
+        },
+        "finance_handoff_path": {
+          "default": "dev-environment/SELFTEST-HANDOFF-20261016-finance-isolation-runtime.json",
+          "type": "string"
+        },
+        "from_task_id": {
+          "const": 175581,
+          "default": 175581,
+          "type": "integer"
+        },
+        "normal_id": {
+          "const": 257312,
+          "default": 257312,
+          "type": "integer"
+        },
+        "role": {
+          "default": "broker",
+          "type": "string"
+        },
+        "run_label": {
+          "default": "TW-LOCAL-SETTLE-20261016040330",
+          "type": "string"
+        },
+        "settlement_id": {
+          "const": 174791,
+          "default": 174791,
+          "type": "integer"
+        },
+        "settlement_no": {
+          "const": "000050-20261016CNY0000018",
+          "default": "000050-20261016CNY0000018",
+          "type": "string"
+        },
+        "to_task_id": {
+          "const": 175582,
+          "default": 175582,
+          "type": "integer"
+        },
+        "verify_finalized_only": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "expected_amount",
+        "expected_org_text",
+        "from_task_id",
+        "normal_id",
+        "role",
+        "run_label",
+        "settlement_id",
+        "settlement_no",
+        "to_task_id",
+        "verify_finalized_only",
+        "finance_handoff_path"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  },
+  {
+    "step_number": 6,
+    "name": "记录待结算终点",
+    "source": "06-final-readonly-views.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "broker",
+          "type": "string"
+        },
+        "after_record_id": {
+          "const": 2110651223716827136,
+          "default": 2110651223716827136,
+          "type": "integer"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000053",
+          "type": "string"
+        },
+        "expected_amount": {
+          "const": "70000.00",
+          "default": "70000.00",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "日本财产",
+          "type": "string"
+        },
+        "from_task_id": {
+          "const": 175581,
+          "default": 175581,
+          "type": "integer"
+        },
+        "normal_id": {
+          "const": 257312,
+          "default": 257312,
+          "type": "integer"
+        },
+        "role": {
+          "default": "broker",
+          "type": "string"
+        },
+        "run_label": {
+          "default": "TW-LOCAL-SETTLE-20261016040330",
+          "type": "string"
+        },
+        "settlement_id": {
+          "const": 174791,
+          "default": 174791,
+          "type": "integer"
+        },
+        "settlement_no": {
+          "const": "000050-20261016CNY0000018",
+          "default": "000050-20261016CNY0000018",
+          "type": "string"
+        },
+        "to_task_id": {
+          "const": 175582,
+          "default": 175582,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "expected_amount",
+        "expected_org_text",
+        "from_task_id",
+        "normal_id",
+        "role",
+        "run_label",
+        "settlement_id",
+        "settlement_no",
+        "to_task_id",
+        "after_record_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  }
+]

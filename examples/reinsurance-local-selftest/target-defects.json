@@ -1,0 +1,29 @@
+{
+  "defects": [
+    {
+      "id": "BJS-BILL-MASTER-001",
+      "status": "已复现，目标平台既有缺陷；修复范围待后续审查",
+      "master_id": 544940,
+      "statement_roles_completed": true,
+      "master_status": 6,
+      "expected_master_status": 8,
+      "failure_run": "32307e82-65f7-44d3-909c-896f2253f602",
+      "scope": "TaskWeave正确检测目标平台状态汇总缺陷；本轮未改BJS业务源或SQL状态，不重提/回放已完成任务。",
+      "source_path": "/Users/xiaojuju/Projects/company/bjs/dev-environment/SELFTEST-HANDOFF-20261016-bill-master-status-analysis.json",
+      "source_sha256": "754d1b5e245be07551e1f4a86a2946dbf803bc472a9ca7bb3b774559272d2d3b",
+      "root_cause": {
+        "caller": "StatementAuditServiceImpl.brokerConfirmApproval -> updateUpperStatementStatus (1268)",
+        "aggregator": "StatementAuditServiceImpl.java:1583-1597 从ri_statement_normal普通list查询一级normal，再用it.getStatus()判断全部完成",
+        "mapping": "RiStatementNormalDO.java:42-44 原statementStatus已注释，status带@TableField(exist=false)，普通list不会填角色状态",
+        "runtime": "实际日志SELECT无status/角色表，随后UPDATE ri_statement statement_status=6, id544940；03:43:13",
+        "why": "当前审批normalDO临时setStatus(8)并未替换聚合list中的新查询实体；getStatus为null，!8.equals(String.valueOf(null))为true，汇总固定走PROCESSING6",
+        "completionEvent": "MessageReminderService.java:456 treatyStatementComplete处理提醒数据，非主表状态汇总"
+      },
+      "baseline": {
+        "coreHead": "7b59f8291",
+        "filesUnmodified": true,
+        "sameAggregationExistsInHEAD": true
+      }
+    }
+  ]
+}

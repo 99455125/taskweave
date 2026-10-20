@@ -56,9 +56,10 @@ class WorkbenchHomeTests(unittest.TestCase):
 
             elements = list(ui.context.client.elements.values())
             texts = {getattr(element, "text", None) for element in elements}
-            self.assertTrue({"活跃执行", "继续执行", "填写输入", "待核对结果", "核对结果", "查看查询结果", "结束"}.issubset(texts))
+            self.assertTrue({"活跃执行", "继续执行", "填写输入", "待核对结果", "核对结果", "全部记录", "结束"}.issubset(texts))
             self.assertTrue({"任务总数", "活跃执行", "今日执行", "待处理", "最近执行结果", "快速开始"}.issubset(texts))
             self.assertEqual(sum(getattr(element, "text", None) == "结果需要人工核对" for element in elements), 1)
+            self.assertNotIn("查看查询结果", texts)
             section_panels = {}
             for element in elements:
                 title = getattr(element, "text", None)
@@ -152,6 +153,31 @@ class WorkbenchHomeTests(unittest.TestCase):
                 with client:
                     await scenario()
             asyncio.run(within_client())
+        finally:
+            client.delete()
+
+    def test_home_new_execution_opens_dialog_before_navigation(self):
+        from nicegui.client import Client
+        from nicegui.page import page
+        client = Client(page('/home-new-execution'))
+        async def scenario():
+            with client:
+                workbench = Workbench.__new__(Workbench)
+                workbench.page = 'home'
+                workbench.run_page = SimpleNamespace(open_create=AsyncMock())
+                workbench.navigate = AsyncMock(return_value=True)
+                await workbench._open_new_execution()
+                workbench.run_page.open_create.assert_awaited_once()
+                workbench.navigate.assert_not_awaited()
+                await workbench.run_page.open_create.call_args.kwargs['on_created']()
+                workbench.navigate.assert_awaited_once_with('executions')
+                workbench.navigate.reset_mock()
+                workbench.run_page.open_create.reset_mock()
+                await workbench.open_task_execution('chosen-task')
+                self.assertEqual(workbench.run_page.open_create.call_args.args, ('chosen-task',))
+                workbench.navigate.assert_not_awaited()
+        try:
+            asyncio.run(scenario())
         finally:
             client.delete()
 

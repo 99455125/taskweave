@@ -1,42 +1,31 @@
 # 任务与步骤
 
-维护任务定义、步骤内容、复制与任务包；运行实例见 [执行](execution.md)，规划导入见 [规划](planning.md)。本页描述当前规则，不要求读取历史 REQ。
+## 职责
 
-## 当前行为与约束
+管理任务定义、步骤顺序、编辑确认、复制与任务包导入导出。定义写入与运行记录分开；收藏和分类是独立组织信息。
 
-- 任务保存名称、说明和输入 schema；步骤有稳定 ID、顺序、描述、AI 编写说明、内容、参数、依赖与能力声明。
-- 当前执行为线性步骤；条件/循环/子流程不能因模型字段预留就视为已实现。
-- 步骤内容为 `python-async-v1`，入口是 `async def run(ctx, inputs)`，返回 `ctx.result(...)`。不允许 import 或绕过 ctx 直接访问外部能力；这不是恶意 Python 安全沙箱。
-- 步骤保存使用 expected_hash 防止过期覆盖，编辑使原确认失效；不维护步骤版本树。静态检查成功不等于业务验证成功；确认与试跑是不同操作，手动确认须保留明确用户操作。
-- 复制任务重建步骤 ID 并重映射前序引用，复制上下文组和有序采集项；组合写入失败要回滚，不能留下半个任务。
-- 任务包当前格式 `taskweave-task-2`，字段与导入校验以 task_package.py、task_transfer.py 为准。分享不包含环境、运行历史和运行结果；导入校验插件与内容，不执行步骤。普通导入与规划草稿导入的确认策略不同，不可混用。
-- 桌面任务导入默认选择本地 JSON 文件，最大32 MiB；文件读取和解析后需显式点击导入，素材不经过文本框或WebSocket传输。保留小型JSON粘贴入口；无效、超限或关闭弹窗后的文件不会创建任务。任务包格式、导入校验及确认策略不变。
-- 任务 JSON 导出包含各步骤的采集上下文组、有序采集项及图片预览；导入创建新上下文副本并保留所属步骤、名称、说明、采集时间与参数。任务/步骤输入 schema 分别保留，前序绑定重映射到新步骤 ID，不携带活跃采集会话。
-- 清理运行保留任务/步骤定义和确认状态，清理运行结果、文件及相关会话；执行中的任务禁止清理。删除任务与清理运行不是同一操作。
-- 删除任务或步骤先核对独立上下文观察会话；在途采集或未保存录制拒绝删除，空闲且没有待确认录制时，删除成功后再释放其观察资源。不会以删除操作静默消费录制证据。
-- 任务编辑器内的概览、步骤详情、正式执行历史和调试历史由 TasksPage 按同一 task ID 组织；Workbench 负责装配步骤/历史视图回调，不复制 task/step 身份。离开步骤页签有草稿时先选择保存、放弃或取消，保存失败保留在当前页签。
-- 任务概览按 `input_schema_json` 展示变量名、类型、必填、默认值与说明，并按真实执行及试跑记录展示状态统计和最近调试记录；这些摘要不改变任务或运行定义。
-- 任务可本地收藏并分入一个单层分类；复制保留分类但默认不收藏。分类删除仅清除关联，不删除任务或其历史。任务包不带这些本地组织字段，导入任务默认未收藏且未分类。
-- 进入任务页时显示任务列表与所选任务概览；切换左栏任务留在同一工作区。收藏与分类写入按 task ID 串行，并只刷新组织控件，保留步骤编辑器的未保存字段；写入失败时保留现有草稿与页面句柄。
-- 从任务概览直接选择“步骤管理”会进入带原身份保护的步骤编辑器路由；首次空步骤仍从该路由创建首步骤。动作表单、变量与输入依赖、时间设置可折叠，动作表单默认折叠，并由“插入动作”显式打开；上下文只从素材卡片标题处采集。调试默认折叠，只有明确调试导航会自动展开；调试区在 1390px 以上使用 320px 右栏，901–1390px 使用 280px 右栏；901–1199px 进一步缩短任务侧栏/步骤目录并使用 260px 调试栏。仅 900px 及以下时置于配置下方。
-- 步骤列表“更多 → 确认全部步骤”先保存并校验当前全部步骤。返回的无效诊断和 `TaskError` 都会按步骤序号、名称和原因列出；任一校验失败时不确认任何步骤。校验全部通过后逐步调用现有人工确认并刷新实际存储状态；确认中途失败时报告持久化成功数和失败步骤。意外异常继续向上抛出。
-- 步骤目录标题行提供紧凑新增按钮；步骤配置标题旁的“更多”菜单提供批量确认、顺序移动与删除，边界位置不可移动。保存位于步骤配置标题栏，底部仅保留“校验内容”和“确认验证”；未保存配置不能直接确认，先显式保存。任务侧栏卡片整块可点击且支持键盘聚焦，长名称省略显示并可查看完整提示。
-- 步骤配置中的插件上下文以共享的紧凑素材卡片显示：分组说明、采集顺序、预览、改名、移动和删除均可直接操作，每组默认折叠，显式展开查看采集项。采集弹窗将组信息、插件动态字段、目标选择、高级参数和暂存项放在一次批量保存流程中；取消不写入，显示内容遵循隐私脱敏设置。
-- AI 修复仅在当前步骤仍关联同一失败运行与尝试时展示完整编号并允许继续；缺少或过期证据时禁用发起操作。用户可选择修复轮次、去重和补充说明，并显式选择“大模型api调用”或“大模型网页chat调用”；取消不发请求。
+## 当前流程
 
-TaskImportSession持有导入模式、粘贴内容、文件读取代次、限额及解析结果，提交防重和关闭判断在普通层；已接受的导入仍完成持久化，关闭后不再更新旧视图。CategorySession持有分类弹窗草稿，StepActions负责步骤新增、移动、删除与批量校验确认；原页面和组件实际委托这些交互对象。
+- TaskUseCases处理任务创建/更新/复制/删除和运行记录清理；StepUseCases负责步骤保存、校验、调试与确认。
+- 步骤保存使用expected_hash保护并发编辑；确认对应当前内容和有效证据，修改定义使旧确认失效。批量确认先保存并校验全部步骤，再逐项确认；中途失败报告实际成功数并刷新持久状态。
+- 导入完整校验任务包、引用与能力后事务写入新身份；失败回滚。复制保留步骤、材料组项及其顺序，不复制运行记录。
+- TaskImportSession持有文件/文本模式、原始内容、文件代次和提交防重；文本入口上限2Mi字符，JSON文件上限32MiB。关闭只废弃旧视图结果，已接受写入继续完成。
+- 步骤编辑器保留既有插件的能力子集及毫秒级超时，打开或切换步骤不改变定义；新选插件时加入其目录能力，移除插件时移除对应能力。
+- TaskDraft保存任务配置的普通草稿；EditorSession管理步骤保存串行、保存版本及冲突。TaskTabTransition/WorkspaceNavigation提供保存、放弃、取消的导航决定，失败保留原草稿。
+- CategorySession维护分类弹窗草稿；TaskOrganization串行更新收藏/分类，避免并发动作覆盖先前成功值。目录筛选由CatalogFilter持有，UI绑定输入事件。
 
-## 代码入口
+## 代码与协作
 
-- [任务用例](../../src/taskweave/application/tasks.py)、[步骤用例](../../src/taskweave/application/steps.py)、[任务包导入导出](../../src/taskweave/application/task_transfer.py)。
-- [任务包 schema](../../src/taskweave/core/task_package.py)、[内容和绑定校验](../../src/taskweave/core/validation.py)。
-- [任务仓储](../../src/taskweave/infrastructure/repositories/tasks.py)、[步骤仓储](../../src/taskweave/infrastructure/repositories/steps.py)。
-- [任务页](../../src/taskweave/desktop/pages/tasks.py)、[步骤编辑器](../../src/taskweave/desktop/components/step_editor.py)。
+| 责任 | 代码 |
+| --- | --- |
+| 任务/步骤用例 | [tasks.py](../../src/taskweave/application/tasks.py)、[steps.py](../../src/taskweave/application/steps.py) |
+| 任务包校验与复制 | [task_transfer.py](../../src/taskweave/application/task_transfer.py)、[任务包契约](../contracts/task-packages.md) |
+| 持久化 | [任务仓储](../../src/taskweave/infrastructure/repositories/tasks.py)、[步骤仓储](../../src/taskweave/infrastructure/repositories/steps.py) |
+| 普通交互 | [tasks.py](../../src/taskweave/presentation/tasks.py)、[editor.py](../../src/taskweave/presentation/editor.py)、[step_actions.py](../../src/taskweave/presentation/step_actions.py)、[task_import.py](../../src/taskweave/presentation/task_import.py) |
+| UI装配 | [TasksPage](../../src/taskweave/desktop/pages/tasks.py)、[StepEditor](../../src/taskweave/desktop/components/step_editor.py) |
 
-## 验证入口
+步骤字段与代码约束见[步骤契约](../contracts/steps.md)。任务输入和运行补参的归属见[执行模块](execution.md)。
 
-测试键：`application.tasks`、`application.steps`、`repository.tasks`、`repository.steps`；UI 改动选择 `ui.tasks` 或 `ui.editor`。复制、任务包、并发保存分别关注 ID/绑定重映射、失败回滚、expected_hash 冲突。具体目标与反向依赖使用 [模块映射](../../tests/module-map.json)，命令见 [测试规则](../testing.md)。
+## 验证定位
 
-## 按需深入
-
-[步骤内容与绑定](../reference/step-content.md)、[任务包与规划导入](../reference/task-sharing.md)。只在本次修改涉及相应契约时阅读。
+application.tasks、application.steps、ui.tasks、ui.editor；重点检查导入回滚、复制引用重映射、哈希冲突、确认失效、批量部分失败及导航保留草稿。用changed dry-run查实际消费者，不默认扩大为全量。

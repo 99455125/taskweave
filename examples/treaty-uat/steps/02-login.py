@@ -1,0 +1,17 @@
+async def run(ctx, inputs):
+    await ctx.call("playwright.page_assert_url", {"url": "https://ire-uat.shie.com.cn/login", "role": "operator"})
+    pending = await ctx.call("playwright.page_state", {"selector": "#emailOrTokenVerifyCode", "role": "operator"})
+    if pending["match_count"] != 1 or not pending["visible"]:
+        await ctx.call("playwright.page_fill", {"selector": "#username", "value": inputs["login_account"], "role": "operator"})
+        await ctx.call("playwright.page_fill", {"selector": "#password", "value": inputs["org_secret"], "role": "operator"})
+        image = await ctx.call("playwright.page_element_image", {"selector": inputs["captcha_selector"], "role": "operator"})
+        recognized = await ctx.call("ocr.recognize", {"image_base64": image["image_base64"], "expected_length": 4})
+        await ctx.call("playwright.page_fill", {"selector": "#verifyCode", "value": recognized["text"], "role": "operator"})
+        await ctx.call("playwright.page_click", {"selector": {"kind": "role", "value": "button", "name": "登 录", "exact": True}, "role": "operator"})
+    await ctx.call("playwright.page_assert_state", {"selector": "#emailOrTokenVerifyCode", "expected": {"count": 1, "visible": True}, "role": "operator"})
+    await ctx.call("playwright.page_fill", {"selector": "#emailOrTokenVerifyCode", "value": inputs["uat_email_code"], "role": "operator"})
+    await ctx.call("playwright.page_click", {"selector": {"kind": "role", "value": "button", "name": "确 认", "exact": True}, "role": "operator"})
+    await ctx.call("playwright.page_assert_url", {"url": "https://ire-uat.shie.com.cn/Home", "role": "operator"})
+    await ctx.call("playwright.page_assert_text", {"selector": "body", "text": "您好，太平人寿", "role": "operator"})
+    observed = await ctx.call("playwright.page_inspect", {"role": "operator"})
+    return ctx.result(data={"home_url": observed["url"], "organization": "太平人寿保险有限公司"})

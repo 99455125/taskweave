@@ -1,5 +1,5 @@
 # infrastructure
 
-SQLite 仓储与 UoW、存储迁移、运行协调/worker、模型与 HTTP 适配。runtime 通过语义仓储接口持久化。
+SQLite存储、仓储/UoW、运行编排/实例池/worker通信、资源会话、本地HTTP、模型与隐私适配。通过core端口向用例提供具体实现。
 
-按改动读取 [存储与环境](../../../docs/modules/storage.md)、[执行与结果](../../../docs/modules/execution.md)或[AI 编写](../../../docs/modules/authoring.md)，无需通读所有模块或历史需求。
+分别见[存储](../../../docs/modules/storage.md)、[执行](../../../docs/modules/execution.md)、[上下文](../../../docs/modules/contexts.md)和[AI编写](../../../docs/modules/authoring.md)；跨层边界见[架构](../../../docs/architecture.md)。

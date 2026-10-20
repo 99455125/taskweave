@@ -855,10 +855,15 @@ class Workbench:
                 await self.planning_page.create()
 
     async def _open_new_execution(self):
-        self.run_page.pending_open_create = True
-        await self.navigate("executions")
+        # Keep the dialog on the client when its originating page is replaced.
+        with ui.context.client:
+            await self.run_page.open_create(on_created=lambda: self.navigate("executions"))
 
     async def open_task_execution(self, task_id):
+        if self.page == "home":
+            with ui.context.client:
+                await self.run_page.open_create(task_id, on_created=lambda: self.navigate("executions"))
+            return
         self.run_page.pending_task_id = task_id
         await self.navigate("executions")
 

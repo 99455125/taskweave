@@ -1,0 +1,81 @@
+{
+  "settlement_id": 174791,
+  "settlement_no": "000050-20261016CNY0000018",
+  "from_task_id": 175581,
+  "to_task_id": 175582,
+  "detail_id": 175317,
+  "normal_id": 257312,
+  "run_label": "TW-LOCAL-SETTLE-20261016040330",
+  "from_org": "000050",
+  "to_org": "000053",
+  "storage_currency": "SETTLE-CNY",
+  "statement_currency": "CNY",
+  "amount": "70000.00",
+  "rate_pair": [
+    "100.00",
+    "100.00"
+  ],
+  "role_statuses": [
+    "6",
+    "6"
+  ],
+  "status": "本轮双方确认审核完成，双方和关联账单待结算6；本地Mock接收成功，真实链及支付未验证",
+  "creation_effect_run": "ad3e31fa-604c-42ad-b84b-1951bd8439ee",
+  "creation_failure": "最初核对错误使用currency=CNY，实际SETTLE-CNY；保存原水位170792，后只读唯一定位174791，没有重复新建。",
+  "add_effect_run": "b0ff47e2-59b2-4adf-a502-5b098e0ef9de",
+  "add_failure": "草稿账单号存platform_statement_no_temp，首次添加结算金额由UI初始化派生；修正阶段断言后只读恢复，S03保存初始化金额及100/100汇率。",
+  "verification_runs": [
+    "f0e49051-bee3-4333-b6df-f0e650b0cfb7",
+    "e8107fc5-0226-43b6-973f-e239cfd0781f",
+    "980dce2f-02d7-4c14-8d75-d0d33fc7f1b3"
+  ],
+  "scope": "仅本轮已有自有草稿续接代码；初始新建全流程尚未通用化，双签/单证为精确本地Mock，不证明真实签名或链。",
+  "next": "续编退回新单、第二条结算路线及真实record来源；新会话整套连续运行尚未验证。",
+  "submit_attempt": {
+    "run_id": "b1781c80-b810-494a-8050-707583c9a5ff",
+    "result": "UI点击提交后，隐式balanceQueryNew被本地Mock403拒绝；双方仍0，未判成功，未盲目重试。",
+    "readonly_followup_run": "573ec346-7685-4f0e-a8ed-e21d86115e0f",
+    "next": "精确050+CNY合成余额测试支持验证后，再按草稿状态与无既有job守卫提交。"
+  },
+  "submit_effect_run": "9fb5830b-e2d7-4d93-b2c8-803fd9241d95",
+  "submit_verification_run": "93e80f85-89ef-4225-902e-4db16d300604",
+  "after_record_id": 2110651223716827136,
+  "sender_audit_runs": [
+    "74f7925e-055b-4e32-ab14-6ca59940c7dc",
+    "bfead58d-e656-4403-9fa5-2fb777e494c5"
+  ],
+  "sender_final_readonly_verification": "734191fc-4fa8-45ab-976b-7a9dfb5d78b3",
+  "sender_job": {
+    "parent_id": 1768115023432721900,
+    "detail_id": 1768114586986032183,
+    "status": 8,
+    "callback_result": "{\"code\":\"0\"}",
+    "submit_tx_id": null,
+    "limitation": "旧Mock返回txId、消费tx，历史空值保留；未来Mock已修正并验证，不回放。"
+  },
+  "receiver_confirmation_run": "d92f7cad-7365-452c-b01d-27ac2f47b794",
+  "receiver_first_audit_run": "f08c97f4-2848-4e5f-8e6f-586e4ed488a6",
+  "receiver_final_effect_run": "01129040-2afd-4168-91f2-7fb483ad7a90",
+  "confirmation_job": {
+    "parent_id": 1768115023432721901,
+    "detail_id": 1768114586986032184,
+    "status": 8,
+    "callback_result": "{\"code\":\"0\"}",
+    "tx_id": "owned-local-settlement-mock-709d055cd53e48fba29170f07503cd04"
+  },
+  "sender_wait_source_new_run_verified": false,
+  "receiver_final_readonly_verification": "a34305ce-dd96-4744-b308-1b6aada6cc59",
+  "final_readonly_views_run": "50f6b1b9-a570-4024-8d15-de945925540a",
+  "historical_first_sample": {
+    "parent_status": 10,
+    "detail_status": 10,
+    "meaning": "父任务上链中；明细上链成功等待业务回调，非回调失败。之后同一次处理到8，无重发或恢复。"
+  },
+  "local_receipt": {
+    "id": 1768092173429976783,
+    "code": "0001",
+    "busi_order_no": "9663625a-1561-4b0c-94d2-275204236fdd",
+    "payment_completed": false
+  },
+  "record_source_verified": false
+}

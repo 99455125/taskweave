@@ -1,0 +1,72 @@
+{
+  "original_task_id": "323157f6-2efa-4a33-9a7b-5727c0fc69fc",
+  "gui_imported_task_id": "75eaa938-4c54-45fd-8360-732c0fdcbed3",
+  "roundtrip_exact_match": true,
+  "package_bytes": 23189061,
+  "sha256": "85f73e18aa23f6972c17f01057cb404cb51df5b4b2f84f7078a6d1738b0139a3",
+  "per_step": [
+    {
+      "step": "step-1",
+      "groups": 1,
+      "captures": 6
+    },
+    {
+      "step": "step-2",
+      "groups": 1,
+      "captures": 6
+    },
+    {
+      "step": "step-3",
+      "groups": 2,
+      "captures": 9
+    },
+    {
+      "step": "step-4",
+      "groups": 2,
+      "captures": 10
+    },
+    {
+      "step": "step-5",
+      "groups": 1,
+      "captures": 6
+    },
+    {
+      "step": "step-6",
+      "groups": 2,
+      "captures": 16
+    },
+    {
+      "step": "step-7",
+      "groups": 1,
+      "captures": 5
+    },
+    {
+      "step": "step-8",
+      "groups": 2,
+      "captures": 6
+    },
+    {
+      "step": "step-9",
+      "groups": 2,
+      "captures": 6
+    }
+  ],
+  "groups": 14,
+  "captures": 70,
+  "preview_display_verified": true,
+  "restored_fields": [
+    "step association",
+    "group name",
+    "notes",
+    "order",
+    "label",
+    "request",
+    "items",
+    "views",
+    "include_view",
+    "captured_at",
+    "source_page",
+    "operation_notes",
+    "send_preview"
+  ]
+}

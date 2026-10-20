@@ -1,0 +1,183 @@
+{
+  "statement_id": 544940,
+  "record_no": "000050-2026PT00011-SOAP0001",
+  "bill_label": "TW-LOCAL-BILL-20261016025047",
+  "platform_treaty_no": "000050-2026PT00011",
+  "status": "四角色均8、两段核心Mock回调均8；最终核验失败：主表仍6，为目标平台既有汇总缺陷，未判整笔完成",
+  "actual_effect_run": "79f7c5f0-1d42-4484-8f12-0910f44258a6",
+  "verification": {
+    "key": "BILL-01",
+    "step_number": 9,
+    "step_id": "fc2862f1-5ab2-48ce-bef9-1863c6f94602",
+    "run_id": "16603861-ce9a-4f35-954f-6ee1da9734d7",
+    "status": "SUCCEEDED",
+    "current_content_hash": "e33a6d0ce0d19dc4abecac36542e4d19772025802531f0925767651f6631088e",
+    "purpose": "本轮定期总账单录入及三方确认分段真实验证",
+    "output": {
+      "after": {
+        "id": 257312,
+        "net_balance": "70000.00",
+        "org_code": "000053",
+        "platform_statement_no": "000050-2026PT00011-SOA0001",
+        "review_level": null,
+        "reviewer": null,
+        "statement_id": 544940,
+        "statement_status": 8
+      },
+      "boundary": "本地正常认证领取/页面决策；列表TiFlash未验收。业务Mock与真实record来源及链节点分列。",
+      "items": [
+        {
+          "item_amount": "100000.00",
+          "item_code": "01",
+          "object_id": 257312
+        },
+        {
+          "item_amount": "20000.00",
+          "item_code": "02",
+          "object_id": 257312
+        },
+        {
+          "item_amount": "10000.00",
+          "item_code": "21",
+          "object_id": 257312
+        },
+        {
+          "item_amount": "0.00",
+          "item_code": "60",
+          "object_id": 257312
+        },
+        {
+          "item_amount": "100000.00",
+          "item_code": "01",
+          "object_id": 257313
+        },
+        {
+          "item_amount": "20000.00",
+          "item_code": "02",
+          "object_id": 257313
+        },
+        {
+          "item_amount": "10000.00",
+          "item_code": "21",
+          "object_id": 257313
+        },
+        {
+          "item_amount": "0.00",
+          "item_code": "60",
+          "object_id": 257313
+        }
+      ],
+      "normal_id": 257312,
+      "phase": "经纪二次确认二级审核",
+      "resumed_existing_action": false,
+      "role_states": [
+        {
+          "biz_id": "owned-local-bill-tw-20261016025047-ab",
+          "enter_org_code": "000053",
+          "id": 257312,
+          "input_org_code": "000050",
+          "net_balance": "70000.00",
+          "org_code": "000050",
+          "parent_id": null,
+          "platform_statement_no": "000050-2026PT00011-SOA0001",
+          "statement_status": 8
+        },
+        {
+          "biz_id": "owned-local-bill-tw-20261016025047-ab",
+          "enter_org_code": "000053",
+          "id": 257312,
+          "input_org_code": "000050",
+          "net_balance": "70000.00",
+          "org_code": "000053",
+          "parent_id": null,
+          "platform_statement_no": "000050-2026PT00011-SOA0001",
+          "statement_status": 8
+        },
+        {
+          "biz_id": "owned-local-bill-tw-20261016025047-bc",
+          "enter_org_code": "000045",
+          "id": 257313,
+          "input_org_code": "000053",
+          "net_balance": "70000.00",
+          "org_code": "000045",
+          "parent_id": 257312,
+          "platform_statement_no": "000050-2026PT00011-SOA0002",
+          "statement_status": 8
+        },
+        {
+          "biz_id": "owned-local-bill-tw-20261016025047-bc",
+          "enter_org_code": "000045",
+          "id": 257313,
+          "input_org_code": "000053",
+          "net_balance": "70000.00",
+          "org_code": "000053",
+          "parent_id": 257312,
+          "platform_statement_no": "000050-2026PT00011-SOA0002",
+          "statement_status": 8
+        }
+      ],
+      "statement_id": 544940
+    }
+  },
+  "scope": "总账单试算；可选分项账单未试算未保存",
+  "next": "结算单本地正常前置核对；真实record来源与列表独立验收。BJS主表汇总缺陷另列，不直接改状态。",
+  "submit_actual_effect_run": "a27dd606-5de3-4cdc-b2f5-bd254eb02087",
+  "normal_identity_rebuilt": {
+    "before": [
+      257310,
+      257311
+    ],
+    "after": [
+      257312,
+      257313
+    ]
+  },
+  "platform_statement_numbers": [
+    "000050-2026PT00011-SOA0001",
+    "000050-2026PT00011-SOA0002"
+  ],
+  "list_boundary": "列表服务器错误，环境会话已定位强制tidb,tiflash hint与仅TiKV环境不兼容；尚未验收。",
+  "retry_guard": {
+    "run_id": "a92d629d-635a-4c42-b2bf-57e7e141d140",
+    "actions": [
+      {
+        "action_id": "tidb.query",
+        "action_index": 1,
+        "effect": "READ"
+      },
+      {
+        "action_id": "tidb.query",
+        "action_index": 2,
+        "effect": "READ"
+      },
+      {
+        "action_id": "tidb.query",
+        "action_index": 3,
+        "effect": "READ"
+      }
+    ],
+    "result": "仅回读，未重复点击提交；本笔Mock前置未完成，保留失败，不计步骤成功"
+  },
+  "recovery_actual_effect_run": "f90689cb-d7ff-4da8-ba5b-531193fed421",
+  "submit_verified_run": "e043f5a9-c877-48d6-8a50-98c5b5679f86",
+  "broker_first_effect_runs": {
+    "normal_claim": "a2fe5577-6375-4df1-8745-d669b3f1c442",
+    "first_confirmation": "844d36b0-06ae-4d24-9038-df96fa564ac4",
+    "audit_1": "12465a1e-7330-4cb9-947a-99d402f7571d",
+    "audit_2": "2e907835-06db-4ab9-a273-e08988375576"
+  },
+  "broker_first_verified_run": "e476969a-0fa4-4514-9288-35a2fc552459",
+  "reinsurer_effect_runs": {
+    "claim": "b1b64d0f-0b73-4099-a64e-bacdf7bbf981",
+    "first_confirmation": "c91c0f30-5537-408e-8aec-535276970e92",
+    "audit_1": "3a720c12-a2d0-4221-9355-94b00b8a0744"
+  },
+  "reinsurer_verified_run": "5d4a0819-e1db-4655-829e-e84109c8c4a0",
+  "broker_secondary_runs": {
+    "confirm": "15f34885-c2ab-4710-9e82-6f0bd8d64c72",
+    "audit1": "9b833494-c696-414e-b30c-bc4015cb1b72",
+    "audit2": "16603861-ce9a-4f35-954f-6ee1da9734d7"
+  },
+  "final_verification_failed_run": "32307e82-65f7-44d3-909c-896f2253f602",
+  "target_defect": "BJS-BILL-MASTER-001"
+}

@@ -1,0 +1,47 @@
+{
+  "recorded_at": "2026-10-16T02:43:17.355478+08:00",
+  "environment_id": "a78c266f-0178-4e6f-b7b3-0a02500f8e76",
+  "old_effective_timeout_seconds": 15,
+  "new_timeout_seconds": 30,
+  "scope": "仅BJS本地自测环境；产品默认、数据库全局配置及只读门禁不变",
+  "evidence_path": "/Users/xiaojuju/Projects/company/bjs/dev-environment/SELFTEST-HANDOFF-20261016-tidb-read-diagnosis.json",
+  "evidence_sha256": "a4227a665555e078c976dbb5cce4db94965fb6d8944334c70cd05f96b4e68e96",
+  "diagnosis": "两条历史慢查询均Cop data_is_not_ready 47次，regionMiss退避20.01秒后成功；15秒客户端超时发生在服务端成功前。实际resolved-ts推进周期20秒、safe_ts拒绝计数232，符合近当前TSO stale-read安全时间未就绪。当前复测6条均1.7至2.7毫秒；不能声称持续复现。单TiKV/单副本，非跨副本同步落后。当前无明显内存/CPU/磁盘资源耗尽或resolver锁积压证据。",
+  "validation_boundary": "已有20秒安全时间等待的服务端证据；后续连接试跑验证配置加载，不声称每次复现了最慢周期。",
+  "subsequent_runtime_tuning": {
+    "evidence_path": "/Users/xiaojuju/Projects/company/bjs/dev-environment/SELFTEST-HANDOFF-20261016-resolved-ts-online-result.json",
+    "evidence_sha256": "8e3e4ae99c3c4d7154090006fda7dbe7fd04bb901e1312781dc607114571a099",
+    "checkedAt": "2026-10-16T03:38:06.778849+08:00",
+    "state": "retained temporary 1s after measured improvement",
+    "persist": false,
+    "restartPerformed": false,
+    "onlyChangedField": "resolved-ts.advance-ts-interval",
+    "beforeValue": "20s",
+    "afterValue": "1s",
+    "beforeMs": [
+      5.009,
+      1.912,
+      20102.882,
+      20113.632
+    ],
+    "afterMs": [
+      4540.293,
+      1025.249,
+      1028.228,
+      1026.157
+    ],
+    "beforeDockerStats": "bjs-middleware-tikv-1 2.46% 3.559GiB / 5GiB\nbjs-middleware-pd-1 7.56% 198.3MiB / 768MiB\nbjs-middleware-tidb-1 3.57% 726.1MiB / 2GiB\n",
+    "afterDockerStats": "bjs-middleware-tikv-1 2.33% 3.558GiB / 5GiB\nbjs-middleware-pd-1 6.21% 198.3MiB / 768MiB\nbjs-middleware-tidb-1 2.95% 726.1MiB / 2GiB\n",
+    "afterCgroupCpuSample": {
+      "windowSeconds": 10.037421709002956,
+      "usageMicroseconds": 234914,
+      "cpuPercentOneCore": 2.340381890991951
+    },
+    "cpuCaveat": "Docker snapshots before2.46% after2.33%; no sustained-load comparison. Short process_cpu_seconds_total granularity produced0 delta over7.67s, does not mean0 CPU. cgroup sample is higher resolution.",
+    "businessTableWrites": false,
+    "snapshotSemanticsChanged": false,
+    "rollback": "POST /config?persist=false body {\"resolved-ts.advance-ts-interval\":\"20s\"} in owned TiKV container",
+    "taskweave_validation_run": "5d4a0819-e1db-4655-829e-e84109c8c4a0",
+    "boundary": "仅本地TiKV运行时推进周期；persist=false，重启可能恢复20s。TaskWeave预算30秒、产品默认15秒、固定TSO只读及安全校验保持。"
+  }
+}

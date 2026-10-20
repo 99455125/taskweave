@@ -1,0 +1,79 @@
+{
+  "case": "TREATY-03",
+  "independent_fixture": true,
+  "contract_suffix": "TW-LOCAL-CB-20261016045751",
+  "status": "经纪人退回分出方两轮流程已分段完成：V1退回、暂存V2仍看V1、重提保留旧快照、再次退回冻结V2及只读详情核验通过",
+  "runs": {
+    "1": "61462412-491a-4b9d-b761-436288d228d0",
+    "2": "55b891a8-e180-442c-9eb8-c70aa86e769f",
+    "3": "aee2f2af-b625-40f4-a12d-172345282a8e",
+    "4": "0a1371db-b334-45a9-b3d2-9e705756ad8f",
+    "5": "5537d508-e73a-4d6f-aafd-f47cf49b8018",
+    "6": "a813a2f6-c1cf-4733-90c9-caf2d70254ec",
+    "7": "29d3ca59-fc19-4990-967a-faf3b1c36b3d",
+    "8": "d9a0f9ae-e868-4f54-b7f8-69aeb0b7a924",
+    "9": "d9287dc4-ba26-4a66-86e3-4517cbe21188",
+    "10": "d81ff220-f3a1-4a9c-b9bc-e3ad45d8af67",
+    "11": "646727da-5910-43e5-b9da-82e9651ff9e2",
+    "12": "b9afe9e5-a824-44e2-9072-1be219c0da36",
+    "13": "38b08ae5-e939-4123-b412-55aee90a42e2",
+    "14": "61901354-f3be-48ae-8fd5-dedc38fcb306"
+  },
+  "precondition_correction": "创建前source_id尚未生成，已从任务级必填改为可选；新快照步骤随后必须绑定本轮真实参与方ID。",
+  "next": "直连再保人退回分出方已另案完成；再保人退回经纪人、账单/结算退回、第二条结算路线及真实record仍待完成。",
+  "platform_contract_number": "000050-2026PT00012",
+  "master_id": 325095,
+  "participants": [
+    10926271,
+    10926272,
+    10926273
+  ],
+  "submit_effect_run": "9eed69d5-63ca-4580-8baf-7b244c442077",
+  "submit_effect_note": "真实提交已生效，列表按钮瞬时未就绪导致步骤后续失败；只读恢复核验，无重复提交。",
+  "after_record_id": 2110651223716827136,
+  "first_rejection": {
+    "source_table": 2,
+    "source_id": 10926272,
+    "snapshot_id": 60001,
+    "snapshot_sha256": "c4f7250590afd7e367ed22de6a63a40c87fdfa4485f327fa27dc759ee41977fd",
+    "states": [
+      "13",
+      "4",
+      "0"
+    ]
+  },
+  "v1_name": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751",
+  "v2_save_effect_run": "a5ab225c-ece6-4ebe-b5ee-2f0ef7af9aca",
+  "v2_readonly_verification_run": "d9287dc4-ba26-4a66-86e3-4517cbe21188",
+  "v2_save_limitation": "真实保存已发生；初次即时读库过早失败，后续只读恢复核验；新源码普通保存通知等待分支未正向重跑。",
+  "resubmit": {
+    "run_id": "646727da-5910-43e5-b9da-82e9651ff9e2",
+    "parent_id": 1768115023432721903,
+    "detail_id": 1768114586986032186,
+    "before_job_id": 1768115023432721902,
+    "status": 8,
+    "callback_result": "{\"code\":\"0\"}",
+    "onchain_times": 1,
+    "note": "重提新建父和明细，每个新明细独立计数；不是要求旧明细times=2。"
+  },
+  "second_rejection": {
+    "run_id": "38b08ae5-e939-4123-b412-55aee90a42e2",
+    "old_snapshot_id": 60001,
+    "old_is_deleted": "Y",
+    "new_snapshot_id": 60002,
+    "new_is_deleted": "N",
+    "new_sha256": "6d01e5bdcde8585bd9964eb9744eab0c5ad70d72951f2e854314925ca51f727e",
+    "states": [
+      "13",
+      "4",
+      "0"
+    ]
+  },
+  "final_view": {
+    "run_id": "61901354-f3be-48ae-8fd5-dedc38fcb306",
+    "readonly": true,
+    "suffix": "TW-LOCAL-CB-20261016045751-V2"
+  },
+  "full_fresh_unattended_run_verified": false,
+  "real_record_source_verified": false
+}

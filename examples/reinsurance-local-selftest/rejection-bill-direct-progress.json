@@ -1,0 +1,269 @@
+{
+  "case": "BILL-02",
+  "status": "直连再保退分出两轮13步当前哈希分段成功；S02从同一已创建草稿续行，非全新会话连续",
+  "runs": {
+    "1": "240e31f3-23ff-4bd7-8165-b552876f616d",
+    "2": "a5a82ea5-fe4f-4cea-9bcb-28a682546540",
+    "3": "381974d7-9fda-4bbf-991d-3f2517b60e67",
+    "4": "5a050102-08ae-47fc-948a-426f5cb98d8c",
+    "5": "bb77e9fd-1330-41f1-bf59-8e0612b816de",
+    "6": "9bed3452-4d2f-449d-a6d4-25090f5d6a0b",
+    "7": "30546e03-3fd1-49a0-813e-6a5912da579e",
+    "8": "12c11ef4-c891-4acd-9db8-f070010063af",
+    "9": "22a9fef6-e7ef-4c42-baa3-6fd1f022e9ff",
+    "10": "bb535c58-c356-45fc-8e15-a3205a471ea5",
+    "11": "15470073-e2dd-4390-9144-4acc776aab97",
+    "12": "71388380-44ae-49c6-bf40-7b185af3c5fd",
+    "13": "ab730768-a4b3-4aca-bd5e-84023bf8af7f"
+  },
+  "created_steps": [
+    "dc10530d-2e9b-46c4-bd94-c517585c9351",
+    "6985f5e9-10bf-4b9e-8239-baa253e4fe4c",
+    "99e103da-688f-4a56-a127-7879f83e6b61",
+    "579741a9-3bc5-4117-8914-ab6ab482c09b"
+  ],
+  "original_steps": [
+    "127c0caf-9c40-4523-8c28-1f50b207bd10",
+    "da1dd998-24a1-4402-b127-c51583441413",
+    "1c23bd9c-aa8e-41b0-978f-f2b6cbbab079",
+    "6654e576-d276-48ab-a152-c2f2025cdfdb",
+    "1d9b741b-50b5-4770-94e9-ab3fddc59ab9",
+    "c0cfdfdb-0716-4f00-93bf-0371acf7e98e",
+    "27917247-6b6a-4d09-bc80-9f6e45cc751f",
+    "5380782b-08d5-44f2-ae3b-6740b023d359",
+    "0145568c-0ec9-4269-a7af-459afc2c68fe"
+  ],
+  "next": "本笔保留最终13/4及两快照；继续修正账单和结算退回/第二路线，不重放本单。",
+  "statement_id": 544943,
+  "record_no": "000050-2026PTSELFTESTBILL001-SOAP0003",
+  "bill_label": "TW-LOCAL-BILL-DIRECT-20261016073029",
+  "treaty_master_id": 317093,
+  "platform_treaty_no": "000050-2026PTSELFTESTBILL001",
+  "base_is_synthetic": true,
+  "base_limitations": [
+    "This is an owned synthetic base copied for prior local tests; status8 was initialized as a mock prerequisite, not obtained by a newly executed normal treaty approval/signature chain.",
+    "No ri_business_attachments rows exist for master/parties; receiver file_status2 is an existing flag and does not prove actual signed file upload or storage readability.",
+    "Existing receiver from_org000027 does not match its parent org000050; parent from_id10947282 is correct. Do not mutate this historical field.",
+    "Bill creation uses current user as input org and party/from_id topology; bill reject routes by normal enter/input org. Existing real UI bills confirm050-to045 normals. TreatyFlowService.getToByFrom DOES read from_org, so do not reuse this fixture to test/replay treaty chain or claim treaty full-chain correctness.",
+    "Master insurance_type_codes/underwriting_year/on_platform_flag are null. They are preserved; actual page loading/new save has not been rerun in this read-only task. If current page validation rejects data, retain evidence and choose a new normal treaty rather than patching states.",
+    "This verdict is for local BILL-02 new-bill prerequisite only, not complete treaty business validation or production suitability."
+  ],
+  "draft_normal_id": 257322,
+  "active_normal_id": 257323,
+  "currency": "CNY",
+  "share_percent": 20,
+  "net_balance": "14000.00",
+  "total_net_before_share": "70000.00",
+  "normal_items": [
+    {
+      "item_amount": "20000.00",
+      "item_code": "01",
+      "object_id": 257323,
+      "version": 1
+    },
+    {
+      "item_amount": "4000.00",
+      "item_code": "02",
+      "object_id": 257323,
+      "version": 1
+    },
+    {
+      "item_amount": "2000.00",
+      "item_code": "21",
+      "object_id": 257323,
+      "version": 1
+    },
+    {
+      "item_amount": "0.00",
+      "item_code": "60",
+      "object_id": 257323,
+      "version": 1
+    }
+  ],
+  "role_states": {
+    "000050": 13,
+    "000045": 4
+  },
+  "source_table": 3,
+  "source_id": 257323,
+  "initial_core_mock_job": {
+    "biz_id": "owned-local-bill-direct-20261016073029",
+    "biz_no": "000050-2026PTSELFTESTBILL001-SOA0003",
+    "callback_result": "成功",
+    "detail_group": 544943,
+    "detail_id": 1768114586986032196,
+    "onchain_business_id": 257323,
+    "onchain_times": 1,
+    "parent_group": 544943,
+    "parent_id": 1768115023432721913,
+    "parent_status": 8,
+    "status": 8
+  },
+  "after_record_id": 2110651223716827136,
+  "snapshots": [
+    {
+      "back_up_data": "{\"accountPeriod\": \"2026Q4\", \"adjustTimes\": 0, \"billType\": 1, \"brokerageVatRateEditFlag\": 0, \"brokerageVatRateFreeFlag\": \"Y\", \"cedentTreatyNo\": \"000050-2026PTSELFTESTBILL001\", \"claimInfoEditFlag\": false, \"comment\": \"仅供本地自测 TW-LOCAL-BILL-DIRECT-20261016073029\", \"creator\": \"000050\", \"extraInfo\": {\"withBrokerInput\": false}, \"firstOperator\": \"000050\", \"generalGroup\": [{\"businessName\": \"CNY\", \"creator\": \"000050\", \"currency\": \"CNY\", \"extraInfo\": {\"closable\": false, \"groupDisable\": true}, \"gmtCreated\": \"2026-10-16 07:33:03\", \"gmtModified\": \"2026-10-16 07:33:03\", \"groupType\": 1, \"id\": 243806, \"index\": 1, \"insuranceTypeCodes\": \"02000,01000\", \"isDeleted\": \"N\", \"items\": [{\"itemAmount\": 100000, \"itemCode\": \"01\"}, {\"itemAmount\": 20000, \"itemCode\": \"02\"}, {\"itemAmount\": 10000, \"itemCode\": \"21\"}, {\"itemAmount\": 0, \"itemCode\": \"60\"}], \"modifier\": \"000050\", \"sectionType\": \"分项类别1\", \"statementId\": 544943, \"statementNormals\": [{\"bizId\": \"owned-local-bill-direct-20261016073029\", \"brokageVatRateFlag\": 0, \"brokageVatSurtaxRateFlag\": 0, \"brokerStatementNoFlag\": 0, \"cedentStatementNo\": \"TW-LOCAL-BILL-DIRECT-20261016073029-TOTAL\", \"confirmStatus\": \"2\", \"creator\": \"000050\", \"currency\": \"CNY\", \"enterOrgCode\": \"000045\", \"extraInfo\": \"{\\\"accountPeriod\\\":\\\"2026Q4\\\",\\\"comment\\\":\\\"仅供本地自测 TW-LOCAL-BILL-DIRECT-20261016073029\\\",\\\"normalIndex\\\":\\\"17921070382143148\\\",\\\"onsiteReject\\\":\\\"Y\\\",\\\"statementEndDate\\\":\\\"2026-12-31 00:00:00\\\",\\\"statementStartDate\\\":\\\"2026-10-16 00:00:00\\\",\\\"taxFreeFlag\\\":\\\"1\\\"}\", \"fileIdFlag\": 1, \"gmtCreated\": \"2026-10-16 07:39:56\", \"gmtModified\": \"2026-10-16 07:40:32\", \"id\": 257323, \"inputOrgCode\": \"000050\", \"insuranceTypeCodes\": \"02000,01000\", \"isDeleted\": \"N\", \"items\": [{\"creator\": \"000050\", \"gmtCreated\": \"2026-10-16 07:33:03\", \"gmtModified\": \"2026-10-16 07:33:03\", \"id\": 1768100826216975262, \"isDeleted\": \"N\", \"itemAmount\": 20000, \"itemCode\": \"01\", \"modifier\": \"000050\", \"version\": 1}, {\"creator\": \"000050\", \"gmtCreated\": \"2026-10-16 07:33:03\", \"gmtModified\": \"2026-10-16 07:33:03\", \"id\": 1768100826216975263, \"isDeleted\": \"N\", \"itemAmount\": 4000, \"itemCode\": \"02\", \"modifier\": \"000050\", \"version\": 1}, {\"creator\": \"000050\", \"gmtCreated\": \"2026-10-16 07:33:03\", \"gmtModified\": \"2026-10-16 07:33:03\", \"id\": 1768100826216975264, \"isDeleted\": \"N\", \"itemAmount\": 2000, \"itemCode\": \"21\", \"modifier\": \"000050\", \"version\": 1}, {\"creator\": \"000050\", \"gmtCreated\": \"2026-10-16 07:33:03\", \"gmtModified\": \"2026-10-16 07:33:03\", \"id\": 1768100826216975265, \"isDeleted\": \"N\", \"itemAmount\": 0, \"itemCode\": \"60\", \"modifier\": \"000050\", \"version\": 1}], \"modifier\": \"000050\", \"netBalance\": 14000, \"normalIndex\": \"17921070382143148\", \"orgRule\": 0, \"platformStatementNo\": \"000050-2026PTSELFTESTBILL001-SOA0003\", \"reinsurerInvolved\": \"1\", \"reinsurerStatementNoFlag\": 0, \"reviewer\": \"000045\", \"sectionType\": \"分项类别1\", \"serviceFeePayer\": \"02\", \"shareRate\": 20, \"statementFlag\": 1, \"statementId\": 544943, \"statementNormalGroupId\": 243806, \"statementStatus\": 4, \"treatyReinsurerId\": 10947283}]}], \"gmtCreated\": \"2026-10-16 07:30:37\", \"gmtModified\": \"2026-10-16 07:39:57\", \"id\": 544943, \"inputOrgCode\": \"000050\", \"isDeleted\": \"N\", \"itemGroup\": [], \"modifier\": \"000050\", \"nonProGroup\": [], \"recordNo\": \"000050-2026PTSELFTESTBILL001-SOAP0003\", \"replyFlag\": false, \"riBusinessAttachmentsDTOList\": [], \"senderDetail\": {\"countryCode\": \"中国\", \"orgCode\": \"000050\", \"orgName\": \"京东安联财产保险有限公司\", \"registerCode\": \"000050\", \"reinsurerRole\": \"再保险分出人\", \"reinsurerRoleCode\": \"01\"}, \"source\": 0, \"statementEndDate\": \"2026-12-31 00:00:00\", \"statementFlag\": 1, \"statementStartDate\": \"2026-10-16 00:00:00\", \"statementStatus\": 3, \"taxFreeFlag\": \"1\", \"treatyCate\": \"01\", \"treatyId\": 317093, \"treatyReinsurerId\": 10947283, \"treatyStatementType\": \"01\"}",
+      "frozen_comment": "仅供本地自测 TW-LOCAL-BILL-DIRECT-20261016073029",
+      "id": 60011,
+      "is_deleted": "Y",
+      "snapshot_sha256": "8e24355e87bd889d5240fbdf1298f29c0c5b99d8e8bfad3f8e944444bb53f51b",
+      "source_id": 257323,
+      "source_table": 3
+    },
+    {
+      "back_up_data": "{\"accountPeriod\": \"2026Q4\", \"adjustTimes\": 0, \"billType\": 1, \"brokerageVatRateEditFlag\": 0, \"brokerageVatRateFreeFlag\": \"Y\", \"cedentTreatyNo\": \"000050-2026PTSELFTESTBILL001\", \"claimInfoEditFlag\": false, \"comment\": \"仅供本地自测 TW-LOCAL-BILL-DIRECT-20261016073029 V2\", \"creator\": \"000050\", \"extraInfo\": {\"withBrokerInput\": false}, \"firstOperator\": \"000050\", \"generalGroup\": [{\"businessName\": \"CNY\", \"creator\": \"000050\", \"currency\": \"CNY\", \"extraInfo\": {\"closable\": false, \"groupDisable\": true}, \"gmtCreated\": \"2026-10-16 07:33:03\", \"gmtModified\": \"2026-10-16 07:33:03\", \"groupType\": 1, \"id\": 243806, \"index\": 1, \"insuranceTypeCodes\": \"02000,01000\", \"isDeleted\": \"N\", \"items\": [{\"itemAmount\": 100000, \"itemCode\": \"01\"}, {\"itemAmount\": 20000, \"itemCode\": \"02\"}, {\"itemAmount\": 10000, \"itemCode\": \"21\"}, {\"itemAmount\": 0, \"itemCode\": \"60\"}], \"modifier\": \"000050\", \"sectionType\": \"分项类别1\", \"statementId\": 544943, \"statementNormals\": [{\"bizId\": \"owned-local-bill-direct-20261016073029\", \"brokageVatRateFlag\": 0, \"brokageVatSurtaxRateFlag\": 0, \"brokerStatementNoFlag\": 0, \"cedentStatementNo\": \"TW-LOCAL-BILL-DIRECT-20261016073029-TOTAL\", \"confirmStatus\": \"2\", \"creator\": \"000050\", \"currency\": \"CNY\", \"enterOrgCode\": \"000045\", \"extraInfo\": \"{\\\"accountPeriod\\\":\\\"2026Q4\\\",\\\"comment\\\":\\\"仅供本地自测 TW-LOCAL-BILL-DIRECT-20261016073029 V2\\\",\\\"nonProportionals\\\":[],\\\"normalIndex\\\":\\\"17921070382143148\\\",\\\"onsiteReject\\\":\\\"Y\\\",\\\"statementEndDate\\\":\\\"2026-12-31 00:00:00\\\",\\\"statementStartDate\\\":\\\"2026-10-16 00:00:00\\\",\\\"taxFreeFlag\\\":\\\"1\\\"}\", \"fileIdFlag\": 1, \"gmtCreated\": \"2026-10-16 07:39:56\", \"gmtModified\": \"2026-10-16 07:41:54\", \"id\": 257323, \"inputOrgCode\": \"000050\", \"insuranceTypeCodes\": \"02000,01000\", \"isDeleted\": \"N\", \"items\": [{\"creator\": \"000050\", \"gmtCreated\": \"2026-10-16 07:33:03\", \"gmtModified\": \"2026-10-16 07:33:03\", \"id\": 1768100826216975270, \"isDeleted\": \"N\", \"itemAmount\": 20000, \"itemCode\": \"01\", \"modifier\": \"000050\", \"version\": 1}, {\"creator\": \"000050\", \"gmtCreated\": \"2026-10-16 07:33:03\", \"gmtModified\": \"2026-10-16 07:33:03\", \"id\": 1768100826216975271, \"isDeleted\": \"N\", \"itemAmount\": 4000, \"itemCode\": \"02\", \"modifier\": \"000050\", \"version\": 1}, {\"creator\": \"000050\", \"gmtCreated\": \"2026-10-16 07:33:03\", \"gmtModified\": \"2026-10-16 07:33:03\", \"id\": 1768100826216975272, \"isDeleted\": \"N\", \"itemAmount\": 2000, \"itemCode\": \"21\", \"modifier\": \"000050\", \"version\": 1}, {\"creator\": \"000050\", \"gmtCreated\": \"2026-10-16 07:33:03\", \"gmtModified\": \"2026-10-16 07:33:03\", \"id\": 1768100826216975273, \"isDeleted\": \"N\", \"itemAmount\": 0, \"itemCode\": \"60\", \"modifier\": \"000050\", \"version\": 1}], \"modifier\": \"000050\", \"netBalance\": 14000, \"normalIndex\": \"17921070382143148\", \"orgRule\": 0, \"platformStatementNo\": \"000050-2026PTSELFTESTBILL001-SOA0003\", \"reinsurerInvolved\": \"1\", \"reinsurerStatementNoFlag\": 0, \"reviewer\": \"000045\", \"sectionType\": \"分项类别1\", \"serviceFeePayer\": \"02\", \"shareRate\": 20, \"statementFlag\": 1, \"statementId\": 544943, \"statementNormalGroupId\": 243806, \"statementStatus\": 4, \"treatyReinsurerId\": 10947283}]}], \"gmtCreated\": \"2026-10-16 07:30:37\", \"gmtModified\": \"2026-10-16 07:39:57\", \"id\": 544943, \"inputOrgCode\": \"000050\", \"isDeleted\": \"N\", \"itemGroup\": [], \"modifier\": \"000050\", \"nonProGroup\": [], \"recordNo\": \"000050-2026PTSELFTESTBILL001-SOAP0003\", \"replyFlag\": false, \"riBusinessAttachmentsDTOList\": [], \"senderDetail\": {\"countryCode\": \"中国\", \"orgCode\": \"000050\", \"orgName\": \"京东安联财产保险有限公司\", \"registerCode\": \"000050\", \"reinsurerRole\": \"再保险分出人\", \"reinsurerRoleCode\": \"01\"}, \"source\": 0, \"statementEndDate\": \"2026-12-31 00:00:00\", \"statementFlag\": 1, \"statementStartDate\": \"2026-10-16 00:00:00\", \"statementStatus\": 3, \"taxFreeFlag\": \"1\", \"treatyCate\": \"01\", \"treatyId\": 317093, \"treatyReinsurerId\": 10947283, \"treatyStatementType\": \"01\"}",
+      "frozen_comment": "仅供本地自测 TW-LOCAL-BILL-DIRECT-20261016073029 V2",
+      "id": 60012,
+      "is_deleted": "N",
+      "snapshot_sha256": "dc688b43b952d90655702e45fca741191aebb039b69b4ab6de02db13827665e4",
+      "source_id": 257323,
+      "source_table": 3
+    }
+  ],
+  "v1_comment": "仅供本地自测 TW-LOCAL-BILL-DIRECT-20261016073029",
+  "v2_comment": "仅供本地自测 TW-LOCAL-BILL-DIRECT-20261016073029 V2",
+  "mock": {
+    "url": "http://127.0.0.1:9703",
+    "pid": 66444,
+    "boundary": "精确本笔TREATY_BILL/045→050 REJECT，非真实链/资金"
+  },
+  "browser_session_released_after_saved_capture": true,
+  "creation_recovery": {
+    "first_run": "d43d90d0-ee5d-4884-9488-130d3a30b87f",
+    "created_draft": 544943,
+    "failed_action": "首次日历日期点击LOCATOR_HIDDEN，未保存/提交。",
+    "fix": "等待日历浮层appear/enter/leave过渡结束后再观察和点击，无固定延时。",
+    "current_run": "a5a82ea5-fe4f-4cea-9bcb-28a682546540",
+    "expected_unsaved_draft_id": 544943,
+    "new_code_creation_branch_rerun": false
+  },
+  "currency_fix": {
+    "failed_run": "4c68c420-fe51-489c-9554-02cc5ecd7aff",
+    "failed_action": "币种Select内部input点击超时，尚未录入科目/试算/保存。",
+    "fix": "点击真实ant-select-selector容器，再搜索CNY并唯一匹配选择；普通试算保存一次成功。",
+    "current_run": "381974d7-9fda-4bbf-991d-3f2517b60e67"
+  },
+  "review_binding_fix": {
+    "found_before_execution": true,
+    "problem": "S10克隆CB schema时保留旧parent1909/detail2192常量且未绑定。",
+    "fix": "移除旧const/default，minimum1整数动态绑定本任务S04 initial_core_mock_job parent/detail；生成器同步，回归和实际S10通过。"
+  },
+  "protected_baseline": {
+    "purpose": "本笔直连账单两轮操作后，root独立SELECT核对owner明确保护的原三账单/三normal/四快照；非TaskWeave业务执行证明。",
+    "handoff_path": "/Users/xiaojuju/Projects/company/bjs/dev-environment/imports/runtime/selftest-handoff/taskweave-direct-bill-base.json",
+    "handoff_sha256": "7f530f8d8705330b88008dd7df59b11c9a56cd7f99c9f8b1da0ec547142df14a",
+    "checks": [
+      {
+        "source": "existingBillsProtected",
+        "table": "ri_statement",
+        "unchanged": true,
+        "rows": [
+          {
+            "id": 536940,
+            "record_no": "000050-2026PTSELFTESTBILL001-SOAP0001",
+            "treaty_statement_type": "01",
+            "statement_flag": 1,
+            "statement_status": 3,
+            "is_deleted": "N"
+          },
+          {
+            "id": 536942,
+            "record_no": "000050-2026PTSELFTESTBILL001-ADJSELFTEST001",
+            "treaty_statement_type": "31",
+            "statement_flag": 1,
+            "statement_status": 3,
+            "is_deleted": "N"
+          },
+          {
+            "id": 540946,
+            "record_no": "000050-2026PTSELFTESTBILL001-SOAP0002",
+            "treaty_statement_type": "01",
+            "statement_flag": 1,
+            "statement_status": 3,
+            "is_deleted": "N"
+          }
+        ]
+      },
+      {
+        "source": "existingNormalsProtected",
+        "table": "ri_statement_normal",
+        "unchanged": true,
+        "rows": [
+          {
+            "id": 249309,
+            "statement_id": 536940,
+            "input_org_code": "000050",
+            "enter_org_code": "000045",
+            "parent_id": null,
+            "upper_enter_org_code": null,
+            "treaty_reinsurer_id": 10947283,
+            "platform_statement_no": "000050-2026PTSELFTESTBILL001-SOA0001"
+          },
+          {
+            "id": 249311,
+            "statement_id": 536942,
+            "input_org_code": "000050",
+            "enter_org_code": "000045",
+            "parent_id": null,
+            "upper_enter_org_code": null,
+            "treaty_reinsurer_id": 10947283,
+            "platform_statement_no": "000050-2026PTSELFTESTBILL001-ADJSELFTEST001"
+          },
+          {
+            "id": 253320,
+            "statement_id": 540946,
+            "input_org_code": "000050",
+            "enter_org_code": "000045",
+            "parent_id": null,
+            "upper_enter_org_code": null,
+            "treaty_reinsurer_id": 10947283,
+            "platform_statement_no": "000050-2026PTSELFTESTBILL001-SOA0002"
+          }
+        ]
+      },
+      {
+        "source": "existingSnapshotHashesProtected",
+        "table": "t_business_back_up_data",
+        "unchanged": true,
+        "rows": [
+          {
+            "id": 1748,
+            "source_table": 3,
+            "source_id": 249309,
+            "is_deleted": "Y",
+            "sha256": "daa46c5d982ff3469220c0977cd28317caeb78e022a7c6cb3b735c8e8b195372"
+          },
+          {
+            "id": 1749,
+            "source_table": 3,
+            "source_id": 249309,
+            "is_deleted": "N",
+            "sha256": "05c0d3af47667170251c2cc71f956ca519df5149d342979c65bf15abecced936"
+          },
+          {
+            "id": 1750,
+            "source_table": 3,
+            "source_id": 249311,
+            "is_deleted": "Y",
+            "sha256": "ba70f03f6089b1dc2ef23f5c49a118beff13b99bf855f10869c9ce9ab0918580"
+          },
+          {
+            "id": 1751,
+            "source_table": 3,
+            "source_id": 249311,
+            "is_deleted": "N",
+            "sha256": "40a1ccf5b81c653ab14b2d69e09bcee91c14f7b11c2a8830e95140ed1eff5cd1"
+          }
+        ]
+      }
+    ],
+    "all_unchanged": true
+  },
+  "boundaries": [
+    "317093原有合成完成状态8、无真实附件、from_org000027残留已明确；仅作为本地账单前置，不验收正常合约全链。",
+    "13步分段实际验证，S02从已创建的原草稿续行；不代表全新会话连续运行。",
+    "S08普通保存、S10普通同步重发、两次045正常退回均本案实际执行。",
+    "实际原三张基础账单、三normal及四快照内容/逻辑删除哈希未变。",
+    "新账单最后为退回13/4，不是正向完成；真实record、结算及资金不由本案证明。"
+  ]
+}

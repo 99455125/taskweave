@@ -1,0 +1,48 @@
+{
+  "verified_at": "2026-10-16T01:33:47.229175+08:00",
+  "scope": "最终修复后真实本地库只读核对历史夹具，未执行业务写入",
+  "plugin_sha256": "178e6e3df1e1d516a4715f2f89a4a08d5cd7e279d1b1415494201b7ad36a39dc",
+  "checks": [
+    {
+      "source_table": 2,
+      "source_id": 10947281,
+      "rows": [
+        {
+          "id": 1747,
+          "source_table": 2,
+          "source_id": 10947281,
+          "snapshot_sha256": "389c1ebd63c77f0c6bf9178ae95d0790cbc360fd2ebd6134007fd54451327a78"
+        }
+      ],
+      "transaction_mode": "tidb_read_only_snapshot_tso"
+    },
+    {
+      "source_table": 3,
+      "source_id": 249309,
+      "rows": [
+        {
+          "id": 1749,
+          "source_table": 3,
+          "source_id": 249309,
+          "snapshot_sha256": "05c0d3af47667170251c2cc71f956ca519df5149d342979c65bf15abecced936"
+        }
+      ],
+      "transaction_mode": "tidb_read_only_snapshot_tso"
+    },
+    {
+      "source_table": 5,
+      "source_id": 170791,
+      "rows": [
+        {
+          "id": 1740,
+          "source_table": 5,
+          "source_id": 170791,
+          "snapshot_sha256": "e13946dc49dee60f2f078e49045f366bc93c5eaf904d6a4bef7d68d4c211caff"
+        }
+      ],
+      "transaction_mode": "tidb_read_only_snapshot_tso"
+    }
+  ],
+  "targeted_tests": 36,
+  "review": "定向独立复核最终无重要发现"
+}

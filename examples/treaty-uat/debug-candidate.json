@@ -1,0 +1,1172 @@
+{
+  "format": "taskweave-task-2",
+  "origin": "ai_generated",
+  "task": {
+    "name": "再保平台 UAT · 合约录入 Demo",
+    "description": "完整走通再保平台合约录入流程；从登录页切换中文开始，采集实际页面与操作顺序，在用户确认业务数据后新建测试合约。完整采集后一次生成任务候选，统计可执行步骤、需要补充信息的步骤和实测结果。 仅限UAT；前次历史运行成功不构成本次执行结果；进入审核即停止，不代审核或双签。",
+    "input_schema": {
+      "type": "object",
+      "properties": {
+        "participants": {
+          "type": "array",
+          "description": "参与方机构代码、名称、份额与首席标志；本次要求000053 70%和000050 30%，均不设首席",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "properties": {
+              "organization_code": {
+                "type": "string",
+                "description": "机构代码"
+              },
+              "organization_name": {
+                "type": "string",
+                "description": "机构名称"
+              },
+              "share_percent": {
+                "type": "number",
+                "description": "份额百分数",
+                "minimum": 0,
+                "maximum": 100
+              },
+              "is_lead": {
+                "type": "boolean",
+                "description": "是否首席"
+              }
+            },
+            "required": [
+              "organization_code",
+              "organization_name",
+              "share_percent",
+              "is_lead"
+            ],
+            "additionalProperties": false
+          },
+          "default": [
+            {
+              "organization_code": "000053",
+              "organization_name": "日本财产保险（中国）有限公司",
+              "share_percent": 70,
+              "is_lead": false
+            },
+            {
+              "organization_code": "000050",
+              "organization_name": "京东安联财产保险有限公司",
+              "share_percent": 30,
+              "is_lead": false
+            }
+          ]
+        },
+        "sections": {
+          "type": "array",
+          "description": "独立分项配置；本次两项分别限额10000000和20000000，均选择家庭财产保险及机动车辆保险",
+          "minItems": 2,
+          "items": {
+            "type": "object",
+            "properties": {
+              "category": {
+                "type": "string",
+                "description": "分项类别"
+              },
+              "insurance_types": {
+                "type": "array",
+                "description": "多选险种",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1
+              },
+              "currency": {
+                "type": "string",
+                "description": "保额币种"
+              },
+              "maximum_limit": {
+                "type": "number",
+                "description": "最大承保限额"
+              },
+              "commission_type": {
+                "type": "string",
+                "description": "手续费类型"
+              },
+              "fixed_commission_rate": {
+                "type": "number",
+                "description": "固定手续费率百分比"
+              },
+              "advance_commission_rate": {
+                "type": "number",
+                "description": "预付手续费率"
+              },
+              "commission_upper_limit": {
+                "type": "number",
+                "description": "手续费上限"
+              },
+              "commission_lower_limit": {
+                "type": "number",
+                "description": "手续费下限"
+              },
+              "loss_sharing": {
+                "type": "boolean",
+                "description": "损失分摊"
+              },
+              "surplus_lines": {
+                "type": "number",
+                "description": "溢额线数"
+              },
+              "maximum_net_retention": {
+                "type": "number",
+                "description": "最大净自留额"
+              },
+              "maximum_gross_retention": {
+                "type": "number",
+                "description": "最大毛自留额"
+              },
+              "quota_ceded_share_percent": {
+                "type": "number",
+                "description": "成数分出份额百分比"
+              },
+              "ceded_underwriting_capacity": {
+                "type": "number",
+                "description": "分出承保能力"
+              }
+            },
+            "required": [
+              "category",
+              "insurance_types",
+              "currency",
+              "maximum_limit",
+              "commission_type",
+              "loss_sharing"
+            ],
+            "additionalProperties": false
+          },
+          "default": [
+            {
+              "category": "TW-UAT-分项1",
+              "insurance_types": [
+                "家庭财产保险",
+                "机动车辆保险"
+              ],
+              "currency": "CNY",
+              "maximum_limit": 10000000,
+              "commission_type": "固定费率",
+              "fixed_commission_rate": 20,
+              "loss_sharing": false
+            },
+            {
+              "category": "TW-UAT-分项2",
+              "insurance_types": [
+                "家庭财产保险",
+                "机动车辆保险"
+              ],
+              "currency": "CNY",
+              "maximum_limit": 20000000,
+              "commission_type": "固定费率",
+              "fixed_commission_rate": 20,
+              "loss_sharing": false
+            }
+          ]
+        },
+        "file_root": {
+          "type": "string",
+          "minLength": 1,
+          "description": "仅允许读取本次测试附件的本地目录；示例用 output/pdf 的绝对路径",
+          "default": "/Users/xiaojuju/Projects/personal/private/taskweave/output/pdf"
+        }
+      },
+      "required": [
+        "participants",
+        "sections",
+        "file_root"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "steps": [
+    {
+      "key": "step-1",
+      "validation_state": "DRAFT",
+      "document": {
+        "name": "显式切换中文登录页",
+        "step_description": "打开英文UAT登录页、选择中文、核对三个中文输入提示和登录按钮",
+        "step_notes": "本代码已在独立调试副本逐步试跑成功，关联实际合约000027-2026PT00035。成功记录见examples/treaty-uat/debug-results.json。尚未重新从头无人干预整段运行；保持草稿，需用户确认。",
+        "step_content": "async def run(ctx, inputs):\n    await ctx.call(\"playwright.page_open\", {\"url\": \"https://ire-uat.shie.com.cn/login\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"**/login\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_click\", {\"selector\": \"#root > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(4) > div:nth-of-type(1) > div:nth-of-type(1)\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"option\", \"name\": \"中文\", \"exact\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\":\"#username\", \"expected\":{\"count\":1,\"visible\":True}, \"role\":\"operator\"})\n    username = await ctx.call(\"playwright.page_attribute\", {\"selector\": \"#username\", \"name\": \"placeholder\", \"role\": \"operator\"})\n    password = await ctx.call(\"playwright.page_attribute\", {\"selector\": \"#password\", \"name\": \"placeholder\", \"role\": \"operator\"})\n    verification = await ctx.call(\"playwright.page_attribute\", {\"selector\": \"#verifyCode\", \"name\": \"placeholder\", \"role\": \"operator\"})\n    if username[\"value\"] != \"请输入用户名\" or password[\"value\"] != \"请输入登录密码\" or verification[\"value\"] != \"请输入验证码\":\n        raise ValueError(\"登录页面没有完成显式中文切换\")\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"登 录\", \"exact\": True}, \"expected\": {\"count\": 1, \"visible\": True, \"enabled\": True}, \"role\": \"operator\"})\n    return ctx.result(data={\"language\": \"中文\"})",
+        "input_schema": {
+          "type": "object",
+          "properties": {},
+          "required": [],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "language": {
+              "type": "string",
+              "description": "已验证的页面语言"
+            }
+          },
+          "required": [
+            "language"
+          ],
+          "additionalProperties": false
+        },
+        "bindings": {},
+        "capabilities": [
+          "playwright.page_assert_state",
+          "playwright.page_assert_url",
+          "playwright.page_attribute",
+          "playwright.page_click",
+          "playwright.page_open"
+        ],
+        "plugin_requirements": {
+          "playwright": "0.4.0"
+        },
+        "timeout_ms": 120000,
+        "delay_after_previous_seconds": 0,
+        "content_format": "python-async-v1"
+      }
+    },
+    {
+      "key": "step-2",
+      "validation_state": "DRAFT",
+      "document": {
+        "name": "OCR及邮箱二次验证登录",
+        "step_description": "填入运行时UAT账号、密钥，读取当前图片验证码，OCR识别四字符并提交第一阶段，再填邮箱测试码；验证/Home及太平人寿身份",
+        "step_notes": "本代码已在独立调试副本逐步试跑成功，关联实际合约000027-2026PT00035。成功记录见examples/treaty-uat/debug-results.json。尚未重新从头无人干预整段运行；保持草稿，需用户确认。",
+        "step_content": "async def run(ctx, inputs):\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"https://ire-uat.shie.com.cn/login\", \"role\": \"operator\"})\n    pending = await ctx.call(\"playwright.page_state\", {\"selector\": \"#emailOrTokenVerifyCode\", \"role\": \"operator\"})\n    if pending[\"match_count\"] != 1 or not pending[\"visible\"]:\n        await ctx.call(\"playwright.page_fill\", {\"selector\": \"#username\", \"value\": inputs[\"login_account\"], \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_fill\", {\"selector\": \"#password\", \"value\": inputs[\"org_secret\"], \"role\": \"operator\"})\n        image = await ctx.call(\"playwright.page_element_image\", {\"selector\": inputs[\"captcha_selector\"], \"role\": \"operator\"})\n        recognized = await ctx.call(\"ocr.recognize\", {\"image_base64\": image[\"image_base64\"], \"expected_length\": 4})\n        await ctx.call(\"playwright.page_fill\", {\"selector\": \"#verifyCode\", \"value\": recognized[\"text\"], \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"登 录\", \"exact\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\": \"#emailOrTokenVerifyCode\", \"expected\": {\"count\": 1, \"visible\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_fill\", {\"selector\": \"#emailOrTokenVerifyCode\", \"value\": inputs[\"uat_email_code\"], \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"确 认\", \"exact\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"https://ire-uat.shie.com.cn/Home\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_text\", {\"selector\": \"body\", \"text\": \"您好，太平人寿\", \"role\": \"operator\"})\n    observed = await ctx.call(\"playwright.page_inspect\", {\"role\": \"operator\"})\n    return ctx.result(data={\"home_url\": observed[\"url\"], \"organization\": \"太平人寿保险有限公司\"})\n",
+        "input_schema": {
+          "additionalProperties": false,
+          "properties": {
+            "captcha_selector": {
+              "default": "#root > div:nth-of-type(1) > div:nth-of-type(3) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > form:nth-of-type(1) > div:nth-of-type(3) > img:nth-of-type(1)",
+              "type": "string"
+            },
+            "login_account": {
+              "default": "000027",
+              "type": "string"
+            },
+            "org_secret": {
+              "type": "string"
+            },
+            "uat_email_code": {
+              "default": "1",
+              "type": "string"
+            }
+          },
+          "required": [
+            "login_account",
+            "org_secret",
+            "uat_email_code",
+            "captcha_selector"
+          ],
+          "type": "object"
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "home_url": {
+              "type": "string",
+              "description": "登录成功后首页地址"
+            },
+            "organization": {
+              "type": "string",
+              "description": "已核对分出机构"
+            }
+          },
+          "required": [
+            "home_url",
+            "organization"
+          ],
+          "additionalProperties": false
+        },
+        "bindings": {
+          "org_secret": {
+            "ref": {
+              "pointer": "/org_secret",
+              "source": "environment"
+            }
+          }
+        },
+        "capabilities": [
+          "ocr.recognize",
+          "playwright.page_assert_state",
+          "playwright.page_assert_text",
+          "playwright.page_assert_url",
+          "playwright.page_click",
+          "playwright.page_element_image",
+          "playwright.page_fill",
+          "playwright.page_inspect",
+          "playwright.page_state"
+        ],
+        "plugin_requirements": {
+          "ocr": "0.1.0",
+          "playwright": "0.4.0"
+        },
+        "timeout_ms": 180000,
+        "delay_after_previous_seconds": 0,
+        "content_format": "python-async-v1"
+      }
+    },
+    {
+      "key": "step-3",
+      "validation_state": "DRAFT",
+      "document": {
+        "name": "合约导航及唯一编号查重",
+        "step_description": "从首页合约交易管理进入合约列表；生成仅一次的北京时区时间戳，拼接合约后缀，按编号查重，发现重复停止",
+        "step_notes": "本代码已在独立调试副本逐步试跑成功，关联实际合约000027-2026PT00035。成功记录见examples/treaty-uat/debug-results.json。尚未重新从头无人干预整段运行；保持草稿，需用户确认。",
+        "step_content": "async def run(ctx, inputs):\n    page = await ctx.call(\"playwright.page_inspect\", {\"role\": \"operator\"})\n    if page[\"url\"] == \"https://ire-uat.shie.com.cn/Home\":\n        await ctx.call(\"playwright.page_assert_url\", {\"url\": \"https://ire-uat.shie.com.cn/Home\", \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"menuitem\", \"name\": \"合约交易管理\", \"exact\": True}, \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"menuitem\", \"name\": \"合约\", \"exact\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"https://ire-uat.shie.com.cn/TreatyManagement/Treaty\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\": \"#查询条件_treatyCode\", \"expected\": {\"count\": 1, \"visible\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\": {\"kind\": \"role\", \"value\": \"tab\", \"name\": \"全部\", \"exact\": False}, \"expected\": {\"count\": 1, \"enabled\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"tab\", \"name\": \"全部\", \"exact\": False}, \"role\": \"operator\"})\n    stamp = await ctx.call(\"utility.now\", {\"timezone\": inputs[\"timestamp_timezone\"]})\n    suffix = inputs[\"name_prefix\"] + stamp[\"compact\"]\n    if not suffix.replace(\"-\", \"\").isalnum():\n        raise ValueError(\"测试编号只接受字母、数字和连字符\")\n    await ctx.call(\"playwright.page_fill\", {\"selector\": \"#查询条件_treatyCode\", \"value\": suffix, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_value\", {\"selector\": \"#查询条件_treatyCode\", \"value\": suffix, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"查 询\", \"exact\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_text\", {\"selector\": \"main\", \"text\": inputs[\"empty_result_text\"], \"role\": \"operator\"})\n    records = await ctx.call(\"playwright.page_list\", {\"selector\": \"main a\", \"role\": \"operator\"})\n    if records[\"truncated\"]:\n        raise ValueError(\"查重记录超出读取范围\")\n    duplicate_count = len([row for row in records[\"items\"] if \"机构合约编号：\" + suffix in row[\"text\"]])\n    if duplicate_count != 0:\n        raise ValueError(\"编号已存在，停止新建合约\")\n    return ctx.result(data={\"contract_suffix\": suffix, \"timestamp\": stamp[\"compact\"], \"duplicate_count\": duplicate_count})\n",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "name_prefix": {
+              "type": "string",
+              "description": "编号及名称后缀前缀，例如TW-UAT-QS-",
+              "default": "TW-UAT-QS-"
+            },
+            "timestamp_timezone": {
+              "type": "string",
+              "description": "时区，例如Asia/Shanghai",
+              "default": "Asia/Shanghai"
+            },
+            "empty_result_text": {
+              "type": "string",
+              "minLength": 1,
+              "description": "需以当前列表实际无记录提示补录；不能猜测空结果",
+              "default": "暂无数据"
+            }
+          },
+          "required": [
+            "name_prefix",
+            "timestamp_timezone",
+            "empty_result_text"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "contract_suffix": {
+              "type": "string",
+              "description": "新生成且查重为零的业务编号和名称后缀"
+            },
+            "timestamp": {
+              "type": "string",
+              "description": "本次唯一时间戳"
+            },
+            "duplicate_count": {
+              "type": "integer",
+              "description": "实际查重结果",
+              "const": 0
+            }
+          },
+          "required": [
+            "contract_suffix",
+            "timestamp",
+            "duplicate_count"
+          ],
+          "additionalProperties": false
+        },
+        "bindings": {},
+        "capabilities": [
+          "playwright.page_assert_state",
+          "playwright.page_assert_text",
+          "playwright.page_assert_url",
+          "playwright.page_assert_value",
+          "playwright.page_click",
+          "playwright.page_fill",
+          "playwright.page_inspect",
+          "playwright.page_list",
+          "utility.now"
+        ],
+        "plugin_requirements": {
+          "playwright": "0.4.0",
+          "utility": "0.1.0"
+        },
+        "timeout_ms": 180000,
+        "delay_after_previous_seconds": 0,
+        "content_format": "python-async-v1"
+      }
+    },
+    {
+      "key": "step-4",
+      "validation_state": "DRAFT",
+      "document": {
+        "name": "新增合约与基本信息",
+        "step_description": "新增合约合同、选择财产保险+比例再保险+指定合约类型，录入分出机构、年度、起止期、保费、主险类、编号、账单时限和状态字段，读取页面值核对",
+        "step_notes": "本代码已在独立调试副本逐步试跑成功，关联实际合约000027-2026PT00035。成功记录见examples/treaty-uat/debug-results.json。尚未重新从头无人干预整段运行；保持草稿，需用户确认。",
+        "step_content": "async def run(ctx, inputs):\n    async def field(field_id):\n        snapshot = await ctx.call(\"playwright.page_inspect\", {\"scope\": \"full_page\", \"role\": \"operator\"})\n        matches = [e for e in snapshot[\"elements\"] if e.get(\"id\") == field_id and e.get(\"visible\")]\n        if len(matches) != 1 or not matches[0].get(\"preferred_selector\"):\n            raise ValueError(\"当前页面字段不唯一或没有验证过的定位器：\" + field_id)\n        return matches[0]\n\n    async def fill_field(field_id, value):\n        element = await field(field_id)\n        selector = element[\"preferred_selector\"]\n        await ctx.call(\"playwright.page_fill\", {\"selector\": selector, \"value\": str(value), \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_press\", {\"selector\": selector, \"key\": \"Tab\", \"role\": \"operator\"})\n        if isinstance(value, (int, float)):\n            actual = await ctx.call(\"playwright.page_input_value\", {\"selector\": selector, \"role\": \"operator\"})\n            if float(actual[\"value\"].replace(\",\", \"\")) != float(value):\n                raise ValueError(\"数值字段回读不一致：\" + field_id)\n        else:\n            await ctx.call(\"playwright.page_assert_value\", {\"selector\": selector, \"value\": str(value), \"role\": \"operator\"})\n\n    async def select_field(field_id, value):\n        element = await field(field_id)\n        selector = element[\"preferred_selector\"]\n        controls = element.get(\"attributes\", {}).get(\"aria-controls\")\n        if not controls:\n            raise ValueError(\"字段未提供下拉列表标识：\" + field_id)\n        ancestors = element.get(\"ancestor_chain\", [])\n        if len(ancestors) < 2:\n            raise ValueError(\"字段缺少实际选择控件范围：\" + field_id)\n        await ctx.call(\"playwright.page_click\", {\"selector\": ancestors[1][\"selector\"], \"role\": \"operator\"})\n        observed = await ctx.call(\"playwright.page_inspect\", {\"selector\": \"[id='\" + controls + \"']\", \"include_ancestors\": True, \"include_descendants\": True, \"depth\": 6, \"max_nodes\": 100, \"role\": \"operator\"})\n        matches = []\n        for ancestor in observed[\"dom\"][\"ancestors\"][:3]:\n            tree = await ctx.call(\"playwright.page_inspect\", {\"selector\": ancestor[\"selector\"], \"include_descendants\": True, \"depth\": 6, \"max_nodes\": 300, \"role\": \"operator\"})\n            queue = [tree[\"dom\"][\"root\"]]\n            while queue:\n                node = queue.pop(0)\n                queue.extend(node.get(\"children\", []))\n                if node.get(\"visible\") and \"ant-select-item-option\" in node.get(\"attributes\", {}).get(\"class\", \"\") and \"ant-select-item-option-content\" not in node.get(\"attributes\", {}).get(\"class\", \"\") and node.get(\"name\") == str(value):\n                    matches.append(node)\n            if matches:\n                break\n        if len(matches) != 1 or not matches[0].get(\"preferred_selector\"):\n            raise ValueError(\"没有唯一实际下拉选项：\" + str(value))\n        await ctx.call(\"playwright.page_click\", {\"selector\": matches[0][\"preferred_selector\"], \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_press\", {\"selector\": selector, \"key\": \"Escape\", \"role\": \"operator\"})\n        current = await field(field_id)\n        displayed = await ctx.call(\"playwright.page_text\", {\"selector\": current[\"ancestor_chain\"][1][\"selector\"], \"role\": \"operator\"})\n        if str(value) not in displayed[\"text\"]:\n            raise ValueError(\"下拉字段没有显示所选值：\" + field_id)\n\n    page = await ctx.call(\"playwright.page_inspect\", {\"role\": \"operator\"})\n    if page[\"url\"] == \"https://ire-uat.shie.com.cn/TreatyManagement/Treaty\":\n        await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"新增合约合同\", \"exact\": True}, \"role\": \"operator\"})\n        for label in [\"财产保险\", \"比例再保险\"]:\n            await ctx.call(\"playwright.page_check\", {\"selector\": {\"kind\": \"label\", \"value\": label, \"exact\": True}, \"checked\": True, \"role\": \"operator\"})\n            await ctx.call(\"playwright.page_assert_checked\", {\"selector\": {\"kind\": \"label\", \"value\": label, \"exact\": True}, \"checked\": True, \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"确 认\", \"exact\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"**/TreatyManagement/Treaty/add?**\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\": \"#orgBusinessCode\", \"expected\": {\"count\": 1, \"visible\": True, \"editable\": True}, \"role\": \"operator\"})\n    await fill_field(\"orgBusinessCode\", inputs[\"contract_suffix\"])\n    for field_id, value in [(\"treatyType\", inputs[\"treaty_type\"]), (\"insuranceCate\", inputs[\"main_insurance_class\"]), (\"timeZone\", inputs[\"business_timezone_label\"]), (\"currency\", inputs[\"premium_currency\"]), (\"renewalFlag\", \"是\" if inputs[\"is_renewal\"] else \"否\"), (\"terminationFlag\", inputs[\"termination_method\"])]:\n        await select_field(field_id, value)\n    for selector, value in [(\"#startDate\", inputs[\"start_datetime\"]), ({\"kind\": \"placeholder\", \"value\": \"结束日期\", \"exact\": True}, inputs[\"end_datetime\"])]:\n        await ctx.call(\"playwright.page_click\", {\"selector\": selector, \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_assert_state\", {\"selector\": selector, \"expected\": {\"editable\": True}, \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_fill\", {\"selector\": selector, \"value\": value, \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_press\", {\"selector\": selector, \"key\": \"Tab\", \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"确 定\", \"exact\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_value\", {\"selector\": \"#startDate\", \"value\": inputs[\"start_datetime\"], \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_value\", {\"selector\": {\"kind\": \"placeholder\", \"value\": \"结束日期\", \"exact\": True}, \"value\": inputs[\"end_datetime\"], \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_click\", {\"selector\": \"#treatyYear\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\": \"#treatyYear\", \"expected\": {\"editable\": True}, \"role\": \"operator\"})\n    await fill_field(\"treatyYear\", inputs[\"business_year\"])\n    await ctx.call(\"playwright.page_press\", {\"selector\": \"#treatyYear\", \"key\": \"Enter\", \"role\": \"operator\"})\n    await fill_field(\"treatyName\", inputs[\"contract_suffix\"])\n    await fill_field(\"epi\", inputs[\"estimated_premium\"])\n    selector = {\"kind\": \"label\", \"value\": \"是\" if inputs[\"is_facultative_obligatory\"] else \"否\", \"exact\": True, \"within\": \"#facultativeObligatoryTreatyFlag\"}\n    await ctx.call(\"playwright.page_check\", {\"selector\": selector, \"checked\": True, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_checked\", {\"selector\": selector, \"checked\": True, \"role\": \"operator\"})\n    await select_field(\"accountPeriodType\", inputs[\"statement_frequency\"])\n    for field_id, name in [(\"furnishedDays\", \"statement_days\"), (\"confirmDays\", \"confirmation_days\"), (\"settlementDays\", \"settlement_days\")]:\n        await fill_field(field_id, inputs[name])\n    observed = await ctx.call(\"playwright.page_inspect\", {\"role\": \"operator\"})\n    return ctx.result(data={\"contract_suffix\": inputs[\"contract_suffix\"], \"form_url\": observed[\"url\"]})\n",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "contract_suffix": {
+              "type": "string",
+              "description": "前序步骤已经生成并查重的编号及名称后缀"
+            },
+            "treaty_type": {
+              "type": "string",
+              "description": "合约类型",
+              "enum": [
+                "成数合约",
+                "溢额合约",
+                "混合比例合约"
+              ],
+              "default": "成数合约"
+            },
+            "main_insurance_class": {
+              "type": "string",
+              "description": "单选主险类，本次为一揽子",
+              "default": "一揽子"
+            },
+            "business_year": {
+              "type": "integer",
+              "description": "业务年度",
+              "default": 2026
+            },
+            "start_datetime": {
+              "type": "string",
+              "description": "北京时区YYYY-MM-DD HH:MM:SS",
+              "default": "2026-01-01 00:00:00"
+            },
+            "end_datetime": {
+              "type": "string",
+              "description": "北京时区YYYY-MM-DD HH:MM:SS",
+              "default": "2026-12-31 23:59:59"
+            },
+            "estimated_premium": {
+              "type": "number",
+              "description": "预估保费",
+              "default": 1000000
+            },
+            "premium_currency": {
+              "type": "string",
+              "description": "币种",
+              "default": "CNY"
+            },
+            "is_renewal": {
+              "type": "boolean",
+              "description": "是否续转",
+              "default": false
+            },
+            "termination_method": {
+              "type": "string",
+              "description": "终止方式",
+              "default": "自然终止"
+            },
+            "is_facultative_obligatory": {
+              "type": "boolean",
+              "description": "预约分保",
+              "default": false
+            },
+            "statement_frequency": {
+              "type": "string",
+              "description": "账单周期",
+              "default": "季度"
+            },
+            "statement_days": {
+              "type": "integer",
+              "description": "出账天数",
+              "default": 30
+            },
+            "confirmation_days": {
+              "type": "integer",
+              "description": "确认天数",
+              "default": 30
+            },
+            "settlement_days": {
+              "type": "integer",
+              "description": "结算天数",
+              "default": 30
+            },
+            "business_timezone_label": {
+              "type": "string",
+              "description": "页面实际北京时区选项",
+              "default": "(GMT+08:00)中国标准时间（北京）"
+            }
+          },
+          "required": [
+            "contract_suffix",
+            "treaty_type",
+            "main_insurance_class",
+            "business_year",
+            "start_datetime",
+            "end_datetime",
+            "estimated_premium",
+            "premium_currency",
+            "is_renewal",
+            "termination_method",
+            "is_facultative_obligatory",
+            "statement_frequency",
+            "statement_days",
+            "confirmation_days",
+            "settlement_days",
+            "business_timezone_label"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "contract_suffix": {
+              "type": "string",
+              "description": "录入的编号后缀"
+            },
+            "form_url": {
+              "type": "string",
+              "description": "新增表单URL"
+            }
+          },
+          "required": [
+            "contract_suffix",
+            "form_url"
+          ],
+          "additionalProperties": false
+        },
+        "bindings": {
+          "contract_suffix": {
+            "ref": {
+              "source": "step",
+              "step_id": "step-3",
+              "output": "data",
+              "pointer": "/contract_suffix"
+            }
+          }
+        },
+        "capabilities": [
+          "playwright.page_assert_checked",
+          "playwright.page_assert_state",
+          "playwright.page_assert_url",
+          "playwright.page_assert_value",
+          "playwright.page_check",
+          "playwright.page_click",
+          "playwright.page_fill",
+          "playwright.page_input_value",
+          "playwright.page_inspect",
+          "playwright.page_press",
+          "playwright.page_text"
+        ],
+        "plugin_requirements": {
+          "playwright": "0.4.0"
+        },
+        "timeout_ms": 300000,
+        "delay_after_previous_seconds": 0,
+        "content_format": "python-async-v1"
+      }
+    },
+    {
+      "key": "step-5",
+      "validation_state": "DRAFT",
+      "document": {
+        "name": "参与方录入与双附件上传",
+        "step_description": "数组驱动选择000053和000050机构、70%/30%、均无首席；从授权文件根读取UAT PDF并分别上传，核实两个参与方附件清单和下载链接",
+        "step_notes": "本代码已在独立调试副本逐步试跑成功，关联实际合约000027-2026PT00035。成功记录见examples/treaty-uat/debug-results.json。尚未重新从头无人干预整段运行；保持草稿，需用户确认。",
+        "step_content": "async def run(ctx, inputs):\n    async def field(field_id):\n        snapshot = await ctx.call(\"playwright.page_inspect\", {\"scope\": \"full_page\", \"role\": \"operator\"})\n        matches = [e for e in snapshot[\"elements\"] if e.get(\"id\") == field_id and e.get(\"visible\")]\n        if len(matches) != 1 or not matches[0].get(\"preferred_selector\"):\n            raise ValueError(\"当前页面字段不唯一或没有验证过的定位器：\" + field_id)\n        return matches[0]\n\n    async def fill_field(field_id, value):\n        element = await field(field_id)\n        selector = element[\"preferred_selector\"]\n        await ctx.call(\"playwright.page_fill\", {\"selector\": selector, \"value\": str(value), \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_press\", {\"selector\": selector, \"key\": \"Tab\", \"role\": \"operator\"})\n        if isinstance(value, (int, float)):\n            actual = await ctx.call(\"playwright.page_input_value\", {\"selector\": selector, \"role\": \"operator\"})\n            if float(actual[\"value\"].replace(\",\", \"\")) != float(value):\n                raise ValueError(\"数值字段回读不一致：\" + field_id)\n        else:\n            await ctx.call(\"playwright.page_assert_value\", {\"selector\": selector, \"value\": str(value), \"role\": \"operator\"})\n\n    async def select_field(field_id, value):\n        element = await field(field_id)\n        selector = element[\"preferred_selector\"]\n        controls = element.get(\"attributes\", {}).get(\"aria-controls\")\n        if not controls:\n            raise ValueError(\"字段未提供下拉列表标识：\" + field_id)\n        ancestors = element.get(\"ancestor_chain\", [])\n        if len(ancestors) < 2:\n            raise ValueError(\"字段缺少实际选择控件范围：\" + field_id)\n        if element.get(\"attributes\", {}).get(\"aria-expanded\") != \"true\":\n            await ctx.call(\"playwright.page_click\", {\"selector\": ancestors[1][\"selector\"], \"role\": \"operator\"})\n        observed = await ctx.call(\"playwright.page_inspect\", {\"selector\": \"[id='\" + controls + \"']\", \"include_ancestors\": True, \"include_descendants\": True, \"depth\": 6, \"max_nodes\": 100, \"role\": \"operator\"})\n        matches = []\n        for ancestor in observed[\"dom\"][\"ancestors\"][:3]:\n            tree = await ctx.call(\"playwright.page_inspect\", {\"selector\": ancestor[\"selector\"], \"include_descendants\": True, \"depth\": 6, \"max_nodes\": 300, \"role\": \"operator\"})\n            queue = [tree[\"dom\"][\"root\"]]\n            while queue:\n                node = queue.pop(0)\n                queue.extend(node.get(\"children\", []))\n                if node.get(\"visible\") and \"ant-select-item-option\" in node.get(\"attributes\", {}).get(\"class\", \"\") and \"ant-select-item-option-content\" not in node.get(\"attributes\", {}).get(\"class\", \"\") and node.get(\"name\") == str(value):\n                    matches.append(node)\n            if matches:\n                break\n        if len(matches) != 1 or not matches[0].get(\"preferred_selector\"):\n            raise ValueError(\"没有唯一实际下拉选项：\" + str(value))\n        await ctx.call(\"playwright.page_click\", {\"selector\": matches[0][\"preferred_selector\"], \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_press\", {\"selector\": selector, \"key\": \"Escape\", \"role\": \"operator\"})\n        current = await field(field_id)\n        displayed = await ctx.call(\"playwright.page_text\", {\"selector\": current[\"ancestor_chain\"][1][\"selector\"], \"role\": \"operator\"})\n        if str(value) not in displayed[\"text\"]:\n            raise ValueError(\"下拉字段没有显示所选值：\" + field_id)\n\n    async def confirm_upload():\n        await ctx.call(\"playwright.page_assert_text\", {\"selector\": \"body\", \"text\": \"上传各参与方用印后的合同扫描件，请谨慎上传。\", \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"确 定\", \"exact\": True}, \"role\": \"operator\"})\n\n    pending = await ctx.call(\"playwright.page_state\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"确 定\", \"exact\": True}, \"role\": \"operator\"})\n    if pending[\"match_count\"] == 1 and pending[\"visible\"]:\n        await confirm_upload()\n    participants = inputs[\"participants\"]\n    total = sum(p[\"share_percent\"] for p in participants)\n    if abs(total - 100) > 0.000001 or len(set(p[\"organization_code\"] for p in participants)) != len(participants):\n        raise ValueError(\"参与方代码重复或份额合计不等于100%\")\n    attachment = await ctx.call(\"file.read\", {\"path\": inputs[\"attachment_path\"], \"format\": \"base64\", \"max_bytes\": 1048576})\n    verified_shares = []\n    uploaded = 0\n    for index, participant in enumerate(participants):\n        snapshot = await ctx.call(\"playwright.page_inspect\", {\"scope\": \"full_page\", \"role\": \"operator\"})\n        amounts = [e for e in snapshot[\"elements\"] if e.get(\"id\", \"\").endswith(\"_amount\") and e.get(\"visible\")]\n        if len(amounts) == index:\n            await ctx.call(\"playwright.page_click\", {\"selector\": inputs[\"add_participant_selector\"], \"role\": \"operator\"})\n            snapshot = await ctx.call(\"playwright.page_inspect\", {\"scope\": \"full_page\", \"role\": \"operator\"})\n            amounts = [e for e in snapshot[\"elements\"] if e.get(\"id\", \"\").endswith(\"_amount\") and e.get(\"visible\")]\n        if len(amounts) <= index or len(amounts) > len(participants):\n            raise ValueError(\"参与方行数与本次新增顺序不符\")\n        amount = amounts[index]\n        row = amount[\"ancestor_chain\"][0][\"selector\"][\"value\"].split(\" > td:\")[0]\n        selectors = [e for e in snapshot[\"elements\"] if e.get(\"role\") == \"combobox\" and e.get(\"id\", \"\").startswith(\"rc_select_\") and any(a.get(\"selector\", {}).get(\"value\", \"\").startswith(row + \" > \") for a in e.get(\"ancestor_chain\", []))]\n        if len(selectors) != 1:\n            raise ValueError(\"当前参与方机构输入框不唯一\")\n        institution = selectors[0]\n        current_institution = await ctx.call(\"playwright.page_text\", {\"selector\": institution[\"ancestor_chain\"][1][\"selector\"], \"role\": \"operator\"})\n        if participant[\"organization_code\"] + \"-\" + participant[\"organization_name\"] not in current_institution[\"text\"]:\n            if institution.get(\"attributes\", {}).get(\"aria-expanded\") != \"true\":\n                await ctx.call(\"playwright.page_click\", {\"selector\": institution[\"ancestor_chain\"][1][\"selector\"], \"role\": \"operator\"})\n            await ctx.call(\"playwright.page_fill\", {\"selector\": institution[\"preferred_selector\"], \"value\": \"\", \"role\": \"operator\"})\n            await ctx.call(\"playwright.page_fill\", {\"selector\": institution[\"preferred_selector\"], \"value\": participant[\"organization_code\"], \"role\": \"operator\"})\n            await ctx.call(\"playwright.page_assert_text\", {\"selector\": \"body\", \"text\": participant[\"organization_code\"] + \"-\" + participant[\"organization_name\"], \"role\": \"operator\"})\n            await select_field(institution[\"id\"], participant[\"organization_code\"] + \"-\" + participant[\"organization_name\"])\n        await fill_field(amount[\"id\"], participant[\"share_percent\"])\n        observed_share = await ctx.call(\"playwright.page_input_value\", {\"selector\": amount[\"preferred_selector\"], \"role\": \"operator\"})\n        verified_shares.append(float(observed_share[\"value\"].replace(\",\", \"\")))\n        lead = {\"kind\": \"label\", \"value\": \"是\", \"exact\": True, \"within\": row}\n        snapshot = await ctx.call(\"playwright.page_inspect\", {\"scope\": \"full_page\", \"role\": \"operator\"})\n        leads = [e for e in snapshot[\"elements\"] if e.get(\"type\") == \"checkbox\" and any(a.get(\"selector\", {}).get(\"value\", \"\").startswith(row + \" > \") for a in e.get(\"ancestor_chain\", []))]\n        if len(leads) != 1 or leads[0].get(\"checked\") != participant[\"is_lead\"]:\n            raise ValueError(\"首席标志与本次非首席要求不符\")\n        links = await ctx.call(\"playwright.page_list\", {\"selector\": row + \" a\", \"role\": \"operator\"})\n        existing = [link for link in links[\"items\"] if link[\"text\"].startswith(inputs[\"attachment_name\"].rsplit(\".\", 1)[0]) and link[\"text\"].endswith(\".pdf\")]\n        if links[\"total_count\"] and len(existing) != 1:\n            raise ValueError(\"参与方已有未知附件，停止覆盖\")\n        if not existing:\n            upload = row + \" input[type=file]\"\n            await ctx.call(\"playwright.page_assert_state\", {\"selector\": upload, \"expected\": {\"count\": 1, \"enabled\": True}, \"role\": \"operator\"})\n            await ctx.call(\"playwright.page_upload\", {\"selector\": upload, \"mode\": \"input\", \"files\": [{\"name\": inputs[\"attachment_name\"], \"mime_type\": \"application/pdf\", \"content_base64\": attachment[\"content\"]}], \"role\": \"operator\"})\n            await confirm_upload()\n        await ctx.call(\"playwright.page_assert_state\", {\"selector\": row + \" a\", \"expected\": {\"count\": 1, \"visible\": True}, \"role\": \"operator\"})\n        actual_attachment = await ctx.call(\"playwright.page_text\", {\"selector\": row + \" a\", \"role\": \"operator\"})\n        if not actual_attachment[\"text\"].startswith(inputs[\"attachment_name\"].rsplit(\".\", 1)[0]) or not actual_attachment[\"text\"].endswith(\".pdf\"):\n            raise ValueError(\"上传后的附件名称不符合预期\")\n        uploaded += 1\n    if abs(sum(verified_shares) - 100) > 0.000001:\n        raise ValueError(\"实际录入份额合计不等于100%\")\n    return ctx.result(data={\"participant_count\": len(verified_shares), \"total_share_percent\": sum(verified_shares), \"uploaded_attachment_count\": uploaded})\n",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "attachment_path": {
+              "type": "string",
+              "description": "file_root内UAT测试PDF的相对路径",
+              "default": "uat-treaty-demo.pdf"
+            },
+            "participants": {
+              "type": "array",
+              "description": "参与方机构代码、名称、份额与首席标志；本次要求000053 70%和000050 30%，均不设首席",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "organization_code": {
+                    "type": "string",
+                    "description": "机构代码"
+                  },
+                  "organization_name": {
+                    "type": "string",
+                    "description": "机构名称"
+                  },
+                  "share_percent": {
+                    "type": "number",
+                    "description": "份额百分数",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "is_lead": {
+                    "type": "boolean",
+                    "description": "是否首席"
+                  }
+                },
+                "required": [
+                  "organization_code",
+                  "organization_name",
+                  "share_percent",
+                  "is_lead"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "add_participant_selector": {
+              "type": "string",
+              "description": "实际采集的参与方新增图标定位器",
+              "default": "#root > section:nth-of-type(1) > section:nth-of-type(1) > main:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(2) > div:nth-of-type(2) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > div:nth-of-type(1) > table:nth-of-type(1) > thead:nth-of-type(1) > tr:nth-of-type(1) > th:nth-of-type(7) > img:nth-of-type(1)"
+            },
+            "attachment_name": {
+              "type": "string",
+              "default": "uat-treaty-demo.pdf"
+            }
+          },
+          "required": [
+            "attachment_path",
+            "participants",
+            "add_participant_selector",
+            "attachment_name"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "participant_count": {
+              "type": "integer",
+              "description": "验证通过的参与方数"
+            },
+            "total_share_percent": {
+              "type": "number",
+              "description": "实际份额之和"
+            },
+            "uploaded_attachment_count": {
+              "type": "integer",
+              "description": "附件清单内已核实上传数"
+            }
+          },
+          "required": [
+            "participant_count",
+            "total_share_percent",
+            "uploaded_attachment_count"
+          ],
+          "additionalProperties": false
+        },
+        "bindings": {
+          "participants": {
+            "ref": {
+              "source": "task",
+              "pointer": "/participants"
+            }
+          }
+        },
+        "capabilities": [
+          "file.read",
+          "playwright.page_assert_state",
+          "playwright.page_assert_text",
+          "playwright.page_assert_value",
+          "playwright.page_click",
+          "playwright.page_fill",
+          "playwright.page_input_value",
+          "playwright.page_inspect",
+          "playwright.page_list",
+          "playwright.page_press",
+          "playwright.page_state",
+          "playwright.page_text",
+          "playwright.page_upload"
+        ],
+        "plugin_requirements": {
+          "file": "0.1.0",
+          "playwright": "0.4.0"
+        },
+        "timeout_ms": 300000,
+        "delay_after_previous_seconds": 0,
+        "content_format": "python-async-v1"
+      }
+    },
+    {
+      "key": "step-6",
+      "validation_state": "DRAFT",
+      "document": {
+        "name": "两个明细分项与动态手续费",
+        "step_description": "依据共享分项数组独立建立两个分项，多选各自险种，填写币种、承保限额、手续费类型及相关条件，验证两个分项数据",
+        "step_notes": "本代码已在独立调试副本逐步试跑成功，关联实际合约000027-2026PT00035。成功记录见examples/treaty-uat/debug-results.json。尚未重新从头无人干预整段运行；保持草稿，需用户确认。",
+        "step_content": "async def run(ctx, inputs):\n    async def field(field_id):\n        snapshot = await ctx.call(\"playwright.page_inspect\", {\"scope\": \"full_page\", \"role\": \"operator\"})\n        matches = [e for e in snapshot[\"elements\"] if e.get(\"id\") == field_id and e.get(\"visible\")]\n        if len(matches) != 1 or not matches[0].get(\"preferred_selector\"):\n            raise ValueError(\"当前页面字段不唯一或没有验证过的定位器：\" + field_id)\n        return matches[0]\n\n    async def fill_field(field_id, value):\n        element = await field(field_id)\n        selector = element[\"preferred_selector\"]\n        await ctx.call(\"playwright.page_fill\", {\"selector\": selector, \"value\": str(value), \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_press\", {\"selector\": selector, \"key\": \"Tab\", \"role\": \"operator\"})\n        if isinstance(value, (int, float)):\n            actual = await ctx.call(\"playwright.page_input_value\", {\"selector\": selector, \"role\": \"operator\"})\n            if float(actual[\"value\"].replace(\",\", \"\")) != float(value):\n                raise ValueError(\"数值字段回读不一致：\" + field_id)\n        else:\n            await ctx.call(\"playwright.page_assert_value\", {\"selector\": selector, \"value\": str(value), \"role\": \"operator\"})\n\n    async def select_field(field_id, value):\n        element = await field(field_id)\n        selector = element[\"preferred_selector\"]\n        if field_id == \"insuranceTypeCodes\":\n            selected = await ctx.call(\"playwright.page_text\", {\"selector\": element[\"ancestor_chain\"][3][\"selector\"], \"role\": \"operator\"})\n            if str(value) in selected[\"text\"]:\n                return\n        controls = element.get(\"attributes\", {}).get(\"aria-controls\")\n        if not controls:\n            raise ValueError(\"字段未提供下拉列表标识：\" + field_id)\n        ancestors = element.get(\"ancestor_chain\", [])\n        if len(ancestors) < 2:\n            raise ValueError(\"字段缺少实际选择控件范围：\" + field_id)\n        if element.get(\"attributes\", {}).get(\"aria-expanded\") != \"true\":\n            await ctx.call(\"playwright.page_click\", {\"selector\": ancestors[3 if field_id == \"insuranceTypeCodes\" else 1][\"selector\"], \"role\": \"operator\"})\n        root_selector = \"[id='\" + controls + \"']\"\n        root_state = await ctx.call(\"playwright.page_state\", {\"selector\": root_selector, \"role\": \"operator\"})\n        matches = []\n        for root_index in range(root_state[\"match_count\"]):\n            observed = await ctx.call(\"playwright.page_inspect\", {\"selector\": {\"kind\": \"css\", \"value\": root_selector, \"nth\": root_index}, \"include_ancestors\": True, \"include_descendants\": True, \"depth\": 6, \"max_nodes\": 100, \"role\": \"operator\"})\n            for ancestor in observed[\"dom\"][\"ancestors\"][:3]:\n                tree = await ctx.call(\"playwright.page_inspect\", {\"selector\": ancestor[\"selector\"], \"include_descendants\": True, \"depth\": 6, \"max_nodes\": 300, \"role\": \"operator\"})\n                queue = [tree[\"dom\"][\"root\"]]\n                while queue:\n                    node = queue.pop(0)\n                    queue.extend(node.get(\"children\", []))\n                    if node.get(\"visible\") and \"ant-select-item-option\" in node.get(\"attributes\", {}).get(\"class\", \"\") and \"ant-select-item-option-content\" not in node.get(\"attributes\", {}).get(\"class\", \"\") and node.get(\"name\") == str(value):\n                        matches.append(node)\n                if matches:\n                    break\n            if matches:\n                break\n        if len(matches) != 1 or not matches[0].get(\"preferred_selector\"):\n            raise ValueError(\"没有唯一实际下拉选项：\" + str(value))\n        await ctx.call(\"playwright.page_click\", {\"selector\": matches[0][\"preferred_selector\"], \"role\": \"operator\"})\n        current = await field(field_id)\n        await ctx.call(\"playwright.page_press\", {\"selector\": current[\"preferred_selector\"], \"key\": \"Escape\", \"role\": \"operator\"})\n        current = await field(field_id)\n        displayed = await ctx.call(\"playwright.page_text\", {\"selector\": current[\"ancestor_chain\"][3 if field_id == \"insuranceTypeCodes\" else 1][\"selector\"], \"role\": \"operator\"})\n        if str(value) not in displayed[\"text\"]:\n            raise ValueError(\"下拉字段没有显示所选值：\" + field_id)\n\n    sections = inputs[\"sections\"]\n    if len(sections) != 2:\n        raise ValueError(\"本 Demo 须录入两个分项\")\n    categories = []\n    for index, section in enumerate(sections):\n        tabs = await ctx.call(\"playwright.page_list\", {\"selector\": {\"kind\": \"role\", \"value\": \"tab\"}, \"role\": \"operator\"})\n        if tabs[\"total_count\"] > len(sections) or tabs[\"truncated\"]:\n            raise ValueError(\"已有分项数量超出本次录入范围\")\n        if tabs[\"total_count\"] == index:\n            await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"Add tab\", \"exact\": True}, \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_assert_state\", {\"selector\": {\"kind\": \"role\", \"value\": \"tab\", \"nth\": index}, \"expected\": {\"count\": 1, \"visible\": True}, \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"tab\", \"nth\": index}, \"role\": \"operator\"})\n        await fill_field(\"sectionType\", section[\"category\"])\n        for insurance_type in section[\"insurance_types\"]:\n            await select_field(\"insuranceTypeCodes\", insurance_type)\n        await select_field(\"sumInsuredCurrency\", section[\"currency\"])\n        await fill_field(\"maxLimits\", section[\"maximum_limit\"])\n        await select_field(\"commissionType\", section[\"commission_type\"])\n        if section[\"commission_type\"] == \"固定费率\":\n            await fill_field(\"commisionRate\", section[\"fixed_commission_rate\"])\n        elif section[\"commission_type\"] == \"浮动费率\":\n            await fill_field(\"commisionRate\", section[\"advance_commission_rate\"])\n            await fill_field(\"maxCommissionRate\", section[\"commission_upper_limit\"])\n            await fill_field(\"minCommissionRate\", section[\"commission_lower_limit\"])\n        else:\n            raise ValueError(\"未观察到的手续费类型\")\n        if inputs[\"treaty_type\"] != \"成数合约\":\n            for field_id, key in [(\"lines\", \"surplus_lines\"), (\"maxNetRetention\", \"maximum_net_retention\"), (\"maxGrossRetention\", \"maximum_gross_retention\"), (\"cessionShareRate\", \"quota_ceded_share_percent\"), (\"cessionCapacity\", \"ceded_underwriting_capacity\")]:\n                await fill_field(field_id, section[key])\n        snapshot = await ctx.call(\"playwright.page_inspect\", {\"scope\": \"full_page\", \"role\": \"operator\"})\n        radios = [e for e in snapshot[\"elements\"] if e.get(\"type\") == \"radio\" and e.get(\"name\") == (\"是\" if section[\"loss_sharing\"] else \"否\") and any(a.get(\"id\") == \"lossSharingFlag\" for a in e.get(\"ancestor_chain\", []))]\n        if len(radios) != 1 or not radios[0].get(\"preferred_selector\"):\n            raise ValueError(\"当前分项损失分摊选项不唯一\")\n        await ctx.call(\"playwright.page_check\", {\"selector\": radios[0][\"preferred_selector\"], \"checked\": True, \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_assert_checked\", {\"selector\": radios[0][\"preferred_selector\"], \"checked\": True, \"role\": \"operator\"})\n        actual = await ctx.call(\"playwright.page_input_value\", {\"selector\": (await field(\"sectionType\"))[\"preferred_selector\"], \"role\": \"operator\"})\n        categories.append(actual[\"value\"])\n    return ctx.result(data={\"section_count\": len(categories), \"section_categories\": categories})\n",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "sections": {
+              "type": "array",
+              "description": "独立分项配置；本次两项分别限额10000000和20000000，均选择家庭财产保险及机动车辆保险",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "category": {
+                    "type": "string",
+                    "description": "分项类别"
+                  },
+                  "insurance_types": {
+                    "type": "array",
+                    "description": "多选险种",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1
+                  },
+                  "currency": {
+                    "type": "string",
+                    "description": "保额币种"
+                  },
+                  "maximum_limit": {
+                    "type": "number",
+                    "description": "最大承保限额"
+                  },
+                  "commission_type": {
+                    "type": "string",
+                    "description": "手续费类型"
+                  },
+                  "fixed_commission_rate": {
+                    "type": "number",
+                    "description": "固定手续费率百分比"
+                  },
+                  "advance_commission_rate": {
+                    "type": "number",
+                    "description": "预付手续费率"
+                  },
+                  "commission_upper_limit": {
+                    "type": "number",
+                    "description": "手续费上限"
+                  },
+                  "commission_lower_limit": {
+                    "type": "number",
+                    "description": "手续费下限"
+                  },
+                  "loss_sharing": {
+                    "type": "boolean",
+                    "description": "损失分摊"
+                  },
+                  "surplus_lines": {
+                    "type": "number",
+                    "description": "溢额线数"
+                  },
+                  "maximum_net_retention": {
+                    "type": "number",
+                    "description": "最大净自留额"
+                  },
+                  "maximum_gross_retention": {
+                    "type": "number",
+                    "description": "最大毛自留额"
+                  },
+                  "quota_ceded_share_percent": {
+                    "type": "number",
+                    "description": "成数分出份额百分比"
+                  },
+                  "ceded_underwriting_capacity": {
+                    "type": "number",
+                    "description": "分出承保能力"
+                  }
+                },
+                "required": [
+                  "category",
+                  "insurance_types",
+                  "currency",
+                  "maximum_limit",
+                  "commission_type",
+                  "loss_sharing"
+                ],
+                "additionalProperties": false
+              }
+            },
+            "treaty_type": {
+              "type": "string",
+              "enum": [
+                "成数合约",
+                "溢额合约",
+                "混合比例合约"
+              ],
+              "default": "成数合约"
+            }
+          },
+          "required": [
+            "sections",
+            "treaty_type"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "section_count": {
+              "type": "integer",
+              "description": "核对通过的分项数量"
+            },
+            "section_categories": {
+              "type": "array",
+              "description": "已核对分项类别",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "required": [
+            "section_count",
+            "section_categories"
+          ],
+          "additionalProperties": false
+        },
+        "bindings": {
+          "sections": {
+            "ref": {
+              "source": "task",
+              "pointer": "/sections"
+            }
+          }
+        },
+        "capabilities": [
+          "playwright.page_assert_checked",
+          "playwright.page_assert_state",
+          "playwright.page_assert_value",
+          "playwright.page_check",
+          "playwright.page_click",
+          "playwright.page_fill",
+          "playwright.page_input_value",
+          "playwright.page_inspect",
+          "playwright.page_list",
+          "playwright.page_press",
+          "playwright.page_state",
+          "playwright.page_text"
+        ],
+        "plugin_requirements": {
+          "playwright": "0.4.0"
+        },
+        "timeout_ms": 300000,
+        "delay_after_previous_seconds": 0,
+        "content_format": "python-async-v1"
+      }
+    },
+    {
+      "key": "step-7",
+      "validation_state": "DRAFT",
+      "document": {
+        "name": "保存合约与平台编号读取",
+        "step_description": "完成基本信息、参与方、附件、分项数据之后执行保存，核实进入编辑页、起止期及年度锁定，提取本次平台编号",
+        "step_notes": "本代码已在独立调试副本逐步试跑成功，关联实际合约000027-2026PT00035。成功记录见examples/treaty-uat/debug-results.json。尚未重新从头无人干预整段运行；保持草稿，需用户确认。",
+        "step_content": "async def run(ctx, inputs):\n    await ctx.call(\"playwright.page_assert_value\", {\"selector\": \"#orgBusinessCode\", \"value\": inputs[\"contract_suffix\"], \"role\": \"operator\"})\n    current = await ctx.call(\"playwright.page_inspect\", {\"role\": \"operator\"})\n    if current[\"url\"].endswith(\"/TreatyManagement/Treaty/add\"):\n        confirm = {\"kind\": \"role\", \"value\": \"button\", \"name\": \"确 定\", \"exact\": True}\n        pending = await ctx.call(\"playwright.page_state\", {\"selector\": confirm, \"role\": \"operator\"})\n        if not (pending[\"match_count\"] == 1 and pending[\"visible\"]):\n            await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"保 存\", \"exact\": True}, \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_assert_text\", {\"selector\": \"body\", \"text\": \"保存后[合约起止期]和[业务年度]将不可修改，请确认\", \"role\": \"operator\"})\n        await ctx.call(\"playwright.page_click\", {\"selector\": confirm, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"**/TreatyManagement/Treaty/edit?**\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_text\", {\"selector\": \"main\", \"text\": \"000027-\", \"role\": \"operator\"})\n    body = await ctx.call(\"playwright.page_text\", {\"selector\": \"main\", \"role\": \"operator\"})\n    number = body[\"text\"].split(\"平台合约编号\", 1)[1].split(\"保险种类\", 1)[0].replace(\"：\", \"\").replace(\":\", \"\").strip()\n    if not number.startswith(\"000027-\") or any(c.isspace() for c in number):\n        raise ValueError(\"保存后页面未显示唯一的本机构平台合约编号\")\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"**/TreatyManagement/Treaty/edit?**cedentTreatyNo=\" + number + \"&**\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_value\", {\"selector\": \"#orgBusinessCode\", \"value\": inputs[\"contract_suffix\"], \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\": \"#startDate\", \"expected\": {\"count\": 1, \"editable\": False}, \"role\": \"operator\"})\n    observed = await ctx.call(\"playwright.page_inspect\", {\"role\": \"operator\"})\n    return ctx.result(data={\"platform_contract_number\": number, \"contract_suffix\": inputs[\"contract_suffix\"], \"edit_url\": observed[\"url\"]})\n",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "contract_suffix": {
+              "type": "string",
+              "description": "本次待保存编号"
+            }
+          },
+          "required": [
+            "contract_suffix"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "platform_contract_number": {
+              "type": "string",
+              "description": "页面实际取得的平台编号"
+            },
+            "contract_suffix": {
+              "type": "string",
+              "description": "已保存的业务后缀"
+            },
+            "edit_url": {
+              "type": "string",
+              "description": "保存后编辑页面URL"
+            }
+          },
+          "required": [
+            "platform_contract_number",
+            "contract_suffix",
+            "edit_url"
+          ],
+          "additionalProperties": false
+        },
+        "bindings": {
+          "contract_suffix": {
+            "ref": {
+              "source": "step",
+              "step_id": "step-3",
+              "output": "data",
+              "pointer": "/contract_suffix"
+            }
+          }
+        },
+        "capabilities": [
+          "playwright.page_assert_state",
+          "playwright.page_assert_text",
+          "playwright.page_assert_url",
+          "playwright.page_assert_value",
+          "playwright.page_click",
+          "playwright.page_inspect",
+          "playwright.page_state",
+          "playwright.page_text"
+        ],
+        "plugin_requirements": {
+          "playwright": "0.4.0"
+        },
+        "timeout_ms": 180000,
+        "delay_after_previous_seconds": 0,
+        "content_format": "python-async-v1"
+      }
+    },
+    {
+      "key": "step-8",
+      "validation_state": "DRAFT",
+      "document": {
+        "name": "确认并提交审核",
+        "step_description": "保存后填写UAT审核意见，点击确认并提交审核，验证提交后的业务状态和列表返回",
+        "step_notes": "本代码已在独立调试副本逐步试跑成功，关联实际合约000027-2026PT00035。成功记录见examples/treaty-uat/debug-results.json。尚未重新从头无人干预整段运行；保持草稿，需用户确认。",
+        "step_content": "async def run(ctx, inputs):\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"**/TreatyManagement/Treaty/edit?**cedentTreatyNo=\" + inputs[\"platform_contract_number\"] + \"&**\", \"role\": \"operator\"})\n    choice = {\"kind\": \"label\", \"value\": \"确认并提交审核\", \"exact\": True}\n    await ctx.call(\"playwright.page_check\", {\"selector\": choice, \"checked\": True, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_checked\", {\"selector\": choice, \"checked\": True, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_fill\", {\"selector\": \"#comments\", \"value\": inputs[\"audit_comment\"], \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_value\", {\"selector\": \"#comments\", \"value\": inputs[\"audit_comment\"], \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"提 交\", \"exact\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"**/TreatyManagement/Treaty\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\": \"#查询条件_treatyCode\", \"expected\": {\"count\": 1, \"visible\": True}, \"role\": \"operator\"})\n    return ctx.result(data={\"platform_contract_number\": inputs[\"platform_contract_number\"], \"submission_status\": \"提交后已返回合约列表，审核终态由下一步核对\"})\n",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "audit_comment": {
+              "type": "string",
+              "description": "本次UAT审核提交意见",
+              "default": "仅供 UAT 测试：TaskWeave 合约录入演示，提交审核后停止。"
+            },
+            "platform_contract_number": {
+              "type": "string",
+              "description": "上步产生的平台合约编号"
+            }
+          },
+          "required": [
+            "audit_comment",
+            "platform_contract_number"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "platform_contract_number": {
+              "type": "string",
+              "description": "已提交审核的平台编号"
+            },
+            "submission_status": {
+              "type": "string",
+              "description": "页面实际业务提交状态"
+            }
+          },
+          "required": [
+            "platform_contract_number",
+            "submission_status"
+          ],
+          "additionalProperties": false
+        },
+        "bindings": {
+          "platform_contract_number": {
+            "ref": {
+              "source": "step",
+              "step_id": "step-7",
+              "output": "data",
+              "pointer": "/platform_contract_number"
+            }
+          }
+        },
+        "capabilities": [
+          "playwright.page_assert_checked",
+          "playwright.page_assert_state",
+          "playwright.page_assert_url",
+          "playwright.page_assert_value",
+          "playwright.page_check",
+          "playwright.page_click",
+          "playwright.page_fill"
+        ],
+        "plugin_requirements": {
+          "playwright": "0.4.0"
+        },
+        "timeout_ms": 180000,
+        "delay_after_previous_seconds": 0,
+        "content_format": "python-async-v1"
+      }
+    },
+    {
+      "key": "step-9",
+      "validation_state": "DRAFT",
+      "document": {
+        "name": "编号唯一性与审核终态核对",
+        "step_description": "按本次编号查询唯一一条，打开处理详情核对处于审核阶段、业务字段只读、两家参与方合同待确认，同时核对双方机构份额及两个分项",
+        "step_notes": "本代码已在独立调试副本逐步试跑成功，关联实际合约000027-2026PT00035。成功记录见examples/treaty-uat/debug-results.json。尚未重新从头无人干预整段运行；保持草稿，需用户确认。",
+        "step_content": "async def run(ctx, inputs):\n    await ctx.call(\"playwright.page_fill\", {\"selector\": \"#查询条件_treatyCode\", \"value\": inputs[\"contract_suffix\"], \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_value\", {\"selector\": \"#查询条件_treatyCode\", \"value\": inputs[\"contract_suffix\"], \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"查 询\", \"exact\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_text\", {\"selector\": \"main\", \"text\": \"平台合约编号：\" + inputs[\"platform_contract_number\"], \"role\": \"operator\"})\n    links = await ctx.call(\"playwright.page_list\", {\"selector\": \"main a\", \"role\": \"operator\"})\n    if links[\"truncated\"]:\n        raise ValueError(\"列表超出读取范围，不能证明唯一性\")\n    matched = [row for row in links[\"items\"] if row[\"text\"] == \"机构合约编号：\" + inputs[\"contract_suffix\"]]\n    if len(matched) != 1:\n        raise ValueError(\"编号查询不是唯一记录\")\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\": {\"kind\": \"role\", \"value\": \"tab\", \"name\": \"我的任务\", \"exact\": False}, \"expected\": {\"count\": 1, \"enabled\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"tab\", \"name\": \"我的任务\", \"exact\": False}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"处 理\", \"exact\": True}, \"expected\": {\"count\": 1, \"enabled\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_click\", {\"selector\": {\"kind\": \"role\", \"value\": \"button\", \"name\": \"处 理\", \"exact\": True}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"**/TreatyManagement/Treaty/audit?**\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"**/TreatyManagement/Treaty/audit?**cedentTreatyNo=\" + inputs[\"platform_contract_number\"] + \"&**\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_url\", {\"url\": \"**/TreatyManagement/Treaty/audit?**case=audit\", \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_state\", {\"selector\": \"#orgBusinessCode\", \"expected\": {\"count\": 1, \"editable\": False}, \"role\": \"operator\"})\n    await ctx.call(\"playwright.page_assert_value\", {\"selector\": \"#orgBusinessCode\", \"value\": inputs[\"contract_suffix\"], \"role\": \"operator\"})\n    rows = await ctx.call(\"playwright.page_list\", {\"selector\": \"main table tbody tr\", \"max_items\": 100, \"role\": \"operator\"})\n    if rows[\"truncated\"]:\n        raise ValueError(\"参与方状态超出读取范围\")\n    statuses = []\n    for participant in inputs[\"participants\"]:\n        matching = [row for row in rows[\"items\"] if participant[\"organization_name\"] in row[\"text\"]]\n        if len(matching) != 1 or \"合同待确认\" not in matching[0][\"text\"]:\n            raise ValueError(\"参与方合同状态不符合实际录入终点\")\n        statuses.append({\"organization_code\": participant[\"organization_code\"], \"contract_status\": \"合同待确认\"})\n    return ctx.result(data={\"contract_suffix\": inputs[\"contract_suffix\"], \"platform_contract_number\": inputs[\"platform_contract_number\"], \"matched_contract_count\": len(matched), \"audit_stage\": \"合约审核\", \"participant_contract_statuses\": statuses})\n",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "contract_suffix": {
+              "type": "string",
+              "description": "本次业务编号后缀"
+            },
+            "platform_contract_number": {
+              "type": "string",
+              "description": "本次平台编号"
+            },
+            "participants": {
+              "type": "array",
+              "description": "参与方机构代码、名称、份额与首席标志；本次要求000053 70%和000050 30%，均不设首席",
+              "minItems": 2,
+              "items": {
+                "type": "object",
+                "properties": {
+                  "organization_code": {
+                    "type": "string",
+                    "description": "机构代码"
+                  },
+                  "organization_name": {
+                    "type": "string",
+                    "description": "机构名称"
+                  },
+                  "share_percent": {
+                    "type": "number",
+                    "description": "份额百分数",
+                    "minimum": 0,
+                    "maximum": 100
+                  },
+                  "is_lead": {
+                    "type": "boolean",
+                    "description": "是否首席"
+                  }
+                },
+                "required": [
+                  "organization_code",
+                  "organization_name",
+                  "share_percent",
+                  "is_lead"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "contract_suffix",
+            "platform_contract_number",
+            "participants"
+          ],
+          "additionalProperties": false
+        },
+        "output_schema": {
+          "type": "object",
+          "properties": {
+            "contract_suffix": {
+              "type": "string",
+              "description": "本次编号"
+            },
+            "platform_contract_number": {
+              "type": "string",
+              "description": "实际平台编号"
+            },
+            "matched_contract_count": {
+              "type": "integer",
+              "description": "列表匹配记录数",
+              "const": 1
+            },
+            "audit_stage": {
+              "type": "string",
+              "description": "页面观察到的审核阶段"
+            },
+            "participant_contract_statuses": {
+              "type": "array",
+              "description": "两家参与方合同状态",
+              "items": {
+                "type": "object",
+                "properties": {
+                  "organization_code": {
+                    "type": "string",
+                    "description": "机构编码"
+                  },
+                  "contract_status": {
+                    "type": "string",
+                    "description": "实际合同状态"
+                  }
+                },
+                "required": [
+                  "organization_code",
+                  "contract_status"
+                ],
+                "additionalProperties": false
+              }
+            }
+          },
+          "required": [
+            "contract_suffix",
+            "platform_contract_number",
+            "matched_contract_count",
+            "audit_stage",
+            "participant_contract_statuses"
+          ],
+          "additionalProperties": false
+        },
+        "bindings": {
+          "contract_suffix": {
+            "ref": {
+              "source": "step",
+              "step_id": "step-3",
+              "output": "data",
+              "pointer": "/contract_suffix"
+            }
+          },
+          "platform_contract_number": {
+            "ref": {
+              "source": "step",
+              "step_id": "step-7",
+              "output": "data",
+              "pointer": "/platform_contract_number"
+            }
+          },
+          "participants": {
+            "ref": {
+              "source": "task",
+              "pointer": "/participants"
+            }
+          }
+        },
+        "capabilities": [
+          "playwright.page_assert_state",
+          "playwright.page_assert_text",
+          "playwright.page_assert_url",
+          "playwright.page_assert_value",
+          "playwright.page_click",
+          "playwright.page_fill",
+          "playwright.page_list"
+        ],
+        "plugin_requirements": {
+          "playwright": "0.4.0"
+        },
+        "timeout_ms": 180000,
+        "delay_after_previous_seconds": 0,
+        "content_format": "python-async-v1"
+      }
+    }
+  ],
+  "plan_context_refs": {
+    "step-1": [
+      "7e68a1a1-7f73-4db4-89d3-892601620fd4"
+    ],
+    "step-2": [
+      "7e68a1a1-7f73-4db4-89d3-892601620fd4"
+    ],
+    "step-3": [
+      "c1bc70c0-1b53-45c4-b69b-d63e6aa6f387",
+      "4e3ae3b9-870c-4a8b-8bdc-5a760ba50600"
+    ],
+    "step-4": [
+      "c1bc70c0-1b53-45c4-b69b-d63e6aa6f387",
+      "d1cefea3-f879-4957-9f24-b8afb91e0ba8"
+    ],
+    "step-5": [
+      "914cacb1-d2e1-415a-8d66-d4cccdf1ffe3"
+    ],
+    "step-6": [
+      "d1cefea3-f879-4957-9f24-b8afb91e0ba8",
+      "5bc364be-c7f4-4400-9a3e-874684dc4864"
+    ],
+    "step-7": [
+      "4e3ae3b9-870c-4a8b-8bdc-5a760ba50600"
+    ],
+    "step-8": [
+      "4e3ae3b9-870c-4a8b-8bdc-5a760ba50600",
+      "3827ce59-132a-4278-a495-6a3488f6001e"
+    ],
+    "step-9": [
+      "4e3ae3b9-870c-4a8b-8bdc-5a760ba50600",
+      "3827ce59-132a-4278-a495-6a3488f6001e"
+    ]
+  }
+}

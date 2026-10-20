@@ -1,0 +1,119 @@
+{
+  "case": "BILL-03",
+  "status": "独立账单经纪退分出两轮13步分段实测完成：正常新增提交、V1冻结、V2暂存且接收视图V1、正常同步重发、二次退回及V2只读详情",
+  "runs": {
+    "1": "81cdcfea-0b1b-4a72-8101-a54ff6755765",
+    "2": "6dc003bc-61e0-4fd9-838b-96ccfb1b7f29",
+    "3": "6ff31c39-0aa7-4345-b03a-b7c687bfae6d",
+    "4": "b14a5d0c-5d8b-4630-96e7-4c4f5db4fbbc",
+    "5": "2468278d-74a3-46be-8ea1-81e828e7e1dc",
+    "6": "d3d2620c-9737-4861-aaf3-8ff971795445",
+    "7": "8fcd2586-6677-4f98-b3ad-78b22d189031",
+    "8": "a6079465-a485-414b-a358-29650ee70e09",
+    "9": "61edc8cd-72c3-4c07-9e82-82035aa5e325",
+    "10": "a6235536-0e95-4b5b-ba8c-625ce867a163",
+    "11": "20f4a706-edf8-4861-999d-bb439671aadc",
+    "12": "09b5b346-7315-4b92-818f-5a6926a7777d",
+    "13": "33b677f3-60af-4220-ba73-19d24c6a7ff0"
+  },
+  "next": "继续其他账单退回方向、修正账单、结算退回及第二条结算路线、真实record、新会话连续和软件问题批次修复。",
+  "bill_label": "TW-LOCAL-BILL-CB-20261016061154",
+  "platform_treaty_no": "000050-2026PT00011",
+  "treaty_master_id": 325094,
+  "statement_id": 544941,
+  "record_no": "000050-2026PT00011-SOAP0002",
+  "draft_normals": [
+    257314,
+    257315
+  ],
+  "currency": "CNY",
+  "net_balance": "70000.00",
+  "period": [
+    "2026-10-16",
+    "2026-12-31"
+  ],
+  "initial_submit_done": true,
+  "active_normals": [
+    257316,
+    257317
+  ],
+  "active_platform_nos": [
+    "000050-2026PT00011-SOA0003",
+    "000050-2026PT00011-SOA0004"
+  ],
+  "after_record_id": 2110651223716827136,
+  "initial_core_mock_job": {
+    "parent_id": 1768115023432721909,
+    "detail_id": 1768114586986032192,
+    "status": 8,
+    "callback_result": "成功",
+    "onchain_times": 1,
+    "biz_id": "owned-local-bill-cb-20261016061154-ab"
+  },
+  "first_snapshot": {
+    "id": 60007,
+    "sha256": "f26e720eaa2f087f96af80bf1fb43f782fe4ac3aac252f5e0fc4b36e11100a78",
+    "source_table": 3,
+    "source_id": 257316,
+    "is_deleted": "Y"
+  },
+  "resubmit": {
+    "run_id": "a6235536-0e95-4b5b-ba8c-625ce867a163",
+    "synchronous": true,
+    "new_async_parent_created": false,
+    "initial_job_unchanged": {
+      "parent_id": 1768115023432721909,
+      "detail_id": 1768114586986032192,
+      "status": 8,
+      "callback_result": "成功",
+      "onchain_times": 1,
+      "biz_id": "owned-local-bill-cb-20261016061154-ab"
+    },
+    "after_record_id": 2110651223716827136,
+    "old_snapshot_preserved": true
+  },
+  "second_rejection": {
+    "run_id": "09b5b346-7315-4b92-818f-5a6926a7777d",
+    "old_snapshot_id": 60007,
+    "old_is_deleted": "Y",
+    "new_snapshot_id": 60008,
+    "new_is_deleted": "N",
+    "new_sha256": "c6c4f91c6b1778cc4c1cf7cd0e49e2b81782c44f331250046ce6447cea039c91",
+    "frozen_comment": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154 V2",
+    "role_states": [
+      13,
+      4,
+      0,
+      0
+    ]
+  },
+  "final_view": {
+    "run_id": "33b677f3-60af-4220-ba73-19d24c6a7ff0",
+    "readonly": true,
+    "comment_version": "V2"
+  },
+  "boundaries": [
+    "13步当前哈希成功记录为同笔独立夹具分段调试；固定ID与精确Mock，不代表全新会话无人值守连续运行。",
+    "S10首次在确认决策未加载时停止，未点击提交；补唯一/可见/启用等待后在原13/4状态正常提交一次成功。",
+    "初次提交异步parent/detail8/8回调成功；重发同步，不新增异步parent，旧8/8不单独证明重发。",
+    "source3为活动AB257316，草稿257314/15初始提交正常重建并逻辑删除。",
+    "原544940聚合6缺陷、结算174791及其他完成用例保留；真实record未验证。"
+  ],
+  "authoring_observations": [
+    {
+      "step": 10,
+      "failed_run": "ae5519a8-7ce9-4401-baf2-5d40270867b0",
+      "failed_action": "playwright.page_check",
+      "error": "LOCATOR_NOT_FOUND",
+      "business_submit_reached": false,
+      "evidence": "失败于action16选择决策；保留现场复采同一label已出现。业务字段就绪不代表异步Decision就绪。",
+      "fixed": "S10及执行前的S12都在page_check前等待Decision唯一/可见/启用，20s。",
+      "successful_run": "a6235536-0e95-4b5b-ba8c-625ce867a163"
+    },
+    {
+      "kind": "authoring_script",
+      "observation": "生成器直接改defs引用的schema会污染相邻定义；已从公开step当前schema独立读取，并checkpoint同步全部13步源码/模式/绑定；未修改旧成功步骤。",
+      "software_defect": false
+    }
+  ]
+}

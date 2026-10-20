@@ -1,0 +1,428 @@
+{
+  "issues": [
+    {
+      "id": "TW-LOCAL-TIDB-001",
+      "status": "已修复并验证",
+      "symptom": "ENV-01数据库连接、TREATY-02及BILL-02快照读取均在目标SELECT前失败，TIDB_QUERY_FAILED，数据库错误码1235。",
+      "evidence_runs": [
+        "f7c869bc-9f32-426d-ad5d-c42d6016a2e4",
+        "8eac91aa-5b43-4e1f-8c4b-2e488259c99f",
+        "9e459233-9aed-4e6d-a4d6-f040f45ea3a5"
+      ],
+      "entry": "plugins/tidb/src/taskweave_tidb/__init__.py:query_database",
+      "next": "只读复现数据库异常全文，核对TiDB支持的事务方式，保留SELECT校验、异常传播及回滚关闭；不通过修改本地全局安全设置掩盖问题。",
+      "root_cause": "TiDB 8.5.4普通READ ONLY为noop且默认禁用；墙上时钟NOW快于PD时又导致1105。",
+      "fix": "根据服务握手识别TiDB，先建立空事务获取集群TSO，再替换为START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_PARSE_TSO(TIDB_CURRENT_TSO())；用户SQL仅在只读事务内执行。MySQL保留原行为。",
+      "validation": "回归先复现1235及NOW未来时间失败；26项TiDB定向测试通过，本地真实数据库连接和来源2/3/5快照试跑通过。"
+    },
+    {
+      "id": "TW-LOCAL-TIDB-002",
+      "status": "已修复并验证",
+      "symptom": "连接读取超时后rollback/close的InterfaceError(0)覆盖原始数据库错误，失去根因。",
+      "evidence_runs": [
+        "fbe5555f-3d67-42c4-83a8-6fe5a2d87bd6"
+      ],
+      "fix": "查询异常在游标关闭前保存；依次尝试游标关闭、回滚、连接关闭。包括真实断流后的AttributeError在内的清理异常均保留脱敏说明，不覆盖主因；仅清理失败也不能返回成功。",
+      "validation": "回归先复现原始2013被游标drain的InterfaceError/AttributeError覆盖；真实Connection/MySQLResult/SSCursor受控断流用例确认主因保留且连接关闭。26项TiDB、10项契约/组合依赖测试共36项通过；独立定向复核无重要发现。"
+    },
+    {
+      "id": "TW-LOCAL-PW-003",
+      "status": "已修复并验证",
+      "symptom": "page_input_value读取可见但disabled的经纪人自动汇总份额，错误抛LOCATOR_DISABLED；业务输入无法完整回读。",
+      "evidence_runs": [
+        "fb3461c0-89c4-411d-a846-6642a2a8152d"
+      ],
+      "root_cause": "READ动作复用了写入动作的enabled门禁。",
+      "fix": "仅page_input_value允许读取disabled控件，唯一性/可见性校验保留，page_fill/page_click仍拒绝disabled；真实浏览器回归先复现后修复。",
+      "validation": "27项Playwright范围/动作测试及24项依赖测试通过；重启后bf5f6c32-f766-4f3f-95a2-aba240e07ae2实际通过专用page_input_value读取两行disabled份额100%，原业务动作写权限保持限制。"
+    },
+    {
+      "id": "TW-LOCAL-INPUT-004",
+      "status": "已修复并验证",
+      "symptom": "单步试跑明确传refresh_test_attachment=true，实际尝试输入却为步骤默认false，导致附件未重传；无效类型也被默认值掩盖。",
+      "evidence_runs": [
+        "5ed9b629-b899-4931-9228-ed75d73ec915"
+      ],
+      "root_cause": "create_run把显式单步值放入task_values层，automatic_inputs的步骤默认覆盖它；验证阶段再次重复覆盖。",
+      "fix": "创建时将original_inputs作为overrides，验证使用已解析输入作为overrides；flow_trial、初始幂等依据及原始输入保留。",
+      "validation": "新增两项回归修复前均失败，修复后35项运行/变量/控制/恢复测试通过；限定只读复核无重要发现。 重启API后fe54df5b-688e-482d-a533-cace872f36e0的expected_org_text显式输入覆盖步骤默认，实际尝试摘要一致。 旧UI测试调用修正后，最终38项相关定向测试全部通过。"
+    },
+    {
+      "id": "TW-LOCAL-TEST-005",
+      "status": "已修复并验证",
+      "symptom": "旧反馈试跑UI测试仍向start_trial传已移除的tabs/feedback位置参数，3个子场景TypeError，HEAD版create_run下同样复现。",
+      "fix": "测试改用当前start_trial(continue_session=True)接口，保留环境切换/保留实例/输入路由的全部原断言；不修改产品UI行为。",
+      "validation": "本轮38项输入、变量、运行控制及恢复定向测试通过，包含原失败测试全部3个子场景。"
+    }
+  ],
+  "authoring_corrections": [
+    {
+      "item": "语言下拉定位",
+      "result": "实际combobox为只读输入；改用采集得到的外层div，中文切换试跑成功。"
+    },
+    {
+      "item": "首页身份断言",
+      "result": "本地显示用户名称+账号，改为核对实际账号文字；组织名称来源单列为交接信息。"
+    },
+    {
+      "item": "分项险种",
+      "result": "已纠正为两个分项各自同时勾选家庭财产保险与机动车辆保险。"
+    },
+    {
+      "item": "本地经纪链附件权限",
+      "result": "分出方仅上传一级经纪行；二级上传字段禁用，交经纪人后续上传。不得套用UAT直连两机构都上传的步骤。"
+    },
+    {
+      "item": "附件完成判据",
+      "result": "文件名出现不能单独证明成功；增加实际DOM上传done状态，并以真实保存和数据库附件校验作为证据。"
+    },
+    {
+      "item": "BILL-05高级查询晚挂载",
+      "result": "2c00100b运行在瞬时match_count0后跳过展开，未找到字段。修正为字段未显示时等待实际高级查询控件再点击，a1259860已通过展开/填写/查询，后续失败为独立环境查询错误；业务尚未创建。"
+    },
+    {
+      "item": "BILL-05原normal引用VARCHAR",
+      "result": "正常创建544944后int比较失败，实际former_statement_normal_id为VARCHAR且AB/BC引用正确；改精确str比较，加显式544944只读恢复分支。32c8eab9当前代码只读成功，原创建run6d1e0bd4保留；新普通创建分支未重跑，不重复建单。"
+    },
+    {
+      "item": "BILL-05计划结付日期提交必填",
+      "result": "S03保存允许空paymentDate，首次提交被表单必填阻止，原角色0/job0；S04补真实单月日历选2026-12-31及提交后持久回读，ed322023正常提交成功。"
+    },
+    {
+      "item": "BILL-05领取后即时回读未定",
+      "result": "a0fed731正常claim已成功，ctx后续回读断言失败但原查询值未记录；独立SELECT已归053，增加安全原值日志后55979跳过claim并进入实际31处理页成功。与BILL-04类似现象根因仍未定，不能称TiDB/异步原因已证实。"
+    }
+  ],
+  "environment_limits": [
+    {
+      "item": "上链Mock边界",
+      "status": "当前9703直接成功Mock绕过pangu；本轮仅回读4条历史record，真实provider切换和新记录落库未重跑。"
+    },
+    {
+      "item": "历史record回读范围",
+      "status": "after_record_id=0扫描过大导致超时；改用历史四案最小recordID减1后4条成功。新流程必须填操作前最大ID。"
+    },
+    {
+      "id": "BJS-LOCAL-UPLOAD-001",
+      "item": "本地9703 Mock不支持multipart PDF上传",
+      "status": "backupdatafix及recordotcflag修复multipart二进制处理、fileHash契约及受限下载；其5项回归和实际下载字节一致通过。本轮TaskWeave真实上传后已保存合约000050-2026PT00011，附件hash非空校验实际通过。仅此获准PDF，不证明真实MinIO/链节点。"
+    },
+    {
+      "item": "既有UI测试调用签名失配",
+      "status": "原3个子场景基线失配已复现；按当前公开接口修正测试调用且保留全部断言，最终38项相关测试通过。见TW-LOCAL-TEST-005。"
+    },
+    {
+      "item": "Mock回调异步时序",
+      "status": "经纪两级审核实际完成后，紧接的DB断言曾先失败，随后只读恢复核对053=5/045=3通过；最终确认前仍须分别核对，尚未验证全新会话一次连续执行。"
+    },
+    {
+      "id": "BJS-LOCAL-TIDB-SAFETS-002",
+      "item": "近当前TSO快照等候本地safe-ts推进",
+      "status": "环境会话慢查询确认data_is_not_ready重试47次、退避20.01秒，与本地resolved-ts 20秒周期一致；客户端15秒先超时。最终读取已原样恢复。仅TaskWeave本地自测环境timeout设30秒，产品默认15秒、数据库全局配置及只读门禁不变；连接试跑56b729ab-bd43-4c36-865e-5ed2621d3e8d通过。",
+      "evidence_path": "/Users/xiaojuju/Projects/company/bjs/dev-environment/SELFTEST-HANDOFF-20261016-tidb-read-diagnosis.json",
+      "failed_runs": [
+        "79a658f0-d7b4-40b5-a79c-9b39c6c63b1f",
+        "711716ea-5aeb-47b7-950a-6fa288da05d4"
+      ],
+      "scope": "环境预算匹配明确20秒安全时间周期，不将普通可写读取用作失败降级。"
+    },
+    {
+      "item": "本地safe-ts临时优化后续",
+      "status": "环境会话在线将TiKV resolved-ts.advance-ts-interval由20s临时调1s，persist=false；同快照读降至约1s，TaskWeave run5d4a0819-e1db-4655-829e-e84109c8c4a0通过。历史30秒超时配置记录保留。",
+      "evidence": "environment-tuning.json"
+    },
+    {
+      "id": "BJS-LOCAL-LIST-TIFLASH-001",
+      "item": "BJS账单工作台TiFlash依赖",
+      "status": "本轮已恢复并实际验证正常中文列表及修正创建；限定本地环境，不改变应用SQL。",
+      "evidence_run": "a1259860-8807-4180-8c5a-3ab6815677fa",
+      "root_cause": "原列表SQL SET_VAR限定tidb,tiflash且强制MPP；本地只有TiDB/PD/TiKV，无TiFlash副本，后台返回1815/code=-1而UI显示全部0。",
+      "next": "保留运行资源和精确回退说明，继续31正常业务录入。",
+      "handoff": "/Users/xiaojuju/Projects/company/bjs/dev-environment/SELFTEST-HANDOFF-20261016-adjust-list-tiflash-readonly.json",
+      "fix": "独立TiFlash8.5.4 ARM64及六表replica1，六表AVAILABLE/PROGRESS1，原hint MPP查询和正常APIcode0精确行adjustFlagY。初始4GiB OOM一次，上限持久调整6GiB，后30秒无新增重启，原24服务未重启。",
+      "validation_run": "7556e4d0-406e-4884-8160-532457439142"
+    }
+  ],
+  "bill_authoring_observations": [
+    {
+      "status": "已按实际控件适配，未认定为产品缺陷",
+      "facts": [
+        "账单期间为readonly输入，使用双月日历选择并回读，未移除readonly。",
+        "页面采集把可点击div标为button，但get_by_role未匹配；试算折叠区改用本轮实际CSS定位。",
+        "Ant日历上两个月份均含翻页按钮，使用可见按钮限定；试算确认弹窗异步出现，先断言可见再点击。",
+        "总账单试算与机构明细含同名科目；输入范围限定到试算模块。"
+      ],
+      "evidence_runs": [
+        "ae7e0627-2b5a-4f04-96b7-ff71df09e752",
+        "a641d71c-af99-4ebc-a619-55f07244821f",
+        "152dce16-f54f-426f-815e-5f512df7c0db",
+        "b0d6b144-ebb7-4aca-88c5-c96d0b9a3df7"
+      ],
+      "successful_run": "499b7496-f7c7-4cdc-837d-8f9ee148f2bc"
+    }
+  ],
+  "bill_environment_findings": {
+    "master_id": 544940,
+    "submit_run": "a27dd606-5de3-4cdc-b2f5-bd254eb02087",
+    "normal_rebuild": {
+      "draft": [
+        257310,
+        257311
+      ],
+      "submitted": [
+        257312,
+        257313
+      ]
+    },
+    "mock_precheck": {
+      "status": "已通过TaskWeave限定本笔job精准恢复；实际副作用run f90689cb-d7ff-4da8-ba5b-531193fed421，当前代码只读恢复核验run e043f5a9-c877-48d6-8a50-98c5b5679f86 通过。",
+      "parent_job_id": 1768115023432721898,
+      "detail_id": 1768114586986032181,
+      "source": "dev-environment/SELFTEST-HANDOFF-20261016-owned-bill-submit-check.json"
+    },
+    "list": {
+      "status": "未验收",
+      "root_cause": "RiStatementDao.xml强制tidb,tiflash hint，本地只有tikv，无法生成执行计划",
+      "boundary": "后续拟用正常认证claimTask领取和合法前端路由继续，保留列表未验收；不伪造领取或SQL写状态。"
+    },
+    "completion": {
+      "role_states": [
+        8,
+        8,
+        8,
+        8
+      ],
+      "master_status": 6,
+      "final_check_run": "32307e82-65f7-44d3-909c-896f2253f602",
+      "result": "FAILED，目标BJS主表汇总缺陷，详见target-defects.json；未重复业务动作或SQL写状态。"
+    }
+  },
+  "bill_authoring_review": {
+    "fixed": [
+      "同合约旧草稿复用前核对本轮备注；未保存草稿须显式创建证据ID。",
+      "查重覆盖实际使用-TOTAL编号。",
+      "提交重建normal后按逻辑上下游核对金额、科目、新父子关系；恢复分支同样核对。",
+      "多轮草稿过滤限定本轮备注或显式创建证据ID，不被其他已完成账单阻塞。",
+      "创建前后ID水位核对唯一新草稿；可空可选审核参数不触发无意义人工输入。"
+    ],
+    "verification": "4项离线守卫回归通过；定向只读审核无重要发现。当前S07/S08/S09实际写动作成功；S05/S06当前代码只读恢复成功；S01/S02新源码正向未重跑。"
+  },
+  "settlement_authoring_observations": [
+    {
+      "item": "阶段字段与保存时点",
+      "status": "已按当前实现修正步骤判据，未认定为平台缺陷",
+      "facts": [
+        "CNY国内业务的结算存储币种为SETTLE-CNY，账单币种为CNY；初次按CNY过滤未查到新单，保留ID水位并只读恢复，未重复新建。",
+        "草稿平台账单编号写入platform_statement_no_temp；首次添加的settlement_amount为NULL，UI初始化按同币种派生70000，S03保存后70000及100/100汇率真实落库。",
+        "添加账单抽屉“确定”调用保存端点，作为真实写操作记录。"
+      ],
+      "effect_runs": [
+        "ad3e31fa-604c-42ad-b84b-1951bd8439ee",
+        "b0ff47e2-59b2-4adf-a502-5b098e0ef9de"
+      ],
+      "verification_runs": [
+        "f0e49051-bee3-4333-b6df-f0e650b0cfb7",
+        "e8107fc5-0226-43b6-973f-e239cfd0781f",
+        "980dce2f-02d7-4c14-8d75-d0d33fc7f1b3"
+      ]
+    },
+    {
+      "item": "自定义下拉可见文本覆盖",
+      "status": "已记录观察，是否补强采集待本批业务完成后评估",
+      "facts": [
+        "settle-01-currency-options的完整页面截图显示CNY国内业务等选项，elements清单无对应option，truncated=false。",
+        "page_text(body)可读到这些可见选项；本轮据真实截图和文本选择，并验证实际选中结果。",
+        "当前默认采集针对控件子集，不能将truncated=false解释为全部可见文本已纳入结构化清单。"
+      ],
+      "evidence_run": "17505ba0-1757-4e1a-b37f-06cbdc1a36e0",
+      "capture": "/Users/xiaojuju/taskweave/local-selftest-20261016/settle-01-currency-options.json"
+    }
+  ],
+  "settlement_authoring_review": {
+    "status": "限定复审核验两项源码问题已闭合，无新增必须修复问题；发起方新哈希正向实跑待补",
+    "validation": "账单4项、结算7项、本地只读等待辅助程序11项离线用例通过；接收方新源码真实只读试跑成功，发起方新哈希未重新实跑。",
+    "scope": "固定夹具；保留首次创建、真实record、新会话整套与第二条结算路线未验证边界。"
+  },
+  "settlement_callback_correction": {
+    "status": "已修正误判及持久化标签",
+    "facts": [
+      "父10为上链中、明细10为上链成功待回调，回调失败为9。",
+      "原处理自然4→10→8，sendcount1，没有重发或精准恢复。",
+      "发起方新增等待源码后保留未正向重跑标记，不沿用旧哈希通过。"
+    ],
+    "regressions": [
+      "全部结算源码实际compile",
+      "等待成功后双方状态变化必须拒绝"
+    ],
+    "environment_summary": "finance-isolation-summary.json"
+  },
+  "authoring_compile_observation": {
+    "status": "本批后待验证产品校验覆盖",
+    "fact": "本轮循环外break曾被step.validate判valid；实际compile报SyntaxError，交付源码已修复。",
+    "next": "批后用隔离最小步骤复现，核对现有产品校验契约及编译覆盖后修复，不把AST解析成功等同可执行。",
+    "delivery_guard": "verify_packages已对69个代码步骤实际compile。"
+  },
+  "rejection_authoring_review": {
+    "status": "限定复核无新增必须修复问题",
+    "fixed": [
+      "切签后处理按钮限定本轮平台编号卡片，避免领取其他单。",
+      "实时V2持久化断言位于接收方V1详情观察之前，避免保存异步造成假通过。",
+      "等待实际控件可见、页签可用及输入值加载，初次空值不当作版本泄漏。"
+    ],
+    "validation": "12项离线守卫通过；14步各有当前哈希成功记录。步骤5/9是修改后只读恢复，真实动作run另列。",
+    "unverified": "步骤9新增普通保存通知等待分支未正向重跑；固定Mock和ID尚非新会话通用无人值守用例。"
+  },
+  "direct_rejection_authoring_review": {
+    "status": "限定源码复核无重要问题；低影响标题措辞待本批业务结束统一清理",
+    "observations": [
+      "直连AC无参与方确认弹窗，原提交已完成，仅后续弹窗检查失败；只读恢复无重复提交。",
+      "V2正常保存及成功通知和持久化已完成，后续重复中文切换遇瞬态隐藏；当前代码识别并核验已有正确账号中文会话，只读恢复成功。"
+    ],
+    "pending_wording": [
+      "07/09/11/13查询标题残留三方，07另有经纪4；实际代码均为050→045两方守卫。为保留当前哈希证据，待批次结束统一修改并重新验证。"
+    ],
+    "validation": "12项离线守卫、11项重提等待用例通过；14个当前哈希成功，S05/S09只读恢复，实际动作run另列。",
+    "boundaries": "固定本笔ID和精确Mock；普通恢复后分支、新会话连续运行及真实record未验证。"
+  },
+  "br_rejection_preparation_review": {
+    "status": "前三段调整限定复核无必须修复项，9项离线守卫通过",
+    "observations": [
+      "新单S01首次查询时按钮尚未加载，已加入页签启用和查询按钮可见启用等待；修正后实际查重成功，失败与成功页面均保留。",
+      "S06原新增两行控件断言同时要求visible违反唯一控件契约，改为仅count2，再等待唯一费率可编辑；未提交前已纠正。",
+      "曾将BC新建onSubmit免弹窗规则误套到经纪接收录入onConfirm；实际参与方弹窗已采集，已恢复并校验待确认弹窗，完成正常确认和双级审核。",
+      "待确认恢复的百分比格式按数值比较，不把1.0000误作不等于1。"
+    ],
+    "identity_guard": "S06使用完整entry URL断言平台编号及经纪party ID。page_inspect.url会剥离query，旧endswith检查有效，此增强不计为旧缺陷修复。",
+    "boundaries": "S06从待确认弹窗续行，实际确认和双级审核均在本次成功run；S10真实保存后的即时SQL未读到2.5%，后续只读恢复确认实时2.5/拒绝视图1。新的普通保存分支、新会话连续运行和真实record未验证。",
+    "validation": "12项当前离线守卫及helper参数契约通过；98份源码/模式一致，75份当前哈希成功。TREATY-04前11步已分段核验。",
+    "pending": [
+      "定位S10成功通知后即时读取与最终持久化不一致的原因，收到本地代码/日志依据后再决定等待条件，暂不改TiDB插件或重复保存。"
+    ],
+    "phase": "历史前11步核查；本方向最终结果见br_rejection_completion_review"
+  },
+  "br_rejection_completion_review": {
+    "status": "正常重提与第二次退回实际完成，限定复核问题已闭合",
+    "fixed": [
+      "S12审核观察变量曾覆盖snapshot函数，执行前已改名page_snapshot，内存旧版复现TypeError，完整双级审核回归通过；真实S12随后成功。"
+    ],
+    "validation": "19项离线守卫/调用契约/双级审核路径通过；15步当前哈希成功，S06待确认续行、S10只读恢复边界保留；S12/14/15本轮正常执行成功。",
+    "pending": [
+      "S10即时SQL失败的原始值/TSO缺口已记录，不能认定后台异步或TiDB延迟。后续批次增加可审计原始值及本次保存完成条件后再做新单正向验证。"
+    ],
+    "boundaries": "固定精确Mock/ID；全新会话连续、真实record和其余账单/结算场景待完成。"
+  },
+  "bill_cb_preparation_review": {
+    "status": "前三步正常UI本次通过，限定源码复核无重要发现",
+    "validation": "5项新账单归属守卫通过；新增前三段编译和源码/模式一致。",
+    "scope": "完整步骤输出和页面已保存；新master544941/草稿normal257314/15，未提交，原544940及结算174791不改。",
+    "authoring_script_observation": "空草稿保存材料也须声明playwright.page_inspect；初次第4步材料保存被CONTEXT_PROVIDER_UNAVAILABLE拒绝后，原位补声明并保存材料，无重复建步或数据清理。属于调用契约补齐，不认定软件缺陷。",
+    "pending": "首次提交可能正常重建normal，取得新活动ID后绑定来源3；退回重提同步，不能套用合约第二父任务规则。",
+    "phase": "历史前三步前置核查；本案两轮最终结果见bill_cb_completion_review"
+  },
+  "bill_cb_completion_review": {
+    "status": "独立SOAP0002两轮13步当前哈希实际成功；限定复核问题闭合",
+    "fixed": [
+      "S10业务字段加载后Decision尚未出现，page_check失败且未提交；保留现场后补唯一/visible/enabled等待。S12执行前补同类等待。",
+      "生成器共享schema对象曾污染相邻defs；改用公开step独立读取，并同步全套定义。属于编写脚本问题。"
+    ],
+    "validation": "27项离线守卫/真实helper参数契约/延迟Decision回归通过；13步当前哈希均有实际成功；S08普通保存、S10正常同步重发、S12正常二次退回、S13只读V2均本轮验证。",
+    "boundaries": "本笔固定Mock/ID，分段调试；列表筛选/TiFlash、真实record、新会话连续和剩余账单/结算场景未验收。"
+  },
+  "bill_br_preparation_review": {
+    "scope": "独立前三步与已验证BILL03源相同；新prefix/defs；无旧master/normal/恢复硬编码。",
+    "source_review": "限定只读复核无重要发现，实际编译通过。",
+    "offline_guards": "5/5内存草稿归属及保存前身份守卫通过，不访问业务系统。",
+    "actual": "本笔前三步均一次SUCCEEDED，新544942/SOAP0003，草稿AB257318/BC257319，CNY70000；尚未提交。",
+    "next": "精确Mock/claim/wait就绪后正常首次提交，回读活动normal，再正常UI验证经纪version2其他零金额科目V1。"
+  },
+  "bill_br_stage6_review": {
+    "status": "前6步当前哈希实际成功，原缺陷与恢复分列",
+    "fixed": [
+      "S06执行前复核补搜索过滤虚拟Select并拒绝截断，version1按8行完整dict（含id/说明）比较。",
+      "S06首次在选项:text-is定位失败时停止，未提交；保留且复用原UI空行，改为包含子文本且先唯一/visible/enabled断言，后续一次正常确认成功。"
+    ],
+    "validation": "16项离线归属/真实CLI参数/虚拟Select及完整基线回归通过；我另实际运行owner22项离线组合通过。owner报告新工具22/旧工具68/实际端口15，详见完整交接。S04/05/06正常实际成功。",
+    "actual_custom_item": {
+      "id": 1768100826216975255,
+      "object_id": 257321,
+      "item_code": "98",
+      "item_amount": "0.00",
+      "item_comment": "TW-LOCAL-BILL-BR-20261016064103-BROKER-V1",
+      "version": 2
+    },
+    "environment_mock_observation": "owner实际端口发现旧泛父合约兜底放行未知TREATY_BILL，已补严格未知bill拒绝并保留旧映射；属于本地业务Mock，不认定TaskWeave产品Bug。",
+    "boundaries": "经纪一级审核level1，尚未完成两级审核/再保待确认/退回；固定精确Mock/ID，真实record及新会话整段未验收。"
+  },
+  "bill_br_round2_debug": {
+    "status": "本笔两轮完成，当前17步哈希成功分段；新增46项本地离线执行（含继承重复），非全量。",
+    "save_v2": {
+      "actual_save_run": "13f8630c-aa1c-4b88-87e6-4d3b26e5834d",
+      "failed_assertion": "V2页面重开成功后整行dict含旧id比较失败；SQL原结果未保留，独立SELECT查明旧V1行Y、新V2行N。",
+      "old_item_id": 1768100826216975255,
+      "saved_v2_item_id": 1768100826216975256,
+      "resubmit_v2_item_id": 1768100826216975257,
+      "reason": "平台saveBrokerChangeInfo删除version2原行再insert，实际前端保存生成新ID。",
+      "readonly_recovery_run": "38f6dddc-5550-45a0-bb32-a58cb08b8e25",
+      "readonly_recovery_only": true,
+      "normal_updated_save_branch_positive_rerun": false,
+      "original_rows_compared_across_save_in_current_recovery": false,
+      "full_baseline_during_audits_and_second_reject_verified": true
+    },
+    "resubmit": {
+      "first_run": "78f510da-cbab-4a3d-8b69-6addf4be02c7",
+      "stage0_submit_succeeded": true,
+      "first_audit_blocked_before_business_logic": true,
+      "cause": "本机日志code103操作过快，重提07:18:40.117至审核07:18:43.193相隔3.076秒，AntiRepeat相同接口/账号/主表5秒限制。",
+      "fixed": "每次UI提交前process.run /bin/sleep 6，确认exit_code后重新核对角色状态；无自动重试。",
+      "current_run": "26eefc60-2348-4dbe-875f-ac8c3da644bf",
+      "resume_phase": 1,
+      "current_run_completed_stages": [
+        1,
+        2
+      ],
+      "new_code_phase0_positive_rerun": false
+    },
+    "claim_readback": {
+      "failed_run": "36882f54-6abb-4ba9-b146-345a0de6a278",
+      "stopped_before_page_open_or_reject": true,
+      "observed": "正常claim辅助程序返回成功，后续SQL领取回读断言失败；原查询值未保留，根因未定。后续独立SELECT确认045/levelNULL。",
+      "diagnostic_change": "新增脱敏owned查询日志后续跑；已owned故没有再次claim，正常二次退回一次成功。",
+      "successful_run": "3202d896-e02c-49b0-870c-bf7d84bd1122",
+      "not_claimed": "未判定异步保存或TiDB延迟已确证"
+    },
+    "source_reviews": "S07/08、S09、S10、S12、S14、S16/17限定复核；S12恢复禁止claim P2已修复并实际只读验证。",
+    "remaining": "领取回读原值缺失导致根因未定，登记待复现；普通新会话/phase0节流及原保存分支未重新正向跑，真实record未验收。"
+  },
+  "bill_direct_debug": {
+    "status": "13步当前哈希分段成功；29项本地离线守卫/真实helper参数/日历过渡/新单job绑定回归通过。root另实际执行owner新工具20项通过；owner报告旧90/部署端口25见交接。",
+    "creation": {
+      "first_run": "d43d90d0-ee5d-4884-9488-130d3a30b87f",
+      "created_draft": 544943,
+      "failed_action": "首次日历日期点击LOCATOR_HIDDEN，未保存/提交。",
+      "fix": "等待日历浮层appear/enter/leave过渡结束后再观察和点击，无固定延时。",
+      "current_run": "a5a82ea5-fe4f-4cea-9bcb-28a682546540",
+      "expected_unsaved_draft_id": 544943,
+      "new_code_creation_branch_rerun": false
+    },
+    "currency": {
+      "failed_run": "4c68c420-fe51-489c-9554-02cc5ecd7aff",
+      "failed_action": "币种Select内部input点击超时，尚未录入科目/试算/保存。",
+      "fix": "点击真实ant-select-selector容器，再搜索CNY并唯一匹配选择；普通试算保存一次成功。",
+      "current_run": "381974d7-9fda-4bbf-991d-3f2517b60e67"
+    },
+    "review": {
+      "found_before_execution": true,
+      "problem": "S10克隆CB schema时保留旧parent1909/detail2192常量且未绑定。",
+      "fix": "移除旧const/default，minimum1整数动态绑定本任务S04 initial_core_mock_job parent/detail；生成器同步，回归和实际S10通过。"
+    },
+    "synthetic_base_limitations": [
+      "This is an owned synthetic base copied for prior local tests; status8 was initialized as a mock prerequisite, not obtained by a newly executed normal treaty approval/signature chain.",
+      "No ri_business_attachments rows exist for master/parties; receiver file_status2 is an existing flag and does not prove actual signed file upload or storage readability.",
+      "Existing receiver from_org000027 does not match its parent org000050; parent from_id10947282 is correct. Do not mutate this historical field.",
+      "Bill creation uses current user as input org and party/from_id topology; bill reject routes by normal enter/input org. Existing real UI bills confirm050-to045 normals. TreatyFlowService.getToByFrom DOES read from_org, so do not reuse this fixture to test/replay treaty chain or claim treaty full-chain correctness.",
+      "Master insurance_type_codes/underwriting_year/on_platform_flag are null. They are preserved; actual page loading/new save has not been rerun in this read-only task. If current page validation rejects data, retain evidence and choose a new normal treaty rather than patching states.",
+      "This verdict is for local BILL-02 new-bill prerequisite only, not complete treaty business validation or production suitability."
+    ],
+    "remaining": "固定精确Mock/ID，新会话完整连续/真实record未验收；普通新创建分支未用加强后日历代码重跑。"
+  }
+}

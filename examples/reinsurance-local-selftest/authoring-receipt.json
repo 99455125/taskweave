@@ -1,0 +1,326 @@
+{
+  "created_at": "2026-10-16T01:09:38.008011+08:00",
+  "workspace": "/Users/xiaojuju/taskweave/workspace",
+  "plans": {
+    "environment": {
+      "plan_id": "d0c0f49c-6c6e-4d99-9a46-8528c145d596",
+      "name": "本地自测 本地环境与角色"
+    },
+    "treaty": {
+      "plan_id": "a5adb22f-66f1-4930-97fb-f7eb0af0f58b",
+      "name": "本地自测 分出方合约录入确认与退回"
+    },
+    "bill": {
+      "plan_id": "796deee6-4036-4ceb-ade6-302a91ac3121",
+      "name": "本地自测 合约账单录入确认与退回"
+    },
+    "settlement": {
+      "plan_id": "ce842946-5af5-4788-bbd8-c5858428db69",
+      "name": "本地自测 结算单录入确认与退回"
+    },
+    "onchain": {
+      "plan_id": "0a9d9b88-b45d-4675-8d3f-dadef8a3e09f",
+      "name": "本地自测 上链记录与场内外来源"
+    }
+  },
+  "tasks": [
+    {
+      "key": "ENV-01",
+      "task_id": "7135c399-ef27-46a0-8460-70df7de9b8c6",
+      "name": "本地自测 ENV-01 本地环境与角色登录核对",
+      "plan_id": "d0c0f49c-6c6e-4d99-9a46-8528c145d596",
+      "steps": 5,
+      "coded_readonly_steps": 2,
+      "business_draft_steps": 0,
+      "context_groups": 10,
+      "captures": 12,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/ENV-01.task.json",
+      "export_bytes": 2057004,
+      "coded_steps": 5,
+      "coded_login_steps": 3
+    },
+    {
+      "key": "TREATY-01",
+      "task_id": "3393ea1e-20f0-45d3-9dbc-d56dacb3d2f3",
+      "name": "本地自测 TREATY-01 分出方录入合约 经纪人确认 再保人确认",
+      "plan_id": "a5adb22f-66f1-4930-97fb-f7eb0af0f58b",
+      "steps": 11,
+      "coded_readonly_steps": 0,
+      "business_draft_steps": 0,
+      "context_groups": 47,
+      "captures": 113,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/TREATY-01.task.json",
+      "export_bytes": 22226141,
+      "coded_steps": 11,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "TREATY-02",
+      "task_id": "2f48714d-799b-4ca6-a6ba-f50a60a07fe6",
+      "name": "本地自测 TREATY-02 合约 再保人退回分出方 两轮快照隔离",
+      "plan_id": "a5adb22f-66f1-4930-97fb-f7eb0af0f58b",
+      "steps": 14,
+      "coded_readonly_steps": 4,
+      "business_draft_steps": 0,
+      "context_groups": 46,
+      "captures": 139,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/TREATY-02.task.json",
+      "export_bytes": 16987368,
+      "coded_steps": 14,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "TREATY-03",
+      "task_id": "ed1639b6-6f73-4662-9c83-43f532ddb9aa",
+      "name": "本地自测 TREATY-03 合约 经纪人退回分出方 两轮快照隔离",
+      "plan_id": "a5adb22f-66f1-4930-97fb-f7eb0af0f58b",
+      "steps": 14,
+      "coded_readonly_steps": 4,
+      "business_draft_steps": 0,
+      "context_groups": 48,
+      "captures": 103,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/TREATY-03.task.json",
+      "export_bytes": 15499331,
+      "coded_steps": 14,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "TREATY-04",
+      "task_id": "f9091b37-6508-41bc-8ff2-4044a9f58d9e",
+      "name": "本地自测 TREATY-04 合约 再保人退回经纪人 双级审核与快照",
+      "plan_id": "a5adb22f-66f1-4930-97fb-f7eb0af0f58b",
+      "steps": 15,
+      "coded_readonly_steps": 4,
+      "business_draft_steps": 0,
+      "context_groups": 53,
+      "captures": 102,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/TREATY-04.task.json",
+      "export_bytes": 15323173,
+      "coded_steps": 15,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "BILL-01",
+      "task_id": "6f884178-38cb-4f11-b473-0273b5102962",
+      "name": "本地自测 BILL-01 分出方录入合约账单 经纪人确认 再保人确认",
+      "plan_id": "796deee6-4036-4ceb-ade6-302a91ac3121",
+      "steps": 11,
+      "coded_readonly_steps": 0,
+      "business_draft_steps": 1,
+      "context_groups": 38,
+      "captures": 131,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/BILL-01.task.json",
+      "export_bytes": 24161666,
+      "coded_steps": 10,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "BILL-02",
+      "task_id": "bd7a2444-bb59-4d0c-aa88-307b316833b2",
+      "name": "本地自测 BILL-02 合约账单 再保人退回分出方 两轮快照",
+      "plan_id": "796deee6-4036-4ceb-ade6-302a91ac3121",
+      "steps": 13,
+      "coded_readonly_steps": 4,
+      "business_draft_steps": 0,
+      "context_groups": 46,
+      "captures": 106,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/BILL-02.task.json",
+      "export_bytes": 11032958,
+      "coded_steps": 13,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "BILL-03",
+      "task_id": "618112b4-1d02-4bcf-8315-2cc348b79a3c",
+      "name": "本地自测 BILL-03 合约账单 经纪人退回分出方 两轮快照",
+      "plan_id": "796deee6-4036-4ceb-ade6-302a91ac3121",
+      "steps": 13,
+      "coded_readonly_steps": 4,
+      "business_draft_steps": 0,
+      "context_groups": 44,
+      "captures": 56,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/BILL-03.task.json",
+      "export_bytes": 6331906,
+      "coded_steps": 13,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "BILL-04",
+      "task_id": "cf26cb95-02e6-4b34-94b6-87fc0c2eeda2",
+      "name": "本地自测 BILL-04 合约账单 再保人退回经纪人 两轮快照",
+      "plan_id": "796deee6-4036-4ceb-ade6-302a91ac3121",
+      "steps": 17,
+      "coded_readonly_steps": 4,
+      "business_draft_steps": 0,
+      "context_groups": 77,
+      "captures": 88,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/BILL-04.task.json",
+      "export_bytes": 9297940,
+      "coded_steps": 17,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "BILL-05",
+      "task_id": "85c65b45-385e-48ea-bbab-4a061551e1a7",
+      "name": "本地自测 BILL-05 合约修正账单 录入确认与退回版本隔离",
+      "plan_id": "796deee6-4036-4ceb-ade6-302a91ac3121",
+      "steps": 13,
+      "coded_readonly_steps": 4,
+      "business_draft_steps": 4,
+      "context_groups": 25,
+      "captures": 100,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/BILL-05.task.json",
+      "export_bytes": 11129013,
+      "coded_steps": 9,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "SETTLE-01",
+      "task_id": "9d4b3493-1c60-4664-ab5b-60b64a15c981",
+      "name": "本地自测 SETTLE-01 结算单 录入保存与提交",
+      "plan_id": "ce842946-5af5-4788-bbd8-c5858428db69",
+      "steps": 6,
+      "coded_readonly_steps": 0,
+      "business_draft_steps": 0,
+      "context_groups": 28,
+      "captures": 60,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/SETTLE-01.task.json",
+      "export_bytes": 12778660,
+      "coded_steps": 6,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "SETTLE-02",
+      "task_id": "279fd8d7-5db3-420c-8e12-d021cbdeb9e8",
+      "name": "本地自测 SETTLE-02 结算单 接收方确认与上链边界",
+      "plan_id": "ce842946-5af5-4788-bbd8-c5858428db69",
+      "steps": 6,
+      "coded_readonly_steps": 0,
+      "business_draft_steps": 1,
+      "context_groups": 16,
+      "captures": 40,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/SETTLE-02.task.json",
+      "export_bytes": 6990642,
+      "coded_steps": 5,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "SETTLE-03",
+      "task_id": "7a83562a-e722-45e3-8fe5-3659cd1ddb9b",
+      "name": "本地自测 SETTLE-03 结算单 审核拒绝与接收方退回后重提",
+      "plan_id": "ce842946-5af5-4788-bbd8-c5858428db69",
+      "steps": 6,
+      "coded_readonly_steps": 2,
+      "business_draft_steps": 4,
+      "context_groups": 7,
+      "captures": 51,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/SETTLE-03.task.json",
+      "export_bytes": 5828840,
+      "coded_steps": 2,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "SETTLE-04",
+      "task_id": "ce8412ae-dfa3-4dfe-9bf9-51a31071ef26",
+      "name": "本地自测 SETTLE-04 结算单 列表详情与缺快照读取",
+      "plan_id": "ce842946-5af5-4788-bbd8-c5858428db69",
+      "steps": 3,
+      "coded_readonly_steps": 0,
+      "business_draft_steps": 3,
+      "context_groups": 4,
+      "captures": 27,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/SETTLE-04.task.json",
+      "export_bytes": 3651553,
+      "coded_steps": 0,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "CHAIN-01",
+      "task_id": "4200051e-adba-4fc4-aa46-d173afc10cdc",
+      "name": "本地自测 CHAIN-01 普通业务 场内场外合约与账单来源核对",
+      "plan_id": "0a9d9b88-b45d-4675-8d3f-dadef8a3e09f",
+      "steps": 6,
+      "coded_readonly_steps": 1,
+      "business_draft_steps": 5,
+      "context_groups": 6,
+      "captures": 60,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/CHAIN-01.task.json",
+      "export_bytes": 7271049,
+      "coded_steps": 1,
+      "coded_login_steps": 0
+    },
+    {
+      "key": "CHAIN-02",
+      "task_id": "8642e7e6-5eee-40a0-bcce-233bbe31ee1c",
+      "name": "本地自测 CHAIN-02 普通与清结算交替调用 标记隔离",
+      "plan_id": "0a9d9b88-b45d-4675-8d3f-dadef8a3e09f",
+      "steps": 3,
+      "coded_readonly_steps": 1,
+      "business_draft_steps": 2,
+      "context_groups": 3,
+      "captures": 6,
+      "export": "/Users/xiaojuju/taskweave/local-selftest-20261016/CHAIN-02.task.json",
+      "export_bytes": 32153,
+      "coded_steps": 1,
+      "coded_login_steps": 0
+    }
+  ],
+  "issues": [
+    {
+      "id": "TW-LOCAL-TIDB-001",
+      "status": "已修复并验证",
+      "symptom": "ENV-01数据库连接、TREATY-02及BILL-02快照读取均在目标SELECT前失败，TIDB_QUERY_FAILED，数据库错误码1235。",
+      "evidence_runs": [
+        "f7c869bc-9f32-426d-ad5d-c42d6016a2e4",
+        "8eac91aa-5b43-4e1f-8c4b-2e488259c99f",
+        "9e459233-9aed-4e6d-a4d6-f040f45ea3a5"
+      ],
+      "entry": "plugins/tidb/src/taskweave_tidb/__init__.py:query_database",
+      "next": "只读复现数据库异常全文，核对TiDB支持的事务方式，保留SELECT校验、异常传播及回滚关闭；不通过修改本地全局安全设置掩盖问题。",
+      "root_cause": "TiDB 8.5.4普通READ ONLY为noop且默认禁用；墙上时钟NOW快于PD时又导致1105。",
+      "fix": "根据服务握手识别TiDB，先建立空事务获取集群TSO，再替换为START TRANSACTION READ ONLY AS OF TIMESTAMP TIDB_PARSE_TSO(TIDB_CURRENT_TSO())；用户SQL仅在只读事务内执行。MySQL保留原行为。",
+      "validation": "回归先复现1235及NOW未来时间失败；26项TiDB定向测试通过，本地真实数据库连接和来源2/3/5快照试跑通过。"
+    },
+    {
+      "id": "TW-LOCAL-TIDB-002",
+      "status": "已修复并验证",
+      "symptom": "连接读取超时后rollback/close的InterfaceError(0)覆盖原始数据库错误，失去根因。",
+      "evidence_runs": [
+        "fbe5555f-3d67-42c4-83a8-6fe5a2d87bd6"
+      ],
+      "fix": "查询异常在游标关闭前保存；依次尝试游标关闭、回滚、连接关闭。包括真实断流后的AttributeError在内的清理异常均保留脱敏说明，不覆盖主因；仅清理失败也不能返回成功。",
+      "validation": "回归先复现原始2013被游标drain的InterfaceError/AttributeError覆盖；真实Connection/MySQLResult/SSCursor受控断流用例确认主因保留且连接关闭。26项TiDB、10项契约/组合依赖测试共36项通过；独立定向复核无重要发现。"
+    },
+    {
+      "id": "TW-LOCAL-PW-003",
+      "status": "已修复并验证",
+      "symptom": "page_input_value读取可见但disabled的经纪人自动汇总份额，错误抛LOCATOR_DISABLED；业务输入无法完整回读。",
+      "evidence_runs": [
+        "fb3461c0-89c4-411d-a846-6642a2a8152d"
+      ],
+      "root_cause": "READ动作复用了写入动作的enabled门禁。",
+      "fix": "仅page_input_value允许读取disabled控件，唯一性/可见性校验保留，page_fill/page_click仍拒绝disabled；真实浏览器回归先复现后修复。",
+      "validation": "27项Playwright范围/动作测试及24项依赖测试通过；重启后bf5f6c32-f766-4f3f-95a2-aba240e07ae2实际通过专用page_input_value读取两行disabled份额100%，原业务动作写权限保持限制。"
+    },
+    {
+      "id": "TW-LOCAL-INPUT-004",
+      "status": "已修复并验证",
+      "symptom": "单步试跑明确传refresh_test_attachment=true，实际尝试输入却为步骤默认false，导致附件未重传；无效类型也被默认值掩盖。",
+      "evidence_runs": [
+        "5ed9b629-b899-4931-9228-ed75d73ec915"
+      ],
+      "root_cause": "create_run把显式单步值放入task_values层，automatic_inputs的步骤默认覆盖它；验证阶段再次重复覆盖。",
+      "fix": "创建时将original_inputs作为overrides，验证使用已解析输入作为overrides；flow_trial、初始幂等依据及原始输入保留。",
+      "validation": "新增两项回归修复前均失败，修复后35项运行/变量/控制/恢复测试通过；限定只读复核无重要发现。 重启API后fe54df5b-688e-482d-a533-cace872f36e0的expected_org_text显式输入覆盖步骤默认，实际尝试摘要一致。 旧UI测试调用修正后，最终38项相关定向测试全部通过。"
+    },
+    {
+      "id": "TW-LOCAL-TEST-005",
+      "status": "已修复并验证",
+      "symptom": "旧反馈试跑UI测试仍向start_trial传已移除的tabs/feedback位置参数，3个子场景TypeError，HEAD版create_run下同样复现。",
+      "fix": "测试改用当前start_trial(continue_session=True)接口，保留环境切换/保留实例/输入路由的全部原断言；不修改产品UI行为。",
+      "validation": "本轮38项输入、变量、运行控制及恢复定向测试通过，包含原失败测试全部3个子场景。"
+    }
+  ],
+  "environment_id": "a78c266f-0178-4e6f-b7b3-0a02500f8e76",
+  "updated_at": "2026-10-16T08:19:16.811512+08:00"
+}

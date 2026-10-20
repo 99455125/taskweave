@@ -1,0 +1,1572 @@
+[
+  {
+    "step_number": 1,
+    "name": "核对已完成合约与本轮账单编号",
+    "source": "01-prerequisite.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "cedent",
+          "type": "string"
+        },
+        "completed_treaty_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/taskweave-current-treaty.json",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000050",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "京东安联",
+          "type": "string"
+        },
+        "name_prefix": {
+          "default": "TW-LOCAL-BILL-CB-",
+          "type": "string"
+        },
+        "role": {
+          "default": "cedant",
+          "type": "string"
+        },
+        "timestamp_timezone": {
+          "default": "Asia/Shanghai",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "expected_org_text",
+        "role",
+        "completed_treaty_path",
+        "name_prefix",
+        "timestamp_timezone"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "name_prefix": {
+        "ref": {
+          "pointer": "/name_prefix",
+          "source": "task"
+        }
+      },
+      "timestamp_timezone": {
+        "ref": {
+          "pointer": "/timestamp_timezone",
+          "source": "task"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 2,
+    "name": "新增总账单并填写期间和项目",
+    "source": "02-create.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_period": {
+          "default": "2026Q4",
+          "type": "string"
+        },
+        "bill_label": {
+          "type": "string"
+        },
+        "cedent_statement_numbers": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "expected_unsaved_draft_id": {
+          "default": null,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "platform_treaty_no": {
+          "type": "string"
+        },
+        "statement_end_date": {
+          "default": "2026-12-31",
+          "format": "date",
+          "type": "string"
+        },
+        "statement_start_date": {
+          "default": "2026-10-16",
+          "format": "date",
+          "type": "string"
+        },
+        "treaty_master_id": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "platform_treaty_no",
+        "treaty_master_id",
+        "bill_label",
+        "cedent_statement_numbers"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "bill_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/bill_label",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "cedent_statement_numbers": {
+        "ref": {
+          "output": "data",
+          "pointer": "/cedent_statement_numbers",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "platform_treaty_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_treaty_no",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      },
+      "treaty_master_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/treaty_master_id",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 3,
+    "name": "试算和保存账单",
+    "source": "03-items-save.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_period": {
+          "default": "2026Q4",
+          "type": "string"
+        },
+        "bill_label": {
+          "type": "string"
+        },
+        "expected_net_balance": {
+          "default": "70000.00",
+          "type": "string"
+        },
+        "platform_treaty_no": {
+          "type": "string"
+        },
+        "record_no": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "statement_end_date": {
+          "default": "2026-12-31",
+          "type": "string"
+        },
+        "statement_id": {
+          "type": "integer"
+        },
+        "statement_start_date": {
+          "default": "2026-10-16",
+          "type": "string"
+        },
+        "total_items": {
+          "default": [
+            {
+              "amount": "100000",
+              "name": "分出保费 (不含税)"
+            },
+            {
+              "amount": "20000",
+              "name": "分保手续费"
+            },
+            {
+              "amount": "10000",
+              "name": "已决赔款"
+            },
+            {
+              "amount": "0",
+              "name": "增值税（保费）"
+            }
+          ],
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "treaty_master_id": {
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bill_label",
+        "total_items",
+        "statement_id",
+        "platform_treaty_no",
+        "account_period",
+        "statement_start_date",
+        "statement_end_date",
+        "expected_net_balance",
+        "treaty_master_id",
+        "record_no"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "bill_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/bill_label",
+          "source": "step",
+          "step_id": "step-2"
+        }
+      },
+      "platform_treaty_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_treaty_no",
+          "source": "step",
+          "step_id": "step-2"
+        }
+      },
+      "record_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/record_no",
+          "source": "step",
+          "step_id": "step-2"
+        }
+      },
+      "statement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/statement_id",
+          "source": "step",
+          "step_id": "step-2"
+        }
+      },
+      "treaty_master_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/treaty_master_id",
+          "source": "step",
+          "step_id": "step-2"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 4,
+    "name": "提交账单并完成机构审核",
+    "source": "04-submit.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "bill_label": {
+          "const": "TW-LOCAL-BILL-CB-20261016061154",
+          "default": "TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-bill-cb-20261016061154-ab",
+          "default": "owned-local-bill-cb-20261016061154-ab",
+          "type": "string"
+        },
+        "expected_items": {
+          "default": [
+            {
+              "amount": "100000.00",
+              "code": "01"
+            },
+            {
+              "amount": "20000.00",
+              "code": "02"
+            },
+            {
+              "amount": "10000.00",
+              "code": "21"
+            },
+            {
+              "amount": "0.00",
+              "code": "60"
+            }
+          ],
+          "items": {
+            "type": "object"
+          },
+          "type": "array"
+        },
+        "expected_normals": {
+          "items": {
+            "type": "object"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "expected_record_no": {
+          "const": "000050-2026PT00011-SOAP0002",
+          "default": "000050-2026PT00011-SOAP0002",
+          "type": "string"
+        },
+        "platform_treaty_no": {
+          "const": "000050-2026PT00011",
+          "default": "000050-2026PT00011",
+          "type": "string"
+        },
+        "statement_id": {
+          "const": 544941,
+          "default": 544941,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "bill_label",
+        "expected_items",
+        "expected_normals",
+        "platform_treaty_no",
+        "statement_id",
+        "expected_record_no",
+        "expected_biz_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "bill_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/bill_label",
+          "source": "step",
+          "step_id": "step-2"
+        }
+      },
+      "expected_normals": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normals",
+          "source": "step",
+          "step_id": "step-3"
+        }
+      },
+      "expected_record_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/record_no",
+          "source": "step",
+          "step_id": "step-2"
+        }
+      },
+      "platform_treaty_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_treaty_no",
+          "source": "step",
+          "step_id": "step-2"
+        }
+      },
+      "statement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/statement_id",
+          "source": "step",
+          "step_id": "step-2"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 5,
+    "name": "核对本轮待确认任务与领取归属",
+    "source": "05-broker-pending-and-claim.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "bill_label": {
+          "const": "TW-LOCAL-BILL-CB-20261016061154",
+          "default": "TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "downstream_normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-bill-cb-20261016061154-ab",
+          "default": "owned-local-bill-cb-20261016061154-ab",
+          "type": "string"
+        },
+        "normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "platform_treaty_no": {
+          "const": "000050-2026PT00011",
+          "default": "000050-2026PT00011",
+          "type": "string"
+        },
+        "record_no": {
+          "const": "000050-2026PT00011-SOAP0002",
+          "default": "000050-2026PT00011-SOAP0002",
+          "type": "string"
+        },
+        "statement_id": {
+          "const": 544941,
+          "default": 544941,
+          "type": "integer"
+        },
+        "v1_comment": {
+          "const": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "default": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        }
+      },
+      "required": [
+        "credentials_path",
+        "statement_id",
+        "record_no",
+        "platform_treaty_no",
+        "bill_label",
+        "expected_biz_id",
+        "v1_comment",
+        "normal_id",
+        "downstream_normal_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "bill_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/bill_label",
+          "source": "step",
+          "step_id": "step-4"
+        }
+      },
+      "downstream_normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normals/1/id",
+          "source": "step",
+          "step_id": "step-4"
+        }
+      },
+      "normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normals/0/id",
+          "source": "step",
+          "step_id": "step-4"
+        }
+      },
+      "platform_treaty_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_treaty_no",
+          "source": "step",
+          "step_id": "step-4"
+        }
+      },
+      "statement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/statement_id",
+          "source": "step",
+          "step_id": "step-4"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 6,
+    "name": "第一次退回并记录原版本",
+    "source": "06-first-return.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "bill_label": {
+          "const": "TW-LOCAL-BILL-CB-20261016061154",
+          "default": "TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "downstream_normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-bill-cb-20261016061154-ab",
+          "default": "owned-local-bill-cb-20261016061154-ab",
+          "type": "string"
+        },
+        "normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "platform_treaty_no": {
+          "const": "000050-2026PT00011",
+          "default": "000050-2026PT00011",
+          "type": "string"
+        },
+        "record_no": {
+          "const": "000050-2026PT00011-SOAP0002",
+          "default": "000050-2026PT00011-SOAP0002",
+          "type": "string"
+        },
+        "statement_id": {
+          "const": 544941,
+          "default": 544941,
+          "type": "integer"
+        },
+        "v1_comment": {
+          "const": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "default": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        }
+      },
+      "required": [
+        "credentials_path",
+        "statement_id",
+        "record_no",
+        "platform_treaty_no",
+        "bill_label",
+        "expected_biz_id",
+        "v1_comment",
+        "normal_id",
+        "downstream_normal_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "bill_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/bill_label",
+          "source": "step",
+          "step_id": "step-5"
+        }
+      },
+      "downstream_normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/downstream_normal_id",
+          "source": "step",
+          "step_id": "step-5"
+        }
+      },
+      "expected_biz_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/expected_biz_id",
+          "source": "step",
+          "step_id": "step-5"
+        }
+      },
+      "normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normal_id",
+          "source": "step",
+          "step_id": "step-5"
+        }
+      },
+      "platform_treaty_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_treaty_no",
+          "source": "step",
+          "step_id": "step-5"
+        }
+      },
+      "record_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/record_no",
+          "source": "step",
+          "step_id": "step-5"
+        }
+      },
+      "statement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/statement_id",
+          "source": "step",
+          "step_id": "step-5"
+        }
+      },
+      "v1_comment": {
+        "ref": {
+          "output": "data",
+          "pointer": "/v1_comment",
+          "source": "step",
+          "step_id": "step-5"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 7,
+    "name": "读取第一次退回快照",
+    "source": "read-snapshot.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "source_table": {
+          "enum": [
+            2,
+            3,
+            5
+          ],
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_table",
+        "source_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "source_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_id",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "source_table": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_table",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 8,
+    "name": "发送方修改第二版并暂存",
+    "source": "08-modify-comment-and-verify-v1.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "ab_platform_no": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "bill_label": {
+          "const": "TW-LOCAL-BILL-CB-20261016061154",
+          "default": "TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "downstream_normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-bill-cb-20261016061154-ab",
+          "default": "owned-local-bill-cb-20261016061154-ab",
+          "type": "string"
+        },
+        "normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "platform_treaty_no": {
+          "const": "000050-2026PT00011",
+          "default": "000050-2026PT00011",
+          "type": "string"
+        },
+        "record_no": {
+          "const": "000050-2026PT00011-SOAP0002",
+          "default": "000050-2026PT00011-SOAP0002",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "snapshot_sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "type": "string"
+        },
+        "statement_id": {
+          "const": 544941,
+          "default": 544941,
+          "type": "integer"
+        },
+        "v1_comment": {
+          "const": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "default": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        },
+        "v2_comment": {
+          "default": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154 V2",
+          "type": "string"
+        },
+        "verify_saved_only": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "bill_label",
+        "credentials_path",
+        "downstream_normal_id",
+        "expected_biz_id",
+        "normal_id",
+        "platform_treaty_no",
+        "record_no",
+        "statement_id",
+        "v1_comment",
+        "snapshot_id",
+        "snapshot_sha256",
+        "ab_platform_no",
+        "v2_comment",
+        "verify_saved_only"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "ab_platform_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/ab_platform_no",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "bill_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/bill_label",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "downstream_normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/downstream_normal_id",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normal_id",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "platform_treaty_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_treaty_no",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "record_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/record_no",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "snapshot_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_id",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "snapshot_sha256": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_sha256",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "statement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/statement_id",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "v1_comment": {
+        "ref": {
+          "output": "data",
+          "pointer": "/v1_comment",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 9,
+    "name": "核对暂存后旧快照未变",
+    "source": "read-snapshot.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_snapshot_id": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "expected_snapshot_sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "type": "string"
+        },
+        "source_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "source_table": {
+          "enum": [
+            2,
+            3,
+            5
+          ],
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_table",
+        "source_id",
+        "expected_snapshot_id",
+        "expected_snapshot_sha256"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "expected_snapshot_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_id",
+          "source": "step",
+          "step_id": "step-7"
+        }
+      },
+      "expected_snapshot_sha256": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_sha256",
+          "source": "step",
+          "step_id": "step-7"
+        }
+      },
+      "source_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_id",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "source_table": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_table",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 10,
+    "name": "重提并完成实际机构审核",
+    "source": "10-synchronous-resubmit.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "ab_platform_no": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "bill_label": {
+          "const": "TW-LOCAL-BILL-CB-20261016061154",
+          "default": "TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "downstream_normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-bill-cb-20261016061154-ab",
+          "default": "owned-local-bill-cb-20261016061154-ab",
+          "type": "string"
+        },
+        "initial_detail_id": {
+          "const": 1768114586986032192,
+          "default": 1768114586986032192,
+          "type": "integer"
+        },
+        "initial_parent_id": {
+          "const": 1768115023432721909,
+          "default": 1768115023432721909,
+          "type": "integer"
+        },
+        "normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "platform_treaty_no": {
+          "const": "000050-2026PT00011",
+          "default": "000050-2026PT00011",
+          "type": "string"
+        },
+        "record_no": {
+          "const": "000050-2026PT00011-SOAP0002",
+          "default": "000050-2026PT00011-SOAP0002",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "snapshot_sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "type": "string"
+        },
+        "statement_id": {
+          "const": 544941,
+          "default": 544941,
+          "type": "integer"
+        },
+        "v1_comment": {
+          "const": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "default": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        },
+        "v2_comment": {
+          "default": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154 V2",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ab_platform_no",
+        "bill_label",
+        "credentials_path",
+        "downstream_normal_id",
+        "expected_biz_id",
+        "normal_id",
+        "platform_treaty_no",
+        "record_no",
+        "snapshot_id",
+        "snapshot_sha256",
+        "statement_id",
+        "v1_comment",
+        "v2_comment",
+        "initial_parent_id",
+        "initial_detail_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "ab_platform_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/ab_platform_no",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "bill_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/bill_label",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "downstream_normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/downstream_normal_id",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normal_id",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "platform_treaty_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_treaty_no",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "record_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/record_no",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "snapshot_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_id",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "snapshot_sha256": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_sha256",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "statement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/statement_id",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "v1_comment": {
+        "ref": {
+          "output": "data",
+          "pointer": "/v1_comment",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "v2_comment": {
+        "ref": {
+          "output": "data",
+          "pointer": "/v2_comment",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 11,
+    "name": "核对重提后旧快照仍保留",
+    "source": "read-snapshot.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_snapshot_id": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "expected_snapshot_sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "type": "string"
+        },
+        "source_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "source_table": {
+          "enum": [
+            2,
+            3,
+            5
+          ],
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_table",
+        "source_id",
+        "expected_snapshot_id",
+        "expected_snapshot_sha256"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "expected_snapshot_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_id",
+          "source": "step",
+          "step_id": "step-7"
+        }
+      },
+      "expected_snapshot_sha256": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_sha256",
+          "source": "step",
+          "step_id": "step-7"
+        }
+      },
+      "source_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_id",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "source_table": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_table",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 12,
+    "name": "第二次退回并核对版本替换",
+    "source": "12-second-return.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "ab_platform_no": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "bill_label": {
+          "const": "TW-LOCAL-BILL-CB-20261016061154",
+          "default": "TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "downstream_normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-bill-cb-20261016061154-ab",
+          "default": "owned-local-bill-cb-20261016061154-ab",
+          "type": "string"
+        },
+        "normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "platform_treaty_no": {
+          "const": "000050-2026PT00011",
+          "default": "000050-2026PT00011",
+          "type": "string"
+        },
+        "record_no": {
+          "const": "000050-2026PT00011-SOAP0002",
+          "default": "000050-2026PT00011-SOAP0002",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "snapshot_sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "type": "string"
+        },
+        "statement_id": {
+          "const": 544941,
+          "default": 544941,
+          "type": "integer"
+        },
+        "v1_comment": {
+          "const": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "default": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        },
+        "v2_comment": {
+          "default": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154 V2",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ab_platform_no",
+        "bill_label",
+        "credentials_path",
+        "downstream_normal_id",
+        "expected_biz_id",
+        "normal_id",
+        "platform_treaty_no",
+        "record_no",
+        "snapshot_id",
+        "snapshot_sha256",
+        "statement_id",
+        "v1_comment",
+        "v2_comment"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "ab_platform_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/ab_platform_no",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      },
+      "bill_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/bill_label",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      },
+      "downstream_normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/downstream_normal_id",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      },
+      "expected_biz_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/expected_biz_id",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      },
+      "normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normal_id",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      },
+      "platform_treaty_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_treaty_no",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      },
+      "record_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/record_no",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      },
+      "snapshot_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_id",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      },
+      "snapshot_sha256": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_sha256",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      },
+      "statement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/statement_id",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      },
+      "v1_comment": {
+        "ref": {
+          "output": "data",
+          "pointer": "/v1_comment",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      },
+      "v2_comment": {
+        "ref": {
+          "output": "data",
+          "pointer": "/v2_comment",
+          "source": "step",
+          "step_id": "step-10"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 13,
+    "name": "读取第二次退回后的有效快照",
+    "source": "13-final-snapshot-and-readonly-v2.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "ab_platform_no": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "bill_label": {
+          "const": "TW-LOCAL-BILL-CB-20261016061154",
+          "default": "TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "downstream_normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-bill-cb-20261016061154-ab",
+          "default": "owned-local-bill-cb-20261016061154-ab",
+          "type": "string"
+        },
+        "normal_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "old_snapshot_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "old_snapshot_sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "type": "string"
+        },
+        "platform_treaty_no": {
+          "const": "000050-2026PT00011",
+          "default": "000050-2026PT00011",
+          "type": "string"
+        },
+        "record_no": {
+          "const": "000050-2026PT00011-SOAP0002",
+          "default": "000050-2026PT00011-SOAP0002",
+          "type": "string"
+        },
+        "snapshot_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "snapshot_sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "type": "string"
+        },
+        "statement_id": {
+          "const": 544941,
+          "default": 544941,
+          "type": "integer"
+        },
+        "v1_comment": {
+          "const": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "default": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154",
+          "type": "string"
+        },
+        "v2_comment": {
+          "default": "仅供本地自测 TW-LOCAL-BILL-CB-20261016061154 V2",
+          "type": "string"
+        }
+      },
+      "required": [
+        "ab_platform_no",
+        "bill_label",
+        "credentials_path",
+        "downstream_normal_id",
+        "expected_biz_id",
+        "normal_id",
+        "platform_treaty_no",
+        "record_no",
+        "snapshot_id",
+        "snapshot_sha256",
+        "statement_id",
+        "v1_comment",
+        "v2_comment",
+        "old_snapshot_id",
+        "old_snapshot_sha256"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "ab_platform_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/ab_platform_no",
+          "source": "step",
+          "step_id": "step-12"
+        }
+      },
+      "bill_label": {
+        "ref": {
+          "output": "data",
+          "pointer": "/bill_label",
+          "source": "step",
+          "step_id": "step-12"
+        }
+      },
+      "downstream_normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/downstream_normal_id",
+          "source": "step",
+          "step_id": "step-12"
+        }
+      },
+      "normal_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/normal_id",
+          "source": "step",
+          "step_id": "step-12"
+        }
+      },
+      "old_snapshot_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_id",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "old_snapshot_sha256": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_sha256",
+          "source": "step",
+          "step_id": "step-6"
+        }
+      },
+      "platform_treaty_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_treaty_no",
+          "source": "step",
+          "step_id": "step-12"
+        }
+      },
+      "record_no": {
+        "ref": {
+          "output": "data",
+          "pointer": "/record_no",
+          "source": "step",
+          "step_id": "step-12"
+        }
+      },
+      "snapshot_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_id",
+          "source": "step",
+          "step_id": "step-12"
+        }
+      },
+      "snapshot_sha256": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_sha256",
+          "source": "step",
+          "step_id": "step-12"
+        }
+      },
+      "statement_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/statement_id",
+          "source": "step",
+          "step_id": "step-12"
+        }
+      },
+      "v1_comment": {
+        "ref": {
+          "output": "data",
+          "pointer": "/v1_comment",
+          "source": "step",
+          "step_id": "step-12"
+        }
+      },
+      "v2_comment": {
+        "ref": {
+          "output": "data",
+          "pointer": "/v2_comment",
+          "source": "step",
+          "step_id": "step-12"
+        }
+      }
+    }
+  }
+]

@@ -1,0 +1,1096 @@
+[
+  {
+    "step_number": 1,
+    "name": "创建本轮唯一编号与查重",
+    "source": "01-login-and-unique.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "cedent",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "empty_result_text": {
+          "default": "暂无数据",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000050",
+          "type": "string"
+        },
+        "expected_org_text": {
+          "default": "京东安联",
+          "type": "string"
+        },
+        "name_prefix": {
+          "default": "TW-LOCAL-CB-",
+          "type": "string"
+        },
+        "role": {
+          "default": "cedant",
+          "type": "string"
+        },
+        "timestamp_timezone": {
+          "default": "Asia/Shanghai",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "expected_org_text",
+        "role",
+        "name_prefix",
+        "timestamp_timezone",
+        "empty_result_text"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "name_prefix": {
+        "ref": {
+          "pointer": "/name_prefix",
+          "source": "task"
+        }
+      },
+      "timestamp_timezone": {
+        "ref": {
+          "pointer": "/timestamp_timezone",
+          "source": "task"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 2,
+    "name": "新增财产比例合约及基本信息",
+    "source": "02-basic.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "business_timezone_label": {
+          "default": "(GMT+08:00)中国标准时间（北京）",
+          "description": "页面实际北京时区选项",
+          "type": "string"
+        },
+        "business_year": {
+          "default": 2026,
+          "description": "业务年度",
+          "type": "integer"
+        },
+        "confirmation_days": {
+          "default": 30,
+          "description": "确认天数",
+          "type": "integer"
+        },
+        "contract_suffix": {
+          "description": "前序步骤已经生成并查重的编号及名称后缀",
+          "type": "string"
+        },
+        "end_datetime": {
+          "default": "2027-10-15 23:59:59",
+          "description": "北京时区YYYY-MM-DD HH:MM:SS",
+          "type": "string"
+        },
+        "estimated_premium": {
+          "default": 1000000,
+          "description": "预估保费",
+          "type": "number"
+        },
+        "is_facultative_obligatory": {
+          "default": false,
+          "description": "预约分保",
+          "type": "boolean"
+        },
+        "is_renewal": {
+          "default": false,
+          "description": "是否续转",
+          "type": "boolean"
+        },
+        "main_insurance_class": {
+          "default": "一揽子",
+          "description": "单选主险类，本次为一揽子",
+          "type": "string"
+        },
+        "premium_currency": {
+          "default": "CNY",
+          "description": "币种",
+          "type": "string"
+        },
+        "settlement_days": {
+          "default": 30,
+          "description": "结算天数",
+          "type": "integer"
+        },
+        "start_datetime": {
+          "default": "2026-10-16 00:00:00",
+          "description": "北京时区YYYY-MM-DD HH:MM:SS",
+          "type": "string"
+        },
+        "statement_days": {
+          "default": 30,
+          "description": "出账天数",
+          "type": "integer"
+        },
+        "statement_frequency": {
+          "default": "季度",
+          "description": "账单周期",
+          "type": "string"
+        },
+        "termination_method": {
+          "default": "自然终止",
+          "description": "终止方式",
+          "type": "string"
+        },
+        "treaty_type": {
+          "default": "成数合约",
+          "description": "合约类型",
+          "enum": [
+            "成数合约",
+            "溢额合约",
+            "混合比例合约"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "contract_suffix",
+        "treaty_type",
+        "main_insurance_class",
+        "business_year",
+        "start_datetime",
+        "end_datetime",
+        "estimated_premium",
+        "premium_currency",
+        "is_renewal",
+        "termination_method",
+        "is_facultative_obligatory",
+        "statement_frequency",
+        "statement_days",
+        "confirmation_days",
+        "settlement_days",
+        "business_timezone_label"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "contract_suffix": {
+        "ref": {
+          "output": "data",
+          "pointer": "/contract_suffix",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 3,
+    "name": "配置经纪上下游及附件",
+    "source": "03-parties.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "attachment_name": {
+          "default": "tw-local-treaty-demo.pdf",
+          "type": "string"
+        },
+        "attachment_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/tw-local-treaty-demo.pdf",
+          "type": "string"
+        },
+        "broker_code": {
+          "default": "000053",
+          "type": "string"
+        },
+        "broker_rate": {
+          "default": 2.5,
+          "type": "number"
+        },
+        "refresh_test_attachment": {
+          "description": "仅重传当前同名获准测试PDF，修复Mock返回契约后使用；已有未知附件停止。",
+          "type": "boolean"
+        },
+        "reinsurer_code": {
+          "default": "000045",
+          "type": "string"
+        },
+        "share_percent": {
+          "const": 100,
+          "default": 100,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "broker_code",
+        "reinsurer_code",
+        "share_percent",
+        "broker_rate",
+        "attachment_path",
+        "attachment_name"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  },
+  {
+    "step_number": 4,
+    "name": "新增明细分项并保存",
+    "source": "04-sections-save.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_suffix": {
+          "type": "string"
+        },
+        "sections": {
+          "default": [
+            {
+              "category": "本地分项一",
+              "commission_type": "固定费率",
+              "currency": "CNY",
+              "fixed_commission_rate": 20,
+              "insurance_types": [
+                "家庭财产保险",
+                "机动车辆保险"
+              ],
+              "loss_sharing": false,
+              "maximum_limit": 10000000
+            },
+            {
+              "category": "本地分项二",
+              "commission_type": "固定费率",
+              "currency": "CNY",
+              "fixed_commission_rate": 20,
+              "insurance_types": [
+                "家庭财产保险",
+                "机动车辆保险"
+              ],
+              "loss_sharing": false,
+              "maximum_limit": 20000000
+            }
+          ],
+          "description": "独立分项配置；本次两项分别限额10000000和20000000，均选择家庭财产保险及机动车辆保险",
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "advance_commission_rate": {
+                "description": "预付手续费率",
+                "type": "number"
+              },
+              "category": {
+                "description": "分项类别",
+                "type": "string"
+              },
+              "ceded_underwriting_capacity": {
+                "description": "分出承保能力",
+                "type": "number"
+              },
+              "commission_lower_limit": {
+                "description": "手续费下限",
+                "type": "number"
+              },
+              "commission_type": {
+                "description": "手续费类型",
+                "type": "string"
+              },
+              "commission_upper_limit": {
+                "description": "手续费上限",
+                "type": "number"
+              },
+              "currency": {
+                "description": "保额币种",
+                "type": "string"
+              },
+              "fixed_commission_rate": {
+                "description": "固定手续费率百分比",
+                "type": "number"
+              },
+              "insurance_types": {
+                "description": "多选险种",
+                "items": {
+                  "type": "string"
+                },
+                "minItems": 1,
+                "type": "array"
+              },
+              "loss_sharing": {
+                "description": "损失分摊",
+                "type": "boolean"
+              },
+              "maximum_gross_retention": {
+                "description": "最大毛自留额",
+                "type": "number"
+              },
+              "maximum_limit": {
+                "description": "最大承保限额",
+                "type": "number"
+              },
+              "maximum_net_retention": {
+                "description": "最大净自留额",
+                "type": "number"
+              },
+              "quota_ceded_share_percent": {
+                "description": "成数分出份额百分比",
+                "type": "number"
+              },
+              "surplus_lines": {
+                "description": "溢额线数",
+                "type": "number"
+              }
+            },
+            "required": [
+              "category",
+              "insurance_types",
+              "currency",
+              "maximum_limit",
+              "commission_type",
+              "loss_sharing"
+            ],
+            "type": "object"
+          },
+          "minItems": 2,
+          "type": "array"
+        },
+        "treaty_type": {
+          "default": "成数合约",
+          "enum": [
+            "成数合约",
+            "溢额合约",
+            "混合比例合约"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "sections",
+        "treaty_type",
+        "contract_suffix"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "contract_suffix": {
+        "ref": {
+          "output": "data",
+          "pointer": "/contract_suffix",
+          "source": "step",
+          "step_id": "step-1"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 5,
+    "name": "提交并完成分出方机构审核",
+    "source": "05-submit.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "contract_suffix": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "platform_contract_number": {
+          "minLength": 1,
+          "type": "string"
+        },
+        "recovery_run_id": {
+          "type": "string"
+        },
+        "recovery_watermark": {
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "contract_suffix",
+        "platform_contract_number"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "contract_suffix": {
+        "ref": {
+          "output": "data",
+          "pointer": "/contract_suffix",
+          "source": "step",
+          "step_id": "step-4"
+        }
+      },
+      "platform_contract_number": {
+        "ref": {
+          "output": "data",
+          "pointer": "/platform_contract_number",
+          "source": "step",
+          "step_id": "step-4"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 6,
+    "name": "核对本轮待确认任务与领取归属",
+    "source": "06-claim-owned-pending.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "account_key": {
+          "default": "broker",
+          "type": "string"
+        },
+        "contract_suffix": {
+          "const": "TW-LOCAL-CB-20261016045751",
+          "default": "TW-LOCAL-CB-20261016045751",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_account": {
+          "default": "000053",
+          "type": "string"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-treaty-cb-20261016045751-ab",
+          "default": "owned-local-treaty-cb-20261016045751-ab",
+          "type": "string"
+        },
+        "expected_treaty_name": {
+          "const": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751",
+          "default": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751",
+          "type": "string"
+        },
+        "platform_contract_number": {
+          "const": "000050-2026PT00012",
+          "default": "000050-2026PT00012",
+          "type": "string"
+        },
+        "role": {
+          "default": "broker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "account_key",
+        "credentials_path",
+        "expected_account",
+        "role",
+        "platform_contract_number",
+        "contract_suffix",
+        "expected_biz_id",
+        "expected_treaty_name"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  },
+  {
+    "step_number": 7,
+    "name": "第一次退回并记录原版本",
+    "source": "07-first-rejection.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cedant_id": {
+          "const": 10926271,
+          "default": 10926271,
+          "type": "integer"
+        },
+        "contract_suffix": {
+          "const": "TW-LOCAL-CB-20261016045751",
+          "default": "TW-LOCAL-CB-20261016045751",
+          "type": "string"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-treaty-cb-20261016045751-ab",
+          "default": "owned-local-treaty-cb-20261016045751-ab",
+          "type": "string"
+        },
+        "expected_treaty_name": {
+          "const": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751",
+          "default": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751",
+          "type": "string"
+        },
+        "master_id": {
+          "const": 325095,
+          "default": 325095,
+          "type": "integer"
+        },
+        "platform_contract_number": {
+          "const": "000050-2026PT00012",
+          "default": "000050-2026PT00012",
+          "type": "string"
+        },
+        "reinsurer_id": {
+          "const": 10926273,
+          "default": 10926273,
+          "type": "integer"
+        },
+        "source_id": {
+          "const": 10926272,
+          "default": 10926272,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "contract_suffix",
+        "expected_biz_id",
+        "expected_treaty_name",
+        "platform_contract_number",
+        "master_id",
+        "cedant_id",
+        "source_id",
+        "reinsurer_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  },
+  {
+    "step_number": 8,
+    "name": "读取第一次退回快照",
+    "source": "read-snapshot.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "source_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "source_table": {
+          "enum": [
+            2,
+            3,
+            5
+          ],
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_table",
+        "source_id"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "source_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_id",
+          "source": "step",
+          "step_id": "step-7"
+        }
+      },
+      "source_table": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_table",
+          "source": "step",
+          "step_id": "step-7"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 9,
+    "name": "发送方修改第二版并暂存",
+    "source": "09-modify-v2-and-verify-v1.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cedant_id": {
+          "const": 10926271,
+          "default": 10926271,
+          "type": "integer"
+        },
+        "contract_suffix": {
+          "const": "TW-LOCAL-CB-20261016045751",
+          "default": "TW-LOCAL-CB-20261016045751",
+          "type": "string"
+        },
+        "credentials_path": {
+          "default": "dev-environment/imports/runtime/selftest-handoff/credentials.json",
+          "type": "string"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-treaty-cb-20261016045751-ab",
+          "default": "owned-local-treaty-cb-20261016045751-ab",
+          "type": "string"
+        },
+        "expected_treaty_name": {
+          "const": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751",
+          "default": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751",
+          "type": "string"
+        },
+        "master_id": {
+          "const": 325095,
+          "default": 325095,
+          "type": "integer"
+        },
+        "platform_contract_number": {
+          "const": "000050-2026PT00012",
+          "default": "000050-2026PT00012",
+          "type": "string"
+        },
+        "reinsurer_id": {
+          "const": 10926273,
+          "default": 10926273,
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "const": 60001,
+          "default": 60001,
+          "type": "integer"
+        },
+        "snapshot_sha256": {
+          "const": "c4f7250590afd7e367ed22de6a63a40c87fdfa4485f327fa27dc759ee41977fd",
+          "default": "c4f7250590afd7e367ed22de6a63a40c87fdfa4485f327fa27dc759ee41977fd",
+          "type": "string"
+        },
+        "source_id": {
+          "const": 10926272,
+          "default": 10926272,
+          "type": "integer"
+        },
+        "v2_input_suffix": {
+          "const": "TW-LOCAL-CB-20261016045751-V2",
+          "default": "TW-LOCAL-CB-20261016045751-V2",
+          "type": "string"
+        },
+        "v2_treaty_name": {
+          "const": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751-V2",
+          "default": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751-V2",
+          "type": "string"
+        },
+        "verify_saved_only": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cedant_id",
+        "contract_suffix",
+        "expected_biz_id",
+        "expected_treaty_name",
+        "master_id",
+        "platform_contract_number",
+        "reinsurer_id",
+        "source_id",
+        "credentials_path",
+        "snapshot_id",
+        "snapshot_sha256",
+        "v2_treaty_name",
+        "v2_input_suffix",
+        "verify_saved_only"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  },
+  {
+    "step_number": 10,
+    "name": "核对暂存后旧快照未变",
+    "source": "read-snapshot.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_snapshot_id": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "expected_snapshot_sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "type": "string"
+        },
+        "source_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "source_table": {
+          "enum": [
+            2,
+            3,
+            5
+          ],
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_table",
+        "source_id",
+        "expected_snapshot_id",
+        "expected_snapshot_sha256"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "expected_snapshot_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_id",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "expected_snapshot_sha256": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_sha256",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "source_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_id",
+          "source": "step",
+          "step_id": "step-7"
+        }
+      },
+      "source_table": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_table",
+          "source": "step",
+          "step_id": "step-7"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 11,
+    "name": "重提并完成实际机构审核",
+    "source": "11-resubmit-v2.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "before_job_id": {
+          "const": 1768115023432721902,
+          "default": 1768115023432721902,
+          "type": "integer"
+        },
+        "cedant_id": {
+          "const": 10926271,
+          "default": 10926271,
+          "type": "integer"
+        },
+        "contract_suffix": {
+          "const": "TW-LOCAL-CB-20261016045751",
+          "default": "TW-LOCAL-CB-20261016045751",
+          "type": "string"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-treaty-cb-20261016045751-ab",
+          "default": "owned-local-treaty-cb-20261016045751-ab",
+          "type": "string"
+        },
+        "expected_treaty_name": {
+          "const": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751",
+          "default": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751",
+          "type": "string"
+        },
+        "master_id": {
+          "const": 325095,
+          "default": 325095,
+          "type": "integer"
+        },
+        "platform_contract_number": {
+          "const": "000050-2026PT00012",
+          "default": "000050-2026PT00012",
+          "type": "string"
+        },
+        "reinsurer_id": {
+          "const": 10926273,
+          "default": 10926273,
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "const": 60001,
+          "default": 60001,
+          "type": "integer"
+        },
+        "snapshot_sha256": {
+          "const": "c4f7250590afd7e367ed22de6a63a40c87fdfa4485f327fa27dc759ee41977fd",
+          "default": "c4f7250590afd7e367ed22de6a63a40c87fdfa4485f327fa27dc759ee41977fd",
+          "type": "string"
+        },
+        "source_id": {
+          "const": 10926272,
+          "default": 10926272,
+          "type": "integer"
+        },
+        "v2_input_suffix": {
+          "const": "TW-LOCAL-CB-20261016045751-V2",
+          "default": "TW-LOCAL-CB-20261016045751-V2",
+          "type": "string"
+        },
+        "v2_treaty_name": {
+          "const": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751-V2",
+          "default": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751-V2",
+          "type": "string"
+        },
+        "verify_submitted_only": {
+          "default": false,
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "cedant_id",
+        "contract_suffix",
+        "expected_biz_id",
+        "expected_treaty_name",
+        "master_id",
+        "platform_contract_number",
+        "reinsurer_id",
+        "snapshot_id",
+        "snapshot_sha256",
+        "source_id",
+        "v2_input_suffix",
+        "v2_treaty_name",
+        "before_job_id",
+        "verify_submitted_only"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  },
+  {
+    "step_number": 12,
+    "name": "核对重提后旧快照仍保留",
+    "source": "read-snapshot.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "expected_snapshot_id": {
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "expected_snapshot_sha256": {
+          "maxLength": 64,
+          "minLength": 64,
+          "type": "string"
+        },
+        "source_id": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "source_table": {
+          "enum": [
+            2,
+            3,
+            5
+          ],
+          "type": "integer"
+        }
+      },
+      "required": [
+        "source_table",
+        "source_id",
+        "expected_snapshot_id",
+        "expected_snapshot_sha256"
+      ],
+      "type": "object"
+    },
+    "bindings": {
+      "expected_snapshot_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_id",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "expected_snapshot_sha256": {
+        "ref": {
+          "output": "data",
+          "pointer": "/snapshot_sha256",
+          "source": "step",
+          "step_id": "step-8"
+        }
+      },
+      "source_id": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_id",
+          "source": "step",
+          "step_id": "step-7"
+        }
+      },
+      "source_table": {
+        "ref": {
+          "output": "data",
+          "pointer": "/source_table",
+          "source": "step",
+          "step_id": "step-7"
+        }
+      }
+    }
+  },
+  {
+    "step_number": 13,
+    "name": "第二次退回并核对版本替换",
+    "source": "13-second-rejection.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cedant_id": {
+          "const": 10926271,
+          "default": 10926271,
+          "type": "integer"
+        },
+        "contract_suffix": {
+          "const": "TW-LOCAL-CB-20261016045751",
+          "default": "TW-LOCAL-CB-20261016045751",
+          "type": "string"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-treaty-cb-20261016045751-ab",
+          "default": "owned-local-treaty-cb-20261016045751-ab",
+          "type": "string"
+        },
+        "expected_treaty_name": {
+          "const": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751",
+          "default": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751",
+          "type": "string"
+        },
+        "master_id": {
+          "const": 325095,
+          "default": 325095,
+          "type": "integer"
+        },
+        "platform_contract_number": {
+          "const": "000050-2026PT00012",
+          "default": "000050-2026PT00012",
+          "type": "string"
+        },
+        "reinsurer_id": {
+          "const": 10926273,
+          "default": 10926273,
+          "type": "integer"
+        },
+        "snapshot_id": {
+          "const": 60001,
+          "default": 60001,
+          "type": "integer"
+        },
+        "snapshot_sha256": {
+          "const": "c4f7250590afd7e367ed22de6a63a40c87fdfa4485f327fa27dc759ee41977fd",
+          "default": "c4f7250590afd7e367ed22de6a63a40c87fdfa4485f327fa27dc759ee41977fd",
+          "type": "string"
+        },
+        "source_id": {
+          "const": 10926272,
+          "default": 10926272,
+          "type": "integer"
+        },
+        "v2_input_suffix": {
+          "const": "TW-LOCAL-CB-20261016045751-V2",
+          "default": "TW-LOCAL-CB-20261016045751-V2",
+          "type": "string"
+        },
+        "v2_treaty_name": {
+          "const": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751-V2",
+          "default": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751-V2",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cedant_id",
+        "contract_suffix",
+        "expected_biz_id",
+        "expected_treaty_name",
+        "master_id",
+        "platform_contract_number",
+        "reinsurer_id",
+        "snapshot_id",
+        "snapshot_sha256",
+        "source_id",
+        "v2_input_suffix",
+        "v2_treaty_name"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  },
+  {
+    "step_number": 14,
+    "name": "读取第二次退回后的有效快照",
+    "source": "14-second-snapshot-and-view.py",
+    "input_schema": {
+      "additionalProperties": false,
+      "properties": {
+        "cedant_id": {
+          "const": 10926271,
+          "default": 10926271,
+          "type": "integer"
+        },
+        "expected_biz_id": {
+          "const": "owned-local-treaty-cb-20261016045751-ab",
+          "default": "owned-local-treaty-cb-20261016045751-ab",
+          "type": "string"
+        },
+        "expected_snapshot_id": {
+          "const": 60002,
+          "default": 60002,
+          "type": "integer"
+        },
+        "expected_snapshot_sha256": {
+          "const": "6d01e5bdcde8585bd9964eb9744eab0c5ad70d72951f2e854314925ca51f727e",
+          "default": "6d01e5bdcde8585bd9964eb9744eab0c5ad70d72951f2e854314925ca51f727e",
+          "type": "string"
+        },
+        "platform_contract_number": {
+          "const": "000050-2026PT00012",
+          "default": "000050-2026PT00012",
+          "type": "string"
+        },
+        "source_id": {
+          "const": 10926272,
+          "default": 10926272,
+          "type": "integer"
+        },
+        "source_table": {
+          "const": 2,
+          "default": 2,
+          "type": "integer"
+        },
+        "v2_input_suffix": {
+          "const": "TW-LOCAL-CB-20261016045751-V2",
+          "default": "TW-LOCAL-CB-20261016045751-V2",
+          "type": "string"
+        },
+        "v2_treaty_name": {
+          "const": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751-V2",
+          "default": "2026-Allianz Jingdong General Insurance Company Ltd-Whole Account-PT-TW-LOCAL-CB-20261016045751-V2",
+          "type": "string"
+        }
+      },
+      "required": [
+        "cedant_id",
+        "expected_biz_id",
+        "platform_contract_number",
+        "source_id",
+        "v2_input_suffix",
+        "v2_treaty_name",
+        "source_table",
+        "expected_snapshot_id",
+        "expected_snapshot_sha256"
+      ],
+      "type": "object"
+    },
+    "bindings": {}
+  }
+]

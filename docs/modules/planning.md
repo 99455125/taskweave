@@ -1,49 +1,29 @@
 # 规划
 
-规划负责将目标、配置和采集证据组织成任务候选；生成与导入由用户分别发起。规划不是正式执行实例。
+## 职责与对象
 
-## 当前行为与约束
+规划组织任务目标、插件选择、环境和上下文材料，经API生成或网页Chat回复解析形成候选任务。规划配置、采集会话、生成记录与导入后的任务分别拥有独立身份。
 
-- 规划保存描述、编写说明、环境、插件和上下文；更新使用 expected_revision，拒绝过期编辑。
-- 规划元数据、上下文、生成记录分别由三个仓储负责。生成冻结当时的上下文组和有序采集项，候选解析和导入使用该份冻结证据。
-- API 与网页 Chat 都产生候选；本地解析及校验后才导入任务。缺少局部证据的步骤可以保留描述和空代码成为可编辑草稿；非空代码仍须严格校验。
-- 生成提示按实际使用范围声明输入：单步骤使用的输入放该步骤，多步骤共享的同一业务输入才放任务；已有环境变量直接复用，前序结果通过输出与绑定传递。导入保留模型声明的作用域，不自动提升或猜测变量归属。
-- API 响应 schema 与网页提示中的 schema 均要求 `plan_context_refs`。每个步骤明确列出所依据的上下文组 ID，无相关材料则填空数组；同一组可对应多个步骤。存在冻结采集材料时，解析和导入都会拒绝漏列步骤的候选，避免静默丢失材料。没有冻结材料的旧候选仍兼容省略引用。
-- 导入按引用顺序复制对应冻结组的名称、说明、有序采集项、采集参数、时间和图片预览，不能换成规划后来修改的采集项；不让模型重新生成证据。旧候选若有材料但缺引用，需要补全对应关系后重新解析。
-- 已校验的 READY/IMPORTED 候选可以被显式重复导入；每次创建独立任务、步骤和上下文副本。首次导入仍写入兼容字段 `imported_task_id`，完整收据保存在 `plan_generation_imports`，即使任务后来删除也保留。
-- 规划页面按基础配置、能力与素材、生成记录分为三个页签。保存候选仍可从生成记录重新预览；导入不会清除候选或强制离开规划页。
-- 初始只构建基础配置与持续可见的 AI 侧栏；能力与素材的插件/环境查询和素材控件首次打开时加载，生成历史首次打开时加载。重复切换复用原控件，保留未保存配置；生成/解析/导入使历史缓存失效，历史未显示时不额外构建。迟到加载核对规划与页面身份，失败可重新打开重试。
-- 可选采集环境控件位于“能力与素材”卡片顶部、插件选择之前；它仍写入规划的 `environment_id`，采集与候选操作沿用同一规划环境和页面身份保护。
-- AI 辅助侧栏不重复显示“查看生成记录”；候选历史只通过主内容的生成记录页签打开。
-- 生成记录页在白色内容面板中按时间、渠道和状态列出记录，并提供候选查看操作。
-- 规划的 AI 生成与最新候选摘要侧栏在三个页签间持续可见；切换页签只更换主内容。候选始终对应当前规划最新记录，不因页签切换或导入改写身份。
-- 页签横跨工作区上方，素材主区与 AI 辅助侧栏从同一内容顶边开始；素材以白底面板和“所用插件能力与上下文素材”标题呈现，较窄屏幕将侧栏堆叠到主区下方。
-- 规划上下文与步骤上下文共用紧凑素材卡片和有序采集行，可编辑组说明、预览/改名/移动/删除采集项。采集弹窗保留插件动态字段、目标选择与高级参数，并以暂存顺序和删除标记一次批量提交；取消不写入，预览按隐私设置脱敏。
-- 规划采集项改名、移动和删除串行使用最新 revision；成功后只同步对应素材卡片组，核对规划身份后才接受迟到结果。操作期间名称、描述、说明、环境和插件草稿留在现有表单中，失败时不重绘页面。
-- 基础配置侧栏展示最新一条生成记录的详情摘要：任务名、步骤总数、前三个步骤、中文状态/渠道及更新时间。只有最新候选已校验时才允许直接导入；未就绪时显示诊断入口且不回退到更早的候选。成功导入后保留候选摘要并允许再次创建独立任务。
-- 生成、解析和导入后同步刷新候选摘要与生成历史；只更新摘要面板并校验规划身份，迟到详情不能写入新选中的规划。
-- 规划可本地收藏并分入一个单层分类；复制保留分类但默认不收藏。组织元数据与候选/执行定义分离。
-- 规划列表中的收藏、分类筛选和分类管理使用组织元数据 API；选中规划的分类、复制、删除和保存位于详情标题区。描述在列表中单行省略，未保存配置仍遵循原离页草稿保护。
-- 详情收藏切换更新列表和标题星标，不重绘编辑器或覆盖未保存配置。
-- 规划收藏与分类共享按 plan ID 管理的本地权威状态并串行写入，避免快速连续操作回写旧字段。组织刷新与元数据写入串行，刷新从最新规划列表重建缓存并移除已删除分类引用。更新只刷新左侧列表与分类控件，不重绘规划编辑器；分类变化后标题分类选项和值同步更新。页面/规划身份变化时，迟到响应不触碰新选择。
-- 复制规划保留配置、上下文与顺序，不复制活跃采集会话或 AI 生成历史。
-- 规划列表卡片整块可鼠标或键盘打开；收藏切换位于详情分类旁。网页 chat 调用弹窗使用内部可滚动的提示词/回复框与受限高度，弹窗主体可滚动，操作按钮保持可达。
-- 规划资源与调试/正式运行资源分别归属；变更环境或插件配置遵守采集会话控制，忙碌资源不能悄悄丢弃。
+## 当前流程
 
-规划UI位于desktop/pages/planning.py，采集和生成控件拆到components/planning_collection.py、planning_generations.py；旧desktop/planning.py保持兼容导出。presentation/planning.py持有编辑会话、选择、候选和页签/历史加载状态，presentation/context_collection.py持有采集暂存及保存决策；界面控件只适配同一状态。
+1. 保存配置并更新revision；需要后端已保存配置的动作先完成保存。
+2. 采集并保存上下文组。生成时冻结规划、能力及材料快照，而非随后读取最新素材。
+3. API调用模型或导出Chat提示词，回复经结构解析、能力/引用校验和诊断，生成候选记录。
+4. 查看、采纳或导入时核对目标及生成身份；使用冻结材料导入独立任务。
 
-规划目录筛选消费普通CategoryFilter及PlanningPageState.search；控件事件先更新状态再重绘，分类刷新按原规则保留有效选择。采集表单和目标选择复用presentation/collection_form.py，生成/采纳及采集应用协议明确每个操作的参数与返回；UI只负责呈现与事件适配。
+生成记录状态为GENERATING、READY、BLOCKED、FAILED、IMPORTED。同一候选支持显式重复导入，plan_generation_imports保存各次关联；不通过一次导入永久消费候选。
 
-## 代码入口
+PlanningInteraction处理生成/候选、查询身份和导入协调，PlanEditorSession处理配置草稿、revision及素材变更。失败保留草稿，旧响应不更新新规划；目录搜索和分类由普通状态承载。页面的基础配置、能力与素材、生成记录三个页签共用同一候选详情。
 
-- [PlanningService](../../src/taskweave/application/planning.py)：配置、采集、生成、解析与导入协调。
-- [规划元数据](../../src/taskweave/infrastructure/repositories/plans.py)、[规划上下文](../../src/taskweave/infrastructure/repositories/plan_contexts.py)、[生成记录](../../src/taskweave/infrastructure/repositories/plan_generations.py)。
-- [规划 UI](../../src/taskweave/desktop/planning.py)、[会话管理](../../src/taskweave/infrastructure/context_sessions.py)。
+## 代码与边界
 
-## 验证入口
+- [PlanningService](../../src/taskweave/application/planning.py)：业务校验、快照、生成解析与导入事务。
+- [PlanningInteraction / PlanEditorSession](../../src/taskweave/presentation/planning.py)：框架无关交互、明确操作协议及身份保护。
+- [规划仓储](../../src/taskweave/infrastructure/repositories/plans.py)、[生成记录仓储](../../src/taskweave/infrastructure/repositories/plan_generations.py)、[上下文仓储](../../src/taskweave/infrastructure/repositories/plan_contexts.py)：分别保存各自数据，复用共享UoW。
+- [PlanningPage](../../src/taskweave/desktop/pages/planning.py)组合[采集视图](../../src/taskweave/desktop/components/planning_collection.py)及[生成视图](../../src/taskweave/desktop/components/planning_generations.py)；desktop/planning.py只保留兼容导出。
 
-`application.planning`、`repository.planning`、`ui.planning`；重点是 revision 冲突、冻结证据、草稿导入、失败回滚和复制隔离。修改共享采集逻辑还涉及 [上下文](contexts.md)，修改任务包还涉及 [任务](tasks.md)，用 changed dry-run 确定测试闭包，不翻旧需求目录。
+采集与录制复用[上下文模块](contexts.md)，提示和模型处理复用[AI编写](authoring.md)，导入形状遵守[任务包契约](../contracts/task-packages.md)。
 
-## 按需深入
+## 验证定位
 
-[任务包与规划导入](../reference/task-sharing.md)、[连续采集与会话](../reference/contexts.md)、[AI请求与历史](../reference/authoring.md)。只在本次修改涉及相应契约时阅读。
+application.planning、ui.planning；检查revision冲突、快照与最新材料隔离、晚到候选、导入失败原子性、重复导入及保存失败后的材料保留。

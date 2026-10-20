@@ -1,0 +1,70 @@
+{
+  "case": "TREATY-02",
+  "structure": "000050→000045，独立直连，不包含000053",
+  "contract_suffix": "TW-LOCAL-DIRECT-20261016052451",
+  "status": "直连再保人退回分出方两轮14步已分段完成：首次V1冻结、暂存V2接收方仍V1、重提保留旧快照、再次退回冻结V2及只读详情通过",
+  "runs": {
+    "1": "c7ca4524-8b53-4fb5-96d6-c03fb3832ab0",
+    "2": "75d8b47f-c2da-4c63-af88-b17964bd31a1",
+    "3": "665ad9ce-6d23-4b2c-8531-7692eea89a69",
+    "4": "25733234-ed99-4527-a79c-c637939ccbed",
+    "5": "c380e23b-c5e1-4c42-90ba-d687fc21bf8e",
+    "6": "d545eea7-0396-4566-b548-8234fd583aa5",
+    "7": "220987ff-70d3-4cf9-aee5-a401553a2ce9",
+    "8": "788df612-952b-42a1-bd99-6d8f333db3ee",
+    "9": "3b999f33-255a-46f4-bce1-bb03d9e3c2cd",
+    "10": "8cb4bbc3-03d4-4545-bb0a-34b2836440b6",
+    "11": "4bdbc55c-5185-45f2-aa5f-4876cfd15d4d",
+    "12": "81a4942c-89cf-4a1c-8f70-351d1112aa82",
+    "13": "35ed6a34-effe-4c23-a80a-958dc65a5838",
+    "14": "805e1779-883b-4ab7-b2c4-a992e2c7e8ab"
+  },
+  "next": "再保人退回经纪人、账单/结算退回、第二条结算路线及真实record仍待完成。",
+  "master_id": 325096,
+  "platform_contract_number": "000050-2026PT00013",
+  "participants": [
+    10926274,
+    10926275
+  ],
+  "reinsurer_involved": "1",
+  "submit_effect_run": "24d62ec3-4173-4812-86eb-b25df51c7d9b",
+  "submit_effect_note": "直连无参与方确认弹窗；真实提交已完成，仅后续弹窗检查失败；修改后只读恢复核验，无重复提交。",
+  "after_record_id": 2110651223716827136,
+  "first_rejection": {
+    "source_table": 2,
+    "source_id": 10926275,
+    "snapshot_id": 60003,
+    "snapshot_sha256": "13f6ca24c21cb74695fca7a719992d730ec364e610c438dc919f2a91634899f0"
+  },
+  "v2_save_effect_run": "5a5388b6-32e3-495c-8b9c-91b1d1dccdde",
+  "v2_save_note": "实际暂存及本次成功通知/V2持久化均完成；后续045重新切中文时瞬时隐藏导致失败，改为核验现有中文会话并只读恢复，不重复保存。",
+  "resubmit": {
+    "parent_id": 1768115023432721905,
+    "detail_id": 1768114586986032188,
+    "before_job_id": 1768115023432721904,
+    "status": 8,
+    "callback_result": "{\"code\":\"0\"}",
+    "run_id": "4bdbc55c-5185-45f2-aa5f-4876cfd15d4d",
+    "onchain_times": 1,
+    "note": "新父任务1905/新明细2188独立计数1，非旧明细计数2。"
+  },
+  "second_rejection": {
+    "old_snapshot_id": 60003,
+    "old_is_deleted": "Y",
+    "new_snapshot_id": 60004,
+    "new_is_deleted": "N",
+    "new_sha256": "707fb825dc2dc7ecc9cfc71666670b8988c87fbc1b6d5c3b32a2539c76fc79cb",
+    "states": [
+      "13",
+      "4"
+    ]
+  },
+  "v2_readonly_verification_run": "3b999f33-255a-46f4-bce1-bb03d9e3c2cd",
+  "final_view": {
+    "run_id": "805e1779-883b-4ab7-b2c4-a992e2c7e8ab",
+    "readonly": true,
+    "suffix": "TW-LOCAL-DIRECT-20261016052451-V2"
+  },
+  "full_fresh_unattended_run_verified": false,
+  "real_record_source_verified": false
+}

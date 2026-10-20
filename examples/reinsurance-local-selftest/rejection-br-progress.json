@@ -1,0 +1,103 @@
+{
+  "case": "TREATY-04",
+  "status": "再保人退回经纪人两轮15步已分段完成：正常新单/经纪双级审核、首次退回V1、真实暂存2.5但接收方仍1、正常重提双级审核、二次退回冻结2.5及最终只读详情",
+  "runs": {
+    "1": "3c7c001b-db3c-48d3-ac5d-775e66b5589e",
+    "2": "cff5595e-9588-479b-8ba0-d813d456057b",
+    "3": "93bd79a7-bc39-4a91-9181-4a314cfd6427",
+    "4": "61a7b559-4d4e-42ab-8e15-2571aabe618e",
+    "5": "a6c1e5d2-9e72-4f49-a975-9bea3d861b08",
+    "6": "c8eb3e85-d33a-4161-b81e-acf4faa98022",
+    "7": "95d43b78-3512-40eb-abc3-83d646600ddb",
+    "8": "4391ac18-f86c-4147-81a8-f57b38e8785d",
+    "9": "32bc8982-c9f9-4e93-b05b-1a908b60abfc",
+    "10": "852f72ba-5bfb-4cb2-8df0-74b835b214a8",
+    "11": "72d190cc-1431-47f7-b3e0-e3be43127dca",
+    "12": "41a48f27-edff-4d9a-8cec-8d3945b92755",
+    "13": "d029cedc-ff17-49d0-bb6a-a8a2f2d8a892",
+    "14": "aa5b8c03-451b-4965-afbf-8754835af83c",
+    "15": "fd5b8d5b-c695-43eb-a991-758604fee11f"
+  },
+  "next": "三个合约退回方向已各案完成；继续独立账单退回、结算退回和第二条结算路线、真实record、新会话连续及软件问题批次修复。",
+  "contract_suffix": "TW-LOCAL-BR-20261016054508",
+  "platform_contract_number": "000050-2026PT00014",
+  "master_id": 325097,
+  "participants": [
+    10926276,
+    10926277,
+    10926278
+  ],
+  "v1_broker_rate_percent": 1,
+  "v2_broker_rate_percent": 2.5,
+  "after_record_id": 2110651223716827136,
+  "initial_ab": {
+    "parent_id": 1768115023432721906,
+    "detail_id": 1768114586986032189,
+    "status": 8,
+    "callback_code": "0"
+  },
+  "initial_bc": {
+    "parent_id": 1768115023432721907,
+    "detail_id": 1768114586986032190,
+    "status": 8,
+    "callback_code": "0"
+  },
+  "broker_confirmation": {
+    "run_id": "c8eb3e85-d33a-4161-b81e-acf4faa98022",
+    "audit_levels": [
+      1,
+      2
+    ],
+    "v1_broker_rate_percent": 1,
+    "scope": "初次填表/上传后弹窗待确认源自75633f24-e19e-4d5c-9439-b62f8156d965；本次核对待确认弹窗后实际确认并完成两级审核，未重复提交。新会话完整普通分支未连续重跑。"
+  },
+  "first_rejection": {
+    "source_table": 2,
+    "source_id": 10926278,
+    "snapshot_id": 60005,
+    "snapshot_sha256": "40665873a70bf1551cbc0fb9ee9103f4e3e3063e7bf96d8074b5d0d0f223d58c",
+    "states": [
+      "3",
+      "13",
+      "4"
+    ]
+  },
+  "v2_save_effect_run": "fa3ce041-ee97-425a-b546-08c8ff03f493",
+  "v2_readonly_verification_run": "852f72ba-5bfb-4cb2-8df0-74b835b214a8",
+  "v2_save_note": "真实保存后即时SELECT未读到2.5而失败；后续独立SELECT及当前代码只读恢复确认0.025，045拒绝详情仍1%，旧快照不变。未重复保存。即时读取时序根因待本地代码/日志核实。 本地代码/日志证实save为同步事务，提交后返回code0；不认定后台异步。第一次失败查询原始值和有效TSO缺失，原因尚未确定。",
+  "full_fresh_unattended_run_verified": false,
+  "real_record_source_verified": false,
+  "resubmit": {
+    "run_id": "41a48f27-edff-4d9a-8cec-8d3945b92755",
+    "before_job_id": 1768115023432721907,
+    "parent_id": 1768115023432721908,
+    "detail_id": 1768114586986032191,
+    "status": 8,
+    "callback_code": "0",
+    "onchain_times": 1,
+    "audit_levels": [
+      1,
+      2
+    ],
+    "after_record_id": 2110651223716827136
+  },
+  "second_rejection": {
+    "run_id": "aa5b8c03-451b-4965-afbf-8754835af83c",
+    "old_snapshot_id": 60005,
+    "old_is_deleted": "Y",
+    "new_snapshot_id": 60006,
+    "new_is_deleted": "N",
+    "new_sha256": "f8a296ebf59abe61aeb5b362c6d5876e2b1724848b7424d6c834480f23923767",
+    "frozen_broker_rate_percent": 2.5,
+    "states": [
+      "3",
+      "13",
+      "4"
+    ]
+  },
+  "final_view": {
+    "run_id": "fd5b8d5b-c695-43eb-a991-758604fee11f",
+    "readonly": true,
+    "broker_rate_percent": 2.5
+  }
+}
