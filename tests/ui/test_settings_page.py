@@ -85,17 +85,16 @@ class SettingsPageTests(unittest.TestCase):
             with patch("taskweave.desktop.pages.settings.ui") as fake_ui:
                 await page.render()
             self.assertEqual(
-                [call.args[0] for call in button.call_args_list[:4]],
-                ["AI 连接与请求", "脱敏设置", "执行设置", "工作空间"],
+                [call.args[0] for call in button.call_args_list[:5]],
+                ["AI 连接与请求", '外部 AI / MCP', "脱敏设置", "执行设置", "工作空间"],
             )
             labels = [call.args[0] for call in fake_ui.label.call_args_list if call.args]
             for expected in [
                 "设置", "设置分组", "AI 编写连接（可选）", "AI 请求大小",
-                "默认 2048 KiB，最高 16384 KiB；此值不是模型 token 上限。",
                 "脱敏", "执行器", "本地工作空间", "/tmp/taskweave",
-                "总库保存配置与执行记录；每个任务的数据库保存返回结果。",
             ]:
                 self.assertIn(expected, labels)
+            self.assertNotIn("总库保存配置与执行记录；每个任务的数据库保存返回结果。", labels)
             controller.call.assert_awaited_once_with("ai.settings.get")
             controller.workbench_settings.assert_awaited_once_with()
             controller.model_settings.assert_awaited_once_with()

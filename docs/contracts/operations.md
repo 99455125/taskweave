@@ -22,6 +22,7 @@ POST /api只绑定127.0.0.1，要求application/json和Bearer令牌，拒绝携�
 
 | 操作族 | 操作与入口 | 异步处理 |
 | --- | --- | --- |
+| agent | `agent.discover/describe/author/context/execute/wait/inspect/review` → `agent` 对应用例 | 外层同步，原用例仍管理自己的异步边界 |
 | ai | `ai.settings.get` → `ai_settings.get`<br>`ai.settings.update` → `ai_settings.update` | 无 |
 | capabilities | `capabilities` → `registry.catalog` | 无 |
 | context | `context.ai` → `contexts.ai_records`<br>`context.capture.append` → `contexts.append_capture`<br>`context.capture.delete` → `contexts.delete_capture`<br>`context.capture.get` → `contexts.get_capture`<br>`context.capture.label` → `contexts.label_capture`<br>`context.capture.reorder` → `contexts.reorder_capture`<br>`context.capture.replace` → `contexts.replace_capture`<br>`context.delete` → `contexts.delete_group`<br>`context.group.update` → `contexts.update_group`<br>`context.list` → `contexts.list`<br>`context.read` → `contexts.collect`<br>`context.record` → `contexts.record`<br>`context.reorder` → `contexts.reorder_group`<br>`context.save` → `contexts.save`<br>`context.save_batch` → `contexts.save_batch`<br>`context.targets` → `contexts.targets` | 无 |
@@ -39,5 +40,7 @@ POST /api只绑定127.0.0.1，要求application/json和Bearer令牌，拒绝携�
 | task | `task.clear_runs` → `tasks.clear_runs`<br>`task.copy` → `tasks.copy`<br>`task.create` → `tasks.create`<br>`task.delete` → `tasks.delete`<br>`task.export` → `tasks.export`<br>`task.flow.get` → `tasks.flow`<br>`task.flow.describe` → `tasks.describe_flow`<br>`task.flow.save` → `tasks.save_flow`<br>`task.flow.confirm` → `tasks.confirm_flow`<br>`task.get` → `tasks.get`<br>`task.import` → `tasks.import_package`<br>`task.list` → `tasks.list`<br>`task.update` → `tasks.update` | 无 |
 
 ## 权威实现
+
+外部 AI 使用8个 agent 用途入口；具体操作属于当前显式允许集合，参数通过 discover operation → describe operation 获取。MCP/function calling 的共同工具参数见[integration/tools.py](../../src/taskweave/integration/tools.py)，验收参数由[review.py](../../src/taskweave/application/agent/review.py)的 review_contract 提供；人工验收决定没有对外操作。连接、回执与预算语义见[外部 AI 模块](../modules/agent.md)。
 
 [operations.py](../../src/taskweave/application/operations.py)、[Application](../../src/taskweave/application/service.py)、[HTTP](../../src/taskweave/infrastructure/http.py)、[CLI](../../src/taskweave/__main__.py)。关键返回数据由[core/data_contracts.py](../../src/taskweave/core/data_contracts.py)描述；插件/模型扩展JSON保留开放字段。精确参数以实际handler签名为准，不依赖已删除的需求快照。

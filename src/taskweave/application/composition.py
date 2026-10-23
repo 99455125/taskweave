@@ -97,4 +97,7 @@ def compose_application(self, model, registry_factory):
     )
     from taskweave.application.authoring_sessions import bind_application_requests
     self.authoring_requests = bind_application_requests(self)
+    from taskweave.application.agent.service import AgentService
+    from taskweave.infrastructure.agent_store import AgentStore
+    self.agent = AgentService(self, AgentStore(self.storage), self.authoring._outbound)
     self.sequence_driver.recover()

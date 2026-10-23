@@ -29,6 +29,17 @@ uv run taskweave workbench
 uv run python scripts/check_project.py
 ```
 
+## 外部 AI 接入
+
+外部 AI 可通过 MCP 或 function calling 编写、验证及调用已有任务，支持当前分支、循环、嵌套和任务组合。在工作台“设置 → 外部 AI / MCP”复制配置并安装 Skill，或执行：
+
+```bash
+uv run --extra mcp taskweave connection-config
+uv run taskweave skill ~/.agents/skills/taskweave
+```
+
+保持目标工作空间的工作台或 serve 运行；配置中的桥接进程连接同一实例。执行后可由 AI 打开“查看验收”，检查路径、核对项及原始结果，再由用户记录决定。详见[外部 AI 接入](docs/modules/agent.md)。
+
 ## 仓库布局
 
 ```text

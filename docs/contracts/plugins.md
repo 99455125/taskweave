@@ -26,3 +26,33 @@ manifest提供插件ID、package_version、API及主程序版本兼容信息，R
 宿主核心不安装插件的可选依赖；插件只导入SDK或声明依赖的普通插件库。结果引用、任务数据库和资源所有权仍由宿主管理。固定动作不得因插件声明了AI贡献而自动调用模型。外部动作的副作用状态和清理错误必须保留，不能吞掉异常伪装成功。
 
 新增插件需要注册与契约测试、module-map源码覆盖；涉及资源/进程/冻结包时另验证真实生命周期和包收集。具体包入口见[插件模块](../modules/plugins.md)。
+
+## 采集表单布局
+
+插件在 `manifest.context_requests[provider_id]` 的请求 Schema 中可声明
+`x-taskweave-context-form.rows`。每个数组表示一行；单元格是字段名，或
+`{"field": "字段名", "width": 2}`。width 是 1–12 的整数宽度比例，默认 1。
+字段顺序、换行和比例由插件声明；控件类型仍由参数 Schema 决定，颜色、内边距、字号、
+焦点状态与窄屏单列由桌面统一渲染，不加载插件 HTML/CSS 或执行界面代码。
+
+```json
+{
+  "type": "object",
+  "properties": {"table": {"type": "string"}, "database": {"type": "string"}},
+  "required": ["table"],
+  "x-taskweave-context-view": {"default": true},
+  "x-taskweave-context-form": {
+    "rows": [["$provider", "$session", {"field": "table", "width": 2}, "database", "$preview"]]
+  }
+}
+```
+
+保留字段 `$provider`、`$session`、`$target`、`$preview` 分别代表采集器、步骤观察会话、
+已有目标选择与生成预览选项。仅在对应页面及能力可用时出现，不进入采集请求；
+规划没有 `$session`，不支持目标或预览的提供器不会产生对应空位。已有目标隐藏的
+请求参数也从排版中移除；余下字段按各自比例使用该行空间。
+
+同一声明由规划和步骤共用。遗漏的参数仍自动追加，遗漏的宿主选择器放在表单上方；
+未声明布局的旧插件自动排列普通参数，数组/对象单独成行，无参数时只显示宿主控件。
+重复/未知字段、空行和非法宽度在渲染时报告 `CONTEXT_FORM_LAYOUT_INVALID`，不会静默漏掉输入。
+该可选展示扩展不改变插件 API 版本、采集请求校验与执行接口；共享动作 Schema 不因采集排版而修改。

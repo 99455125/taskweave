@@ -5,6 +5,8 @@ from .actions import obj, SITE, COMMON, target, require
 from .client import redact
 
 CONTEXT_INPUT=obj({**SITE,'role':COMMON['role'],'max_output_bytes':COMMON['max_output_bytes']},['site_id'])
+CONTEXT_INPUT['x-taskweave-context-form'] = {'rows': [['$provider', '$session', 'site_id', 'role', 'max_output_bytes', '$preview']]}
+
 
 async def collect_site(provider_id,ctx,request,*,include_view=True):
     from jsonschema import Draft202012Validator

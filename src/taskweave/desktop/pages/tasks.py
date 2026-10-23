@@ -668,7 +668,6 @@ class TasksPage(Page):
         text = document_text(package)
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-4xl"):
             ui.label(task["name"] + " · 导出任务").classes("text-lg")
-            ui.label("包含任务与步骤参数、步骤内容和绑定，以及采集上下文和图片预览；不包含环境和执行历史。")
             ui.textarea("任务 JSON", value=text).props("readonly").classes("w-full").style("max-height: 65vh; overflow: auto")
 
             async def copy():
@@ -692,7 +691,6 @@ class TasksPage(Page):
         draft = TaskImportSession(lambda package: self.controller.call("task.import", package=package))
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-4xl"):
             ui.label("导入任务").classes("text-lg")
-            ui.label("导入任务 JSON 创建独立副本，保留步骤对应的素材及预览。已有任务导出会恢复每步状态；AI 生成任务的步骤均为待确认。请先启用所需插件。")
             mode = ui.toggle({'file': '选择 JSON 文件', 'text': '粘贴 JSON'}, value='file')
             mode.on_value_change(lambda event: setattr(draft, 'mode', event.value))
             dialog.on('hide', draft.close)

@@ -33,6 +33,70 @@ class ContextCardTests(unittest.TestCase):
                 await scenario()
         asyncio.run(within_client())
 
+    def test_preview_is_read_only_and_card_owns_preview_selection(self):
+        from taskweave.desktop.contexts import render_context_draft_rows, show_context_preview
+
+        async def scenario():
+            draft = ContextCaptureDraft()
+            capture = {'items': [], 'views': [{'renderer': 'text', 'data': {'text': 'preview'}}]}
+            entry = draft.append(capture, {}, True, label='页面')
+            with ui.column() as rows:
+                render_context_draft_rows(draft, AsyncMock(), lambda: None)
+            carry = next(e for e in rows.descendants() if getattr(e, 'text', '') == '携带预览')
+            dialog = await show_context_preview('页面', capture, {}, AsyncMock(),
+                                               redact_on_display=False)
+            self.assertFalse(any(getattr(e, 'text', '') == '携带预览' for e in dialog.descendants()))
+            carry.value = True
+            self.assertTrue(entry['send_preview'])
+            self.assertTrue(draft.payload()[0]['send_preview'])
+        self.run_scenario(scenario)
+
+    def test_draft_card_edits_title_and_notes_inline_without_losing_preview_choice(self):
+        from taskweave.desktop.contexts import render_context_draft_rows
+
+        async def scenario():
+            draft = ContextCaptureDraft()
+            entry = draft.append({'items': [{'source': 'demo.page', 'content': 'data'}]}, {}, False, label='页面')
+            with ui.column() as rows:
+                render_context_draft_rows(draft, AsyncMock(), lambda: None)
+            carry = next(e for e in rows.descendants() if getattr(e, 'text', '') == '携带预览')
+            self.assertFalse(carry.enabled)
+            self.assertFalse(any(getattr(e, 'text', '') == '添加操作说明' for e in rows.descendants()))
+            self.assertFalse(any(e._props.get('label') == '采集项标题' for e in rows.descendants()))
+            title = next(e for e in rows.descendants() if getattr(e, 'text', '') == '页面')
+            next(e.handler for e in title._event_listeners.values() if e.type == 'click')(None)
+            title_input = next(e for e in rows.descendants() if e._props.get('label') == '采集项标题')
+            title_input.value = '查询页面'
+            self.assertEqual(draft.payload()[0]['label'], '查询页面')
+            next(e.handler for e in title_input._event_listeners.values() if e.type == 'keydown.enter')()
+            edit = next(e for e in rows.descendants() if getattr(e, 'text', '') == '编辑说明')
+            next(e.handler for e in edit._event_listeners.values() if e.type == 'click')(None)
+            notes = next(e for e in rows.descendants() if e._props.get('label') == '操作说明')
+            notes.value = '新说明'
+            self.assertEqual(draft.payload()[0]['operation_notes'], '新说明')
+            done = next(e for e in rows.descendants() if getattr(e, 'text', '') == '完成')
+            next(e.handler for e in done._event_listeners.values() if e.type == 'click')(None)
+            self.assertEqual(entry['label'], '查询页面')
+            self.assertEqual(entry['operation_notes'], '新说明')
+            self.assertFalse(entry['send_preview'])
+        self.run_scenario(scenario)
+
+    def test_page_card_uses_collected_title_and_removes_private_url_parts(self):
+        from taskweave.desktop.contexts import render_context_draft_rows
+
+        async def scenario():
+            draft = ContextCaptureDraft()
+            entry = draft.append({'items': [{'source': 'playwright.page', 'content':
+                '{"title":"记录查询", "url":"https://user:secret@example.com/contracts?token=secret#private"}'}]},
+                {}, False, label='playwright.page')
+            with ui.column() as rows:
+                render_context_draft_rows(draft, AsyncMock(), lambda: None)
+            self.assertEqual(entry['label'], '记录查询')
+            texts = [getattr(e, 'text', '') for e in rows.descendants()]
+            self.assertIn('https://example.com/contracts', texts)
+            self.assertFalse(any('secret' in text or 'private' in text for text in texts))
+        self.run_scenario(scenario)
+
     def test_shared_preview_keeps_all_views_and_raw_items_and_discards_stale_render(self):
         from taskweave.desktop.contexts import show_context_preview
 

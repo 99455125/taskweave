@@ -22,7 +22,7 @@ class SshPlugin:
         return {'id':'ssh','api_version':1,'package_version':'0.1.0','core_requires':'>=0.1,<1','dependencies':{},
                 'config_variables':[{'key':'ssh_'+key,'type':types.get(key,'string'),'required':key in ('host','username','remote_root'),
                                      'description':'SSH '+key+'; task parameters override environment'} for key in CONFIG_KEYS],
-                'context_requests':{'ssh.server':LIST_INPUT}}
+                'context_requests':{'ssh.server':{**LIST_INPUT, 'x-taskweave-context-form': {'rows': [['$provider', '$session', 'role', {'field': 'path', 'width': 2}], ['max_entries', 'max_output_bytes', '$preview']]}}}}
     def actions(self): return {'ssh.'+name:SshAction(name,self.evidence) for name in DECLARATIONS}
     def tools(self):
         tool=SshAction('list_directory',self.evidence)

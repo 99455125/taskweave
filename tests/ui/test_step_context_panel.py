@@ -228,6 +228,7 @@ class StepContextPanelTests(unittest.TestCase):
             def open(self): return self
             def close(self): return self
             def clear(self): return self
+            def move(self, *_args, **_kwargs): return self
             def descendants(self): return []
 
         async def scenario():
@@ -265,7 +266,7 @@ class StepContextPanelTests(unittest.TestCase):
                 task_id=lambda:"task", environment_id=lambda:"env", button=workbench.button,
                 render_result_view=AsyncMock(),
             )
-            with patch("taskweave.desktop.components.step_contexts.ui", ui), patch("taskweave.desktop.contexts.ui", ui), patch(
+            with patch("taskweave.desktop.components.step_contexts.ui", ui), patch("taskweave.desktop.contexts.ui", ui), patch("taskweave.desktop.components.step_contexts.compact_field"), patch("taskweave.desktop.components.step_contexts.arrange_context_fields"), patch(
                 "taskweave.desktop.components.step_contexts.ValueForm",
                 return_value=SimpleNamespace(hide_fields=MagicMock(), controls={}, values=MagicMock(return_value={})),
             ):
@@ -309,6 +310,7 @@ class StepContextPanelTests(unittest.TestCase):
             def open(self): return self
             def close(self): return self
             def clear(self): return self
+            def move(self, *_args, **_kwargs): return self
             def descendants(self): return []
 
         async def scenario():
@@ -341,7 +343,7 @@ class StepContextPanelTests(unittest.TestCase):
                 button=lambda title, callback, **_kwargs: ui.button(title, on_click=callback),
                 render_result_view=AsyncMock(),
             )
-            with patch("taskweave.desktop.components.step_contexts.ui", ui), patch("taskweave.desktop.contexts.ui", ui), patch(
+            with patch("taskweave.desktop.components.step_contexts.ui", ui), patch("taskweave.desktop.contexts.ui", ui), patch("taskweave.desktop.components.step_contexts.compact_field"), patch("taskweave.desktop.components.step_contexts.arrange_context_fields"), patch(
                 "taskweave.desktop.components.step_contexts.ValueForm",
                 return_value=SimpleNamespace(hide_fields=MagicMock(), controls={}, values=MagicMock(return_value={})),
             ):

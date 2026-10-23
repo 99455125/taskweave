@@ -32,6 +32,11 @@ def main(argv=None):
     )
     serve = sub.add_parser("serve", help="Start local application API (no UI)")
     serve.add_argument("--port", type=int, default=8765)
+    sub.add_parser("mcp", help="Connect an MCP stdio client to the running workspace")
+    sub.add_parser("function-tools", help="Export function-calling tool definitions as JSON")
+    skill = sub.add_parser('skill', help='Install/export the packaged TaskWeave Skill to an explicit directory')
+    skill.add_argument('destination', help='New skill directory, such as ~/.agents/skills/taskweave')
+    sub.add_parser('connection-config', help='Print MCP configuration without credentials')
     request = sub.add_parser(
         "request", help="Send a JSON request file to the running application"
     )
@@ -49,6 +54,23 @@ def main(argv=None):
     from taskweave.core.validation import TaskError
 
     try:
+        if args.command == 'skill':
+            from taskweave.integration.skill import install_skill
+            print(json.dumps(install_skill(args.destination), ensure_ascii=False, indent=2))
+            return 0
+        if args.command == 'connection-config':
+            from taskweave.integration.skill import connection_config
+            from taskweave.infrastructure.sqlite_storage import default_home
+            print(json.dumps(connection_config(args.home or default_home()), ensure_ascii=False, indent=2))
+            return 0
+        if args.command == 'mcp':
+            from taskweave.integration.mcp import run
+            run(args.home)
+            return 0
+        if args.command == 'function-tools':
+            from taskweave.integration.tools import tool_definitions
+            print(json.dumps(tool_definitions(), ensure_ascii=False, indent=2))
+            return 0
         if args.command == "workbench":
             from taskweave.desktop.launcher import launch
 
@@ -131,7 +153,9 @@ def main(argv=None):
                     flush=True,
                 )
                 try:
-                    server.serve_forever()
+                    from taskweave.infrastructure.agent_connection import AgentHost
+                    with AgentHost(app):
+                        server.serve_forever()
                 except KeyboardInterrupt:
                     pass
                 finally:

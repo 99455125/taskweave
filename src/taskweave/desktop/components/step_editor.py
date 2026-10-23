@@ -540,7 +540,6 @@ class StepEditor:
                         schema = SchemaEditor(ctx.old_step["input_schema"], on_change=mark_dirty)
                         if draft:
                             schema.restore_rows(draft['schema'])
-                        ui.label("选择输入来源即可；保存绑定时自动补充输入参数，无需先添加参数。")
                         binding_area = ui.column().classes("w-full")
                         binding_rows = []
                         previous = {
@@ -686,9 +685,6 @@ class StepEditor:
                         ui.button("添加绑定", on_click=lambda: add_binding()).props(
                             "outline"
                         )
-                        ui.label(
-                            "前序结果从本次运行的任务数据库读取，不依赖内存。"
-                        ).classes("text-gray-500")
                     ctx.context_panel = ui.column().classes("tw-step-context-materials w-full min-w-0")
                     ctx.context_component.render(ctx.context_panel)
                     with ui.expansion("时间设置", value=False).classes("w-full"):
@@ -698,9 +694,6 @@ class StepEditor:
                         ).classes("w-full")
                         if step["position"] == 0:
                             delay.disable()
-                            ui.label("首步骤无上一步，不等待。")
-                        else:
-                            ui.label("默认 0 秒；单步和继续也遵守间隔，已等待足够时间则立即执行。")
                         timeout = ui.number(
                             "步骤执行超时（秒，不包含间隔）", value=fields.get('timeout', step["timeout_ms"] / 1000),
                             min=0.001, max=3600, step=0.001,

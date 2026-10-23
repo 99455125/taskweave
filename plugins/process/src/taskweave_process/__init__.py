@@ -19,7 +19,7 @@ class ProcessPlugin:
         return {'id': 'process', 'api_version': 1, 'package_version': '0.1.0', 'core_requires': '>=0.1,<1',
                 'dependencies': {}, 'config_variables': [{'key': 'process_root', 'type': 'string', 'required': True,
                 'description': 'Explicit local root for working directories and collected files; task parameters override environment'}],
-                'context_requests': {'process.environment': ENVIRONMENT_INPUT}}
+                'context_requests': {'process.environment': {**ENVIRONMENT_INPUT, 'x-taskweave-context-form': {'rows': [['$provider', '$session', 'timeout_seconds', 'max_output_bytes', '$preview'], ['programs'], ['directories']]}}}}
 
     def actions(self):
         return {'process.check_environment': CheckEnvironment(), 'process.run': Run(self._failure_evidence), 'process.collect_artifacts': CollectArtifacts()}

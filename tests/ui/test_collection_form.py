@@ -14,11 +14,13 @@ from taskweave.presentation.state import ContextPageState
 
 
 class CollectionFormViewTests(unittest.TestCase):
-    def exercise(self, planning, targets=False):
+    def exercise(self, planning, targets=False, configured=False):
         async def scenario():
             calls, actions = [], {}
             schema = {'properties': {'count': {'type': 'integer', 'default': 1}},
                       'x-taskweave-context-view': {'default': True}}
+            if configured:
+                schema['x-taskweave-context-form'] = {'rows': [['$provider', '$session', '$target', 'count', '$preview']]}
             if targets:
                 schema['x-taskweave-context-targets'] = {}
             capture = {'items': [{'kind': 'text', 'source': 'fixture', 'content': 'captured'}], 'views': []}
@@ -33,7 +35,8 @@ class CollectionFormViewTests(unittest.TestCase):
             def button(label, action, **kwargs):
                 actions[label] = action
                 return ui.button(label)
-            controller = SimpleNamespace(call=call, plugin_context_requests=lambda: {'p.page': schema})
+            controller = SimpleNamespace(call=call, plugin_context_requests=lambda: {'p.page': schema},
+                                         privacy_settings=lambda: {'redact_on_display': True})
             if targets:
                 from taskweave.desktop.context_recording import collection_workspace
                 workspace = collection_workspace(controller, ('plan', 'plan', None) if planning else ('step', 'step', None), [])
@@ -51,7 +54,13 @@ class CollectionFormViewTests(unittest.TestCase):
                     task_id=lambda: 'task', environment_id=lambda: 'env', button=button)
                 await view.collect()
             workspace = next(iter(controller._collection_workspaces.values()))
-            count = next(e for e in ui.context.client.elements.values() if getattr(e, '_props', {}).get('label') == 'count')
+            count = next(e for e in ui.context.client.elements.values() if getattr(e, '_props', {}).get('aria-label') == 'count')
+            if configured:
+                row = count.parent_slot.parent.parent_slot.parent
+                self.assertIn('tw-context-form-row', row._classes)
+                self.assertIn('count', [getattr(control, '_props', {}).get('aria-label')
+                                       for field in row.default_slot.children for control in field.default_slot.children])
+                self.assertEqual(len(row.default_slot.children), 3 + int(not planning) + int(targets))
             count.value = 4
             name = next(e for e in ui.context.client.elements.values() if getattr(e, '_props', {}).get('label') == '上下文名称')
             name.value = 'Changed'
@@ -78,3 +87,39 @@ class CollectionFormViewTests(unittest.TestCase):
 
     def test_plan_restores_target_before_refresh_events_update_fields(self): self.exercise(True, True)
     def test_step_restores_target_before_refresh_events_update_fields(self): self.exercise(False, True)
+
+    def test_plan_uses_plugin_row_and_keeps_live_values(self): self.exercise(True, configured=True)
+    def test_step_uses_plugin_row_and_keeps_live_values(self): self.exercise(False, configured=True)
+    def test_target_controls_share_plugin_row_in_plan(self): self.exercise(True, targets=True, configured=True)
+    def test_target_controls_share_plugin_row_in_step(self): self.exercise(False, targets=True, configured=True)
+
+
+class ContextLayoutViewTests(unittest.TestCase):
+    def test_switching_and_hidden_target_fields_preserve_controls_and_values(self):
+        from taskweave.desktop.forms import arrange_context_fields
+        client = Client(page('/collection-layout-switch'))
+        try:
+            with client:
+                schema = {'properties': {'url': {'type': 'string'}, 'scope': {'type': 'string'}},
+                          'x-taskweave-context-form': {'rows': [['$provider'], ['url', 'scope', '$preview']]}}
+                with ui.column() as first:
+                    form = ValueForm(schema, {'url': 'https://example.com', 'scope': 'viewport'}, compact=True)
+                with ui.column() as second:
+                    empty = ValueForm({'properties': {}}, compact=True)
+                with ui.column() as provider_field:
+                    provider = ui.select(['first', 'second'], value='first')
+                preview = ui.checkbox('Preview', value=True)
+                host = {'$provider': provider_field, '$preview': preview}
+                arrange_context_fields(schema, first, form, host)
+                self.assertEqual(len(first._tw_form_rows), 2)
+                arrange_context_fields({'properties': {}}, second, empty, {'$provider': provider_field})
+                self.assertIs(provider_field.parent_slot.parent.parent_slot.parent, second)
+                form.hide_fields({'url'})
+                arrange_context_fields(schema, first, form, host, {'url'})
+                self.assertFalse(form.fields['url'].visible)
+                self.assertEqual(form.values(), {'url': 'https://example.com', 'scope': 'viewport'})
+                self.assertTrue(preview.value)
+                self.assertIs(provider_field.parent_slot.parent.parent_slot.parent, first)
+                self.assertEqual(provider.value, 'first')
+        finally:
+            client.delete()

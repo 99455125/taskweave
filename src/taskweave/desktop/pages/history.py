@@ -83,7 +83,7 @@ class HistoryPage(Page):
                                         self.button("查看错误", lambda a=attempt, st=result_step: self.error_dialog(a, st))
                                 ui.code(_document_text(readable_metadata(attempt, names)), language="json").classes("w-full")
                         log_area = ui.column().classes("w-full min-w-0")
-                        log_status = ui.label("运行日志按需加载，不自动刷新。").classes("text-xs text-gray-500")
+                        log_status = ui.label().classes("text-xs text-gray-500")
                         load_state = HistoryLoadState((task_id, identity))
 
                         async def load_logs():

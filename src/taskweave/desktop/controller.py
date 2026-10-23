@@ -55,6 +55,20 @@ class DesktopController:
     def workspace_home(self):
         return self.application.home
 
+    async def review_report(self, kind, identity):
+        report = await asyncio.to_thread(self.application.agent.reviews.read, kind, identity)
+        return self.application.agent.sanitize(self.application.agent.public_review(report))
+
+    async def review_decide(self, kind, identity, expected_fingerprint, decision, note):
+        return await asyncio.to_thread(self.application.agent.reviews.decide, kind, identity, expected_fingerprint, decision, note)
+
+    async def open_review(self, kind, identity):
+        from nicegui import ui
+        from taskweave.desktop.components.agent_review import ReviewDialog
+        dialog = ReviewDialog(self, lambda label, callback, **options: ui.button(label, on_click=callback))
+        await dialog.open(kind, identity)
+        return dialog
+
     def reset_debug_conversation(self, step_id):
         self.application.authoring.reset_conversation(step_id)
 

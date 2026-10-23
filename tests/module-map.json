@@ -1058,6 +1058,54 @@
       "browser_targets": [
         "tests.test_sequences_browser"
       ]
+    },
+    "application.agent": {
+      "source_globs": [
+        "src/taskweave/application/agent/*.py",
+        "src/taskweave/core/agent_ports.py",
+        "src/taskweave/infrastructure/agent_store.py"
+      ],
+      "targets": [
+        "tests.test_agent_discovery",
+        "tests.test_agent_store",
+        "tests.test_agent_workflows",
+        "tests.test_agent_review"
+      ],
+      "depends_on": [
+        "application.tasks",
+        "application.runs",
+        "application.sequences"
+      ],
+      "browser_targets": []
+    },
+    "integration.agent": {
+      "source_globs": [
+        "src/taskweave/integration/*.py",
+        "src/taskweave/infrastructure/agent_connection.py"
+      ],
+      "targets": [
+        "tests.test_agent_transport",
+        "tests.test_agent_skill"
+      ],
+      "depends_on": [
+        "application.agent"
+      ],
+      "browser_targets": []
+    },
+    "ui.agent": {
+      "source_globs": [
+        "src/taskweave/desktop/components/agent_review.py"
+      ],
+      "targets": [
+        "tests.ui.test_agent_review"
+      ],
+      "depends_on": [
+        "application.agent",
+        "shared.ui"
+      ],
+      "browser_targets": [
+        "tests.test_agent_browser"
+      ]
     }
   }
 }

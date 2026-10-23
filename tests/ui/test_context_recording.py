@@ -56,7 +56,7 @@ class RecordingDraftTests(unittest.TestCase):
                 await panel.collect()
                 self.assertTrue(workspace.dialog.value)
                 self.assertEqual(workspace.recording.recording_id, recording_id)
-                provider = next(el for el in workspace.dialog.descendants() if el._props.get('label') == '插件上下文')
+                provider = next(el for el in workspace.dialog.descendants() if el._props.get('aria-label') == '插件上下文')
                 self.assertEqual(provider.value, 'demo.page')
                 self.assertFalse(provider.enabled)
                 self.assertTrue(any(getattr(el, 'text', '') == '停止并暂存' and el.visible

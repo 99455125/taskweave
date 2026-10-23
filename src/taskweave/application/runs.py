@@ -3,6 +3,7 @@
 from taskweave.core.data_contracts import RunSummary, CommandResult, ExecutionRequest
 from taskweave.core.run_ports import RunApplicationStore
 import asyncio
+from uuid import uuid4
 from taskweave.core.repositories import EnvironmentRepository, ResultRepository, StepRepository, TaskRepository
 
 
@@ -59,16 +60,21 @@ class RunUseCases:
         return self.coordinator.describe_run(run_id)
     def wait(self, run_id, timeout=30): return self.coordinator.wait(run_id, timeout)
     def instances(self): return self.coordinator.active_instances() + self.context_sessions.list()
-    def end_instance(self, instance_type, owner_id):
+    def end_instance(self, instance_type, owner_id, command_id=None):
         if instance_type == "plan":
             return self.context_sessions.end(owner_id)
         if instance_type == 'step':
             return self.context_sessions.end('step:'+owner_id)
         self._assert_independent(owner_id)
-        return self.coordinator.control(owner_id, "END")
+        return self.coordinator.control(owner_id, command_id or str(uuid4()), "abandon")
     def context_sessions_for_task(self, task_id): return self.coordinator.context_sessions(task_id)
     def list(self, task_id=None): return self.runs.list_runs(task_id)
     def output(self, run_id, step_id, output="data", *, execution_path=None, item_pointer=None, loop_node_id=None):
+        return self.project_output(run_id, step_id, output, execution_path=execution_path,
+                                   item_pointer=item_pointer, loop_node_id=loop_node_id)
+
+    def project_output(self, run_id, step_id, output='data', *, execution_path=None, item_pointer=None, loop_node_id=None, transform=lambda value: value):
+        """Apply an outbound projection before aggregate/item selection loses field context."""
         from taskweave.core.flow_values import aggregate_output
         from taskweave.core.task_flow import is_linear_flow
         import json
@@ -77,15 +83,15 @@ class RunUseCases:
             if attempt is None or attempt["step_id"] != step_id:
                 from taskweave.core.validation import TaskError
                 raise TaskError("OUTPUT_NOT_AVAILABLE")
-            return self.results.read_attempt_output(attempt["attempt_id"], output, self.registry)
+            return transform(self.results.read_attempt_output(attempt["attempt_id"], output, self.registry))
         run = self.runs.run(run_id)
         definition = json.loads(run["definition_json"] or "{}")
         flow = definition.get("flow")
         if flow is None or is_linear_flow(flow):
-            return self.results.read_output(run_id, step_id, output, self.registry)
+            return transform(self.results.read_output(run_id, step_id, output, self.registry))
         instances = self.flow_runs.instances(run_id)
         return aggregate_output(flow, instances, step_id, output,
-                                lambda aid, name: self.results.read_attempt_output(aid, name, self.registry),
+                                lambda aid, name: transform(self.results.read_attempt_output(aid, name, self.registry)),
                                 item_pointer=item_pointer, loop_node_id=loop_node_id)
     def events(self, run_id): return self.runs.events(run_id)
     def event_page(self, run_id, after=0, limit=100): return self.runs.event_page(run_id, after, limit)

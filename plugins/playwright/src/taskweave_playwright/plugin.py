@@ -22,6 +22,10 @@ class PlaywrightPlugin:
             "context_requests": {
                 "playwright.page": {
                     "type": "object",
+                    "x-taskweave-context-form": {"rows": [
+                        ["$provider", "$session", {"field": "$target", "width": 2}],
+                        [{"field": "url", "width": 2}, "role", "scope", "$preview"],
+                    ]},
                     "x-taskweave-context-targets": {
                         "selector_label": "上下文实例 / 页面",
                         "parameter_mode_label": "新建页面",

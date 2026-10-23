@@ -15,7 +15,7 @@
 | `model.json` | 桌面模型连接配置 |
 | `exports/` | 用户显式导出的任务包和规划提示 |
 
-数据库名/路径由[SQLiteStorage](../../src/taskweave/infrastructure/sqlite_storage.py)及对应结果/规划实现确定。控制库现行20、任务库2；sql/中的文件是初始DDL，最新结构还必须叠加sqlite_storage.py迁移，不能把初始user_version当作现行版本。
+数据库名/路径由[SQLiteStorage](../../src/taskweave/infrastructure/sqlite_storage.py)及对应结果/规划实现确定。控制库现行23、任务库2；sql/中的文件是初始DDL，最新结构还必须叠加sqlite_storage.py迁移，不能把初始user_version当作现行版本。v23 增加外部 AI 请求回执与不可变材料记录，定义写入与回执共用控制库 UoW；迁移保留任务、控制流、运行及结果，升级前自动备份，旧版本按 SCHEMA_TOO_NEW 拒绝打开新库。
 
 ## 边界与一致性
 

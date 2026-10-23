@@ -1,17 +1,33 @@
 """Schema-driven inputs and editable parameter definitions."""
 
 import json
+from html import escape
 from nicegui import ui
 from taskweave.core.validation import TaskError
 
 
+def compact_field(control, *, description="", label_container=None):
+    """External accessible label and compact input for opt-in dense forms."""
+    label = control.label or ""
+    container = label_container or control.parent_slot.parent
+    input_id = f"tw-field-{control.id}"
+    with container:
+        caption = ui.html(escape(label), tag="label").props(f"for={input_id}").classes("tw-compact-label")
+    caption.move(target_index=0)
+    control.set_label(None).props(f'dense outlined for={input_id} aria-label={json.dumps(label, ensure_ascii=False)}')
+    if description:
+        control.tooltip(description)
+    return control
+
+
 class ValueForm:
-    def __init__(self, schema, values=None):
+    def __init__(self, schema, values=None, *, compact=False):
+        self.compact = compact
         self.schema, self.controls, self.fields = schema, {}, {}
         self.defaults = {}
         values = values or {}
         properties = schema.get("properties", {})
-        if not properties:
+        if not properties and not compact:
             ui.label("无需输入参数").classes("text-gray-500")
         for name, spec in properties.items():
             field = ui.column().classes("w-full gap-0")
@@ -24,7 +40,7 @@ class ValueForm:
         value = values.get(name, spec.get("default"))
         kind = spec.get("type", "string")
         description = spec.get("description", "").strip()
-        if description:
+        if description and not self.compact:
             ui.label(description).classes("text-xs text-gray-500 mb-0")
         if "enum" in spec:
             control = ui.select(spec["enum"], label=label, value=value)
@@ -45,6 +61,15 @@ class ValueForm:
             )
         else:
             control = ui.input(label, value="" if value is None else str(value))
+        if self.compact:
+            if kind == "boolean":
+                control.props("dense")
+                if description:
+                    control.tooltip(description)
+            else:
+                compact_field(control, description=description)
+                if kind in {"object", "array"}:
+                    control.props("autogrow")
         if kind != "boolean":
             control.props('placeholder="未配置默认值，请录入"')
         control.classes("w-full")
@@ -170,3 +195,27 @@ class SchemaEditor:
                     control.value = value
         finally:
             self.on_change = changed
+
+
+def arrange_context_fields(schema, group, form, host_fields, hidden=()):
+    """Reuse controls and bindings while applying declarative plugin form rows."""
+    from taskweave.presentation.forms import context_form_rows
+    controls = {**{key: value for key, value in host_fields.items() if key != '$preview'}, **form.fields}
+    if '$preview' in host_fields:
+        controls['$preview'] = host_fields['$preview']
+    visible = [name for name in controls if name not in hidden]
+    rows = context_form_rows(schema, visible)
+    containers = getattr(group, '_tw_form_rows', None)
+    if containers is None:
+        containers = group._tw_form_rows = []
+    while len(containers) < len(rows):
+        with group:
+            containers.append(ui.row().classes('tw-context-form-row w-full'))
+    for index, container in enumerate(containers):
+        container.set_visibility(index < len(rows))
+        if index >= len(rows):
+            continue
+        row = rows[index]
+        container.style('grid-template-columns:' + ' '.join(f'minmax(0,{width}fr)' for _, width in row))
+        for name, _ in row:
+            controls[name].move(container)

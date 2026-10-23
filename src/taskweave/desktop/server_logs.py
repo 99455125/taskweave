@@ -62,7 +62,6 @@ def render_logs(logs, open_path=None):
     ui.colors(primary='#345adb')
     ui.add_css('.q-btn {box-shadow:none; border-radius:6px;} .q-btn.bg-primary {background:white !important; color:#345adb !important; border:1px solid #cbd5e1;}')
     ui.label('服务实时日志').classes('text-xl font-medium')
-    ui.label('本地服务、AI 请求和后台异常；关闭此窗口不会结束任务。')
     level = ui.select({'20': 'INFO 及以上', '30': 'WARNING 及以上', '40': 'ERROR'}, value='20', label='级别')
     paused = ui.switch('暂停显示')
     output = ui.log(max_lines=2000).classes('w-full h-[70vh] font-mono')
@@ -91,7 +90,6 @@ def render_logs(logs, open_path=None):
         ui.button('清空显示', on_click=clear)
         if open_path:
             ui.button('打开日志目录', on_click=lambda: open_path(logs.path.parent))
-    ui.label('日志自动保存为 server.log；可暂停显示后选中文字复制。')
     refresh()
     timer = ui.timer(0.5, refresh)
 

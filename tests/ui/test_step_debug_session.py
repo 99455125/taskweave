@@ -260,7 +260,7 @@ class StepDebugSessionTests(unittest.TestCase):
                 await panel.refresh_trial()
                 labels = [c.args[0] for c in ui.label.call_args_list]
                 self.assertTrue(any("BUSINESS_ASSERTION_FAILED" in text for text in labels))
-                self.assertTrue(any("无业务数据输出" in text for text in labels))
+                self.assertFalse(any("无业务数据输出" in text for text in labels))
             controller.trial_feedback.assert_awaited_once_with("run", "second")
             self.assertEqual(state.feedback_run_id, "run")
         asyncio.run(scenario())

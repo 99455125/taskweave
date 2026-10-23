@@ -160,8 +160,6 @@ class StepAIEditor:
                     ui.label("本次修复依据").classes("font-medium")
                     ui.input("运行编号", value=feedback_run_id).props("readonly").classes("w-full").tooltip(feedback_run_id)
                     ui.input("尝试编号", value=feedback["attempt_id"]).props("readonly").classes("w-full").tooltip(feedback["attempt_id"])
-            else:
-                ui.label("尚无当前步骤的失败运行与尝试记录；先完成一次调试，AI 修复才能引用真实依据。").classes("tw-repair-no-evidence w-full")
             rounds = ui.select(
                 {-1:"全部历史",0:"不带历史",**{i:f"最近 {i} 轮" for i in range(1,11)}},
                 value=-1,label="本轮携带的历史会话",
@@ -174,7 +172,6 @@ class StepAIEditor:
             rounds.on_value_change(lambda event: setattr(draft, 'history_rounds', event.value))
             deduplicate.on_value_change(lambda event: setattr(draft, 'deduplicate', event.value))
             supplement.on_value_change(lambda event: setattr(draft, 'supplement', event.value or ''))
-            ui.label("依据当前步骤实际执行内容、失败动作、快照和日志生成；遵守移除项与脱敏设置。").classes("text-sm text-gray-500")
             with ui.row().classes("tw-repair-dialog-actions w-full items-center gap-2 flex-wrap"):
                 api, chat = submit_ai_choice(dialog, [
                     ("大模型api调用", lambda: draft.submit('api', self.identity())),
@@ -285,7 +282,7 @@ class StepAIEditor:
             return
         retained = self.retained_request()
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-4xl"):
-            ui.label("AI 建议 · 采纳后保存为草稿").classes("text-lg")
+            ui.label("AI 建议").classes("text-lg")
             ui.label(proposal["explanation"])
             ui.code(self.controller.diff(saved["step_content"], proposal["proposed_content"]), language="diff").classes("w-full")
             if proposal["diagnostics"]:
@@ -318,8 +315,7 @@ class StepAIEditor:
             return
         retained = self.retained_request()
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-4xl"):
-            ui.label("网页 AI 对话 · 不需要 API Key").classes("text-lg")
-            ui.label("复制以下内容到网页 AI，再将它的整段回复粘贴到下方。推荐回复为包含 step_content 和 explanation 的 JSON；也兼容完整 Python 代码。")
+            ui.label("网页 AI 对话").classes("text-lg")
             ui.textarea("复制到网页 AI 的内容", value=exported["prompt"]).props("readonly rows=12").classes("w-full")
             async def copy_prompt():
                 await self.controller.copy_text(exported["prompt"])

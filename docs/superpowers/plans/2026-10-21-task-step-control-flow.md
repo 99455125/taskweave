@@ -1,5 +1,16 @@
 # 任务步骤控制流与编辑界面实施计划
 
+## 2026-10-22 复审状态
+
+用户要求重新审查编排与现有系统的适配并重设计。代码复审、6 项问题及推荐方案统一维护在[原设计文档的复审章节](../specs/2026-10-21-task-step-control-flow-design.md)。以下已勾选项记录上一轮实施过程，不代表本轮复审问题已修复。
+
+- [x] 审查流程定义、顺序、保存、复制、执行、调试输出与任务组合接线，完成临时库/真实 worker 最小复现。
+- [x] 提出保留任务组合分层、统一任务内定义与执行语义的重设计，记录迁移约束与验收条件。
+- [ ] 用户审核重设计；审核后按同一方案细化本文件中的后续实施任务。
+- [ ] 实现并验证复审修订。产品代码本轮尚未修改，R1–R6 尚未修复。
+
+## 上一轮实施记录
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. The user delegated product decisions to Astra. Git commit, push, PR writes and deployment are not authorized.
 
 **目标：**让一个任务可配置结果分支、条件循环、列表遍历，并在更清爽的步骤页面完整编辑、运行和查看逐轮结果。

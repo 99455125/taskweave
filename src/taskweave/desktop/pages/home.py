@@ -136,7 +136,6 @@ class HomePage(Page):
         with ui.row().classes("tw-home-heading w-full justify-between items-center flex-wrap gap-3"):
             with ui.column().classes("gap-1"):
                 ui.label("工作台").classes("tw-page-title")
-                ui.label("从这里继续工作，或开始一次新的执行。").classes("tw-page-subtitle")
             self.button("新建执行", self.actions.new_execution, primary=True, icon="add")
 
         summary = (
@@ -166,9 +165,6 @@ class HomePage(Page):
             with ui.row().classes("tw-section-heading w-full justify-between items-center"):
                 ui.label("最近更新任务").classes("tw-section-title")
                 self.button("查看全部", lambda: self.actions.navigate("tasks"), flat=True, icon="arrow_forward")
-            if not recent_tasks:
-                ui.label("还没有任务。新建任务后，可在这里继续编写步骤或创建执行。") \
-                    .classes("tw-home-empty")
             for task in recent_tasks:
                 steps = task_steps[task["task_id"]]
                 can_execute = bool(steps) and all(step.get("validation_state") == "VALIDATED" for step in steps)
@@ -299,4 +295,3 @@ class HomePage(Page):
                 self.button("新建任务", self.actions.create_task, icon="add_box")
                 self.button("导入任务", self.actions.import_task, icon="file_upload")
                 self.button("新建执行", self.actions.new_execution, icon="play_arrow")
-            ui.label("从规划整理思路，用任务沉淀可重复执行的步骤。").classes("tw-home-stat-note mt-3")

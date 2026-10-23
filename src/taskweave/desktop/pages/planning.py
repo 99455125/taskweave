@@ -118,10 +118,10 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
         with ui.row().classes("tw-master-layout"):
             with ui.column().classes("tw-panel tw-list-sidebar gap-3"):
                 with ui.row().classes("tw-plan-sidebar-heading w-full items-center justify-between flex-nowrap"):
-                    ui.label("规划").classes("text-lg font-semibold")
-                    self.button("新建", self.create, primary=True)
-                with ui.row().classes("tw-plan-category-toolbar w-full items-center justify-end"):
-                    self.category_manager.render_button()
+                    ui.label("规划").classes("text-lg font-semibold shrink-0")
+                    with ui.row().classes("tw-plan-sidebar-actions items-center flex-nowrap"):
+                        self.button("管理分类", self.category_manager.open, flat=True).classes("tw-plan-manage-categories")
+                        self.button("新建", self.create, primary=True, icon="add")
                 search = ui.input(
                     "搜索规划",
                     value=self.state.search,
@@ -355,7 +355,6 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
 
         with assistant_panel:
             ui.label("AI 生成任务").classes("tw-section-title")
-            ui.label("使用当前规划配置与已保存的上下文快照生成候选；生成不会启动执行。 ").classes("text-sm text-gray-500")
             self.button("大模型api调用", lambda: generate_after_save("api"), primary=True, icon="auto_awesome").classes("w-full")
             self.button("大模型网页chat调用", lambda: generate_after_save("web_chat"), icon="forum").classes("w-full")
             ui.separator()
@@ -376,7 +375,6 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
                 with candidate_area:
                     ui.label("候选预览").classes("font-medium")
                     if generation is None:
-                        ui.label("暂无生成候选。完成一次实际生成后，可在这里查看候选与诊断。").classes("text-sm text-gray-500")
                         return True
                     summary = generation_summary(generation)
                     ui.label(f'{summary["created_at"]} · {summary["channel"]} · {summary["status"]}').classes("text-sm text-gray-500")
@@ -434,7 +432,6 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
                         value=plan.get("environment_id"), label="采集环境（可选）", clearable=True,
                     ).props("outlined dense").classes("w-full")
                     plugins = ui.select(list(catalog["manifests"]), value=plan.get("plugin_ids", []), label="所用插件", multiple=True).props("outlined dense use-chips").classes("w-full")
-                    ui.label("所选插件用于规划材料与能力参考；能力目录仍按已安装插件动态提供。").classes("text-xs text-gray-500")
 
                     bind_draft(environment, "environment_id")
                     bind_draft(plugins, "plugin_ids")
