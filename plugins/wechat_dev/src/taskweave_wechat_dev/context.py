@@ -8,6 +8,8 @@ from .configuration import configuration
 from .bridge import require,mask,representations
 
 REQUEST=obj({'role':{'type':'string','minLength':1,'maxLength':256},'selectors':{'type':'array','items':{'type':'string','minLength':1,'maxLength':512},'maxItems':20},'paths':{'type':'array','items':{'type':'string','minLength':1,'maxLength':256},'minItems':1,'maxItems':20},'screenshot':{'type':'boolean'}})
+REQUEST['x-taskweave-context-form'] = {'rows': [['$provider', '$session', 'role', 'screenshot', '$preview'], ['selectors'], ['paths']]}
+
 async def collect_page(provider_id,ctx,request,*,include_view=True):
  from jsonschema import Draft202012Validator
  request=request or {};require(provider_id=='wechat_dev.page' and Draft202012Validator(REQUEST).is_valid(request),'WECHAT_CONTEXT_INVALID')

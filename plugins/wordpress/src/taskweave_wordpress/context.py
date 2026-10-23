@@ -6,6 +6,8 @@ from .commands import require
 from jsonschema import Draft202012Validator
 
 CONTEXT_INPUT=obj({'role':COMMON['role'],'limit':{'type':'integer','minimum':1,'maximum':20,'default':5},'max_output_bytes':COMMON['max_output_bytes']})
+CONTEXT_INPUT['x-taskweave-context-form'] = {'rows': [['$provider', '$session', 'role', 'limit', 'max_output_bytes', '$preview']]}
+
 
 async def collect_site(provider_id,ctx,request,*,include_view=True):
     require(provider_id=='wordpress.site','CONTEXT_PROVIDER_UNAVAILABLE')

@@ -77,6 +77,12 @@ class SequenceUseCases:
         return self.repository.delete_definition(sequence_id, expected_revision)
 
     def start(self, sequence_id, request_id, inputs):
+        started = self.prepare_start(sequence_id, request_id, inputs)
+        self.driver.wake(started["sequence_run_id"])
+        return started
+
+    def prepare_start(self, sequence_id, request_id, inputs):
+        """Create the durable launch without waking a worker before outer commit."""
         previous = self.repository.replay_start(sequence_id, request_id, inputs)
         if previous:
             return previous
@@ -87,7 +93,6 @@ class SequenceUseCases:
         environment_hashes = {node["node_id"]: fingerprint(self.environments.environment(node["environment_id"])) for node in definition["nodes"]}
         started = self.repository.create_run(sequence_id, request_id, inputs, task_hashes, environment_hashes,
                                              self.registry.versions, expected_revision=definition["revision"])
-        self.driver.wake(started["sequence_run_id"])
         return started
 
     def run_get(self, sequence_run_id):

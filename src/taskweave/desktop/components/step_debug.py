@@ -94,7 +94,6 @@ class StepDebugSession:
             dialog.on("hide", lambda: setattr(self, "flow_dialog_open", False))
             ui.label("从选定步骤调试到当前步骤").classes("text-lg")
             start = ui.select({step["step_id"]: f"{i + 1}. {step['name']}" for i, step in enumerate(eligible)}, value=eligible[0]["step_id"], label="开始步骤").classes("w-full")
-            ui.label("默认从第一步开始。使用上方环境和本次输入，按本次调试结果传递依赖。").classes("text-gray-500")
 
             async def launch():
                 if self.identity() != identity:
@@ -176,7 +175,6 @@ class StepDebugSession:
             return
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
             ui.label("调试有效输入").classes("text-lg")
-            ui.label("前序结果依赖在此填写实际值；调试不会执行其他步骤。")
             environment = await self.environment_select()
             if self.identity() != identity:
                 return
@@ -311,12 +309,10 @@ class StepDebugPanel:
                         following.disable()
         with self.trial_area:
             if self.debug_round_fresh():
-                ui.label("AI 修复上下文已清空。调试实例、插件资源和运行记录继续保留。")
                 return
             await self.pending_inputs(run)
             if not self._current(identity, run_id): return
             if not run_id:
-                ui.label("暂无调试记录。修改后请重新调试，再确认保存。")
                 return
             ui.label("调试状态：" + STATUS.get(run["status"], run["status"]))
             steps = await self.controller.call("step.list", task_id=task_id)
@@ -338,7 +334,6 @@ class StepDebugPanel:
                         if error.code != "OUTPUT_NOT_AVAILABLE":
                             raise
                         if not self._current(identity, run_id): return
-                        ui.label("本步骤无业务数据输出；成功状态与文件结果不受影响。").classes("text-sm text-gray-500")
                     else:
                         if not self._current(identity, run_id): return
                         ui.textarea("业务数据输出", value=document_text(value)).props("readonly rows=6").classes("w-full font-mono")
@@ -355,7 +350,6 @@ class StepDebugPanel:
                 self.state.feedback = feedback
                 self.state.feedback_run_id = run_id
                 with ui.expansion("本次报错上下文", icon="error_outline").classes("w-full border rounded"):
-                    ui.label("下列内容默认提供给 AI；删除只影响本轮 AI 请求，不删除运行记录。").classes("text-sm text-gray-500")
                     for key, title in [("executed_step_content","本次实际执行的步骤内容"),("failed_action","失败动作"),("failure_snapshots","失败快照")]:
                         value = feedback.get(key)
                         if key in self.state.removed_feedback or not value: continue

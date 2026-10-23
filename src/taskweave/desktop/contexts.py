@@ -3,18 +3,20 @@
 import asyncio
 from datetime import datetime
 import json
+from urllib.parse import urlsplit, urlunsplit
 
 from nicegui import ui
 from taskweave.core.context_collection import capture_ai_payload
 
 from taskweave.core.validation import TaskError
 from taskweave.infrastructure.privacy import redact, redact_collected_context
+from taskweave.desktop.forms import compact_field
 
 
 async def show_context_preview(title, capture, renderers, render_result, *,
                                redact_on_display=True, is_active=lambda: True,
                                register_dialog=None):
-    """One read-only preview for saved and staged planning/step captures."""
+    """Read-only evidence preview for saved and staged captures."""
     visible = redact_collected_context(capture, renderers) if redact_on_display else capture
     views, items = visible.get("views", []), visible.get("items", [])
     with ui.dialog() as dialog, ui.card().classes("tw-context-preview-dialog"):
@@ -42,27 +44,11 @@ async def show_context_preview(title, capture, renderers, render_result, *,
                     ui.code(json.dumps(items, ensure_ascii=False, indent=2), language="json").classes("w-full tw-code")
             if not views and not items:
                 ui.label("暂无可预览的内容").classes("text-gray-500")
-        with ui.row().classes("tw-context-preview-footer w-full justify-end"):
+        with ui.row().classes("tw-context-preview-footer w-full items-center justify-end gap-3"):
             ui.button("关闭", on_click=dialog.close).props("outline")
     if is_active():
         dialog.open()
     return dialog
-
-
-def edit_draft_notes(entry, refresh):
-    with ui.context.client.layout:
-        with ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
-            ui.label("编辑采集项").classes("text-lg font-semibold")
-            title = ui.input("标题", value=entry.get("label", "")).classes("w-full")
-            notes = ui.textarea("操作说明", value=entry.get("operation_notes", "")).classes("w-full").props("rows=8 outlined")
-            def save():
-                entry.update(label=title.value or "", operation_notes=notes.value or "")
-                refresh()
-                dialog.close()
-            with ui.row().classes("w-full justify-end"):
-                ui.button("取消", on_click=dialog.close).props("flat")
-                ui.button("保存", on_click=save)
-    dialog.open()
 
 
 def render_preview_attachments(exported):
@@ -72,34 +58,134 @@ def render_preview_attachments(exported):
                   on_click=lambda _e=None, value=item: ui.download.content(
                       base64.b64decode(value["data"]), filename=value["name"],
                       media_type=value["mime_type"])).props("flat dense")
-    if exported.get("attachments"):
-        ui.label("请将这些图片与提示词一起上传到网页 Chat。").classes("text-sm text-gray-500")
 
 
-def render_context_draft_rows(draft, preview, refresh):
-    """Shared presentation for modal-only captures; mutations stay in the draft."""
-    if not draft.entries:
-        ui.label("当前没有保留项；已有组可以保存为空组。").classes("tw-context-empty w-full text-sm text-gray-500")
-    for index, entry in enumerate(draft.entries):
-        with ui.row().classes("tw-context-staged-row w-full items-center gap-2 flex-wrap"):
+def context_capture_summary(entry, *, redact_on_display=True):
+    """Use collected page metadata; keep URL credentials and queries out of summaries."""
+    title, url, source = "", "", ""
+    for item in entry.get("capture", {}).get("items", []):
+        source = source or item.get("source", "")
+        if item.get("source") != "playwright.page":
+            continue
+        try:
+            data = json.loads(item.get("content", ""))
+        except (ValueError, TypeError):
+            continue
+        if isinstance(data, dict):
+            title = data.get("title") if isinstance(data.get("title"), str) else ""
+            url = data.get("url") if isinstance(data.get("url"), str) else ""
+            break
+    if url:
+        try:
+            parsed = urlsplit(url)
+            url = urlunsplit((parsed.scheme, parsed.netloc.rsplit("@", 1)[-1], parsed.path, "", ""))
+        except ValueError:
+            url = ""
+    summary = url or source
+    return (redact(title), redact(summary)) if redact_on_display else (title, summary)
+
+
+def _render_context_draft_row(draft, entry, index, preview, refresh, *, redact_on_display):
+    page_title, source = context_capture_summary(entry, redact_on_display=False)
+    if redact_on_display:
+        source = redact(source)
+    if entry.get("is_new") and page_title and entry.get("label") in {"", "playwright.page"}:
+        entry["label"] = page_title
+    with ui.column().classes("tw-context-staged-row w-full gap-0"):
+        with ui.row().classes("tw-context-staged-header w-full items-start gap-2"):
             ui.label(str(index + 1)).classes("tw-context-index")
-            label = ui.input("采集项标题", value=entry.get("label") or f"采集 {index + 1}").props("dense outlined").classes("tw-context-staged-label")
-            label.on_value_change(lambda event, item=entry: item.update(label=event.value or ""))
-            captured_at = entry.get("captured_at")
-            saved_time = context_capture_time(captured_at)
-            status = "本次新采集" if entry.get("is_new") else (f"已保存 · {saved_time}" if saved_time else "已保存")
-            ui.label(status).classes("tw-context-capture-meta").tooltip(str(captured_at) if captured_at else status)
-            ui.button("预览", icon="visibility", on_click=lambda _event=None, item=entry: preview(item)).props("flat dense")
-            ui.button((entry.get("operation_notes") or "＋ 添加操作说明")[:60],
-                      on_click=lambda _e=None, item=entry: edit_draft_notes(item, refresh)).props("flat dense").classes("w-full justify-start")
-            ui.checkbox("发送上下文预览给 AI", value=bool(entry.get("send_preview")),
-                        on_change=lambda event, item=entry: item.update(send_preview=event.value)).set_enabled(
-                            bool(entry.get("has_preview") or entry.get("capture", {}).get("views")))
-            with ui.button(icon="more_horiz").props("flat dense aria-label=暂存采集项更多"):
-                with ui.menu():
-                    ui.menu_item("上移", on_click=lambda _event=None, item=entry: (draft.move(item, "up"), refresh())).set_enabled(index > 0)
-                    ui.menu_item("下移", on_click=lambda _event=None, item=entry: (draft.move(item, "down"), refresh())).set_enabled(index < len(draft.entries) - 1)
-                    ui.menu_item("删除采集项", on_click=lambda _event=None, item=entry: (draft.remove(item), refresh())).props("class=text-red-7")
+            title_area = ui.column().classes("tw-context-staged-identity gap-0")
+
+            def render_title():
+                title_area.clear()
+                with title_area:
+                    title = entry.get("label") or f"采集 {index + 1}"
+                    ui.button(redact(title) if redact_on_display else title, on_click=edit_title).props(
+                        "flat dense icon-right=edit").classes("tw-context-staged-title")
+
+            def edit_title():
+                original_title = entry.get("label") or ""
+                title_area.clear()
+                with title_area:
+                    control = ui.input("采集项标题", value=entry.get("label") or "").props(
+                        "dense outlined autofocus").classes("w-full").bind_value(entry, "label")
+                finished = False
+
+                def finish(save=True):
+                    nonlocal finished
+                    if finished:
+                        return
+                    finished = True
+                    if save:
+                        entry["label"] = (control.value or "").strip() or original_title
+                    else:
+                        entry["label"] = original_title
+                    render_title()
+                control.on("keydown.enter", lambda: finish())
+                control.on("keydown.escape", lambda: finish(False))
+                control.on("blur", lambda: finish())
+            render_title()
+            with ui.row().classes("tw-context-staged-tools items-center gap-1"):
+                saved_time = context_capture_time(entry.get("captured_at"))
+                status = "本次采集" if entry.get("is_new") else (f"已保存 · {saved_time}" if saved_time else "已保存")
+                ui.label(status).classes("tw-context-staged-status")
+                with ui.row().classes("tw-context-preview-choice items-center gap-1"):
+                    ui.button("预览", icon="visibility", on_click=lambda: preview(entry)).props("flat dense")
+                    ui.checkbox("携带预览").props("dense").bind_value(entry, "send_preview").set_enabled(
+                        bool(entry.get("has_preview") or entry.get("capture", {}).get("views")))
+                with ui.button(icon="more_horiz").props("flat round dense aria-label=暂存采集项更多"):
+                    with ui.menu():
+                        ui.menu_item("上移", on_click=lambda: (draft.move(entry, "up"), refresh())).set_enabled(index > 0)
+                        ui.menu_item("下移", on_click=lambda: (draft.move(entry, "down"), refresh())).set_enabled(index < len(draft.entries) - 1)
+                        ui.menu_item("删除采集项", on_click=lambda: (draft.remove(entry), refresh())).props("class=text-red-7")
+        notes_area = ui.column().classes("tw-context-staged-notes w-full gap-0")
+
+        def render_notes():
+            notes_area.clear()
+            with notes_area:
+                notes = entry.get("operation_notes") or ""
+                with ui.row().classes("tw-context-staged-meta w-full items-center gap-2 flex-nowrap"):
+                    if source:
+                        ui.label(source).classes("tw-context-staged-source grow min-w-0").tooltip(source)
+                    else:
+                        ui.space()
+                    with ui.row().classes("tw-context-note-actions items-center gap-1"):
+                        if len(notes) > 70 or "\n" in notes:
+                            def toggle_notes(event):
+                                expanded = "tw-context-note-expanded" not in text.classes
+                                text.classes(toggle="tw-context-note-expanded")
+                                event.sender.text = "收起" if expanded else "展开"
+                            ui.button("展开", on_click=toggle_notes).props("flat dense")
+                        ui.button("编辑说明", on_click=edit_notes).props("flat dense")
+                if notes:
+                    text = ui.label(notes).classes("tw-context-staged-note-text w-full")
+
+        def edit_notes():
+            original_notes = entry.get("operation_notes") or ""
+            notes_area.clear()
+            with notes_area:
+                control = ui.textarea("操作说明", value=entry.get("operation_notes") or "").props(
+                    "outlined autogrow autofocus").classes("w-full").bind_value(entry, "operation_notes")
+                def cancel():
+                    entry["operation_notes"] = original_notes
+                    render_notes()
+                def save():
+                    entry["operation_notes"] = (control.value or "").strip()
+                    render_notes()
+                with ui.row().classes("w-full justify-end gap-2"):
+                    ui.button("取消", on_click=cancel).props("flat dense")
+                    ui.button("完成", on_click=save).props("unelevated dense")
+        render_notes()
+
+
+def render_context_draft_rows(draft, preview, refresh, *, scroll_target=None, redact_on_display=True):
+    """Shared compact cards; edits and preview choices stay in the collection draft."""
+    for index, entry in enumerate(draft.entries):
+        _render_context_draft_row(draft, entry, index, preview, refresh, redact_on_display=redact_on_display)
+    if scroll_target is not None and scroll_target.client.has_socket_connection:
+        ui.run_javascript(
+            f'requestAnimationFrame(() => document.getElementById("c{scroll_target.id}")?.scrollIntoView({{block: "nearest"}}))'
+        )
 
 
 def context_capture_time(value):
@@ -226,8 +312,9 @@ class ContextCards:
                         if self.delete_capture:
                             ui.menu_item("删除采集项", on_click=lambda _event=None, g=group, c=capture: self.remove_capture(g, c)).props("class=text-red-7")
             if self.update_capture:
-                ui.button((capture.get("operation_notes") or "＋ 添加操作说明")[:80],
-                          on_click=lambda: self.edit_capture_label(group, capture)).props("flat dense").classes("tw-capture-notes-button w-full")
+                with ui.row().classes("w-full items-start gap-2 flex-nowrap"):
+                    ui.label(capture.get("operation_notes") or "").classes("tw-context-staged-note-text")
+                    ui.button("编辑说明", on_click=lambda: self.edit_capture_label(group, capture)).props("flat dense")
                 async def toggle_preview(event):
                     if event.value == bool(capture.get("send_preview")):
                         return
@@ -242,7 +329,7 @@ class ContextCards:
                     finally:
                         if not event.sender.is_deleted:
                             event.sender.enable()
-                ui.checkbox("发送上下文预览给 AI", value=bool(capture.get("send_preview")),
+                ui.checkbox("携带预览", value=bool(capture.get("send_preview")),
                             on_change=toggle_preview).set_enabled(bool(capture.get("has_preview") or capture.get("views")))
             preview = self.capture_preview(capture)
             if preview:
@@ -275,7 +362,7 @@ class ContextCards:
             ui.label(f'删除采集项“{capture.get("label") or "采集项"}”？')
             with ui.row().classes("w-full justify-end gap-2"):
                 ui.button("取消", on_click=lambda: dialog.submit(False)).props("outline")
-                ui.button("确认删除", on_click=lambda: dialog.submit(True)).props("text-color=red-7")
+                ui.button("确认删除", on_click=lambda: dialog.submit(True)).props("outline color=negative")
         if await dialog and self.is_active():
             await self.delete_capture(group, capture)
 
@@ -313,17 +400,20 @@ class ContextCards:
 class ContextTargetPicker:
     """NiceGUI controls bound to plain target/session selection."""
 
-    def __init__(self, load, options=None):
+    def __init__(self, load, options=None, *, compact=False):
         from taskweave.presentation.collection_form import TargetSelection
         self.load = load
         self.interaction = TargetSelection(options)
         self.options = self.interaction.options
         self.updating_selection = False
-        with ui.row().classes("w-full items-center flex-nowrap gap-2"):
+        label_container = ui.context.slot.parent
+        with ui.row().classes("tw-context-target-controls w-full items-center flex-nowrap gap-2"):
             self.select = ui.select({"": self.options["parameter_mode_label"]}, value="",
                 label=self.options["selector_label"], with_input=True).classes("grow min-w-0")
             self.refresh_button = ui.button(icon="refresh", on_click=self.refresh).props(
                 "outline dense aria-label=刷新上下文实例").classes("shrink-0").tooltip("刷新上下文实例")
+        if compact:
+            compact_field(self.select, label_container=label_container)
         self.select.on_value_change(self.selection_changed)
         self.note = ui.label().classes("text-xs text-gray-500")
         self.note.set_visibility(False)

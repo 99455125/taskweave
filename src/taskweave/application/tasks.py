@@ -26,6 +26,7 @@ class TaskUseCases:
         return self.tasks.create_task(name, input_schema, description)
 
     def get(self, task_id) -> TaskRecord: return self.tasks.task(task_id)
+    def definition_hash(self, task_id): return self.tasks.definition_hash(task_id)
     def flow(self, task_id): return self.tasks.flow(task_id)
     def describe_flow(self, task_id):
         return {"flow": self.tasks.flow(task_id),

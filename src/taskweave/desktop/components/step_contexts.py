@@ -10,7 +10,7 @@ from taskweave.desktop.contexts import (
     context_view_default,
 )
 from taskweave.desktop.display import execution_title
-from taskweave.desktop.forms import ValueForm
+from taskweave.desktop.forms import ValueForm, compact_field, arrange_context_fields
 from taskweave.presentation.collection_form import CollectionForm
 from taskweave.desktop.context_recording import collection_workspace, RecordingControls
 
@@ -202,238 +202,276 @@ class StepContextPanel:
 
         with ui.dialog() as dialog, ui.card().classes('tw-context-collection-dialog w-full max-w-5xl'):
             self._dialogs.append(dialog)
-            with ui.row().classes('w-full justify-between items-center'):
+            with ui.row().classes('tw-context-dialog-header w-full justify-between items-center'):
                 ui.label('编辑与采集上下文 · 步骤').classes('text-lg font-medium')
                 ui.button(icon='close',on_click=lambda:cancel()).props('flat round dense aria-label=关闭弹窗')
-            ui.label('修改先暂存，确认保存时整组一次提交；取消不会写入。').classes('tw-context-dialog-note w-full')
-            if provider_removed:
-                ui.label('步骤的插件能力已变化，原录制仍保留。可停止或丢弃；保存素材需恢复原插件能力。').classes('text-sm text-amber-700')
-            name = ui.input('上下文名称', value=workspace.fields.get('name',initial_name)).classes('w-full')
-            bind_field('name', name)
-            notes = ui.textarea('操作说明（可选）', value=workspace.fields.get('notes',initial_notes)).props('autogrow').classes('w-full')
-            bind_field('notes', notes)
-            staged_title = ui.label().classes('font-medium')
-            staged_area = ui.column().classes('w-full gap-2')
-            deleted_area = ui.column().classes('w-full gap-1')
-            initial_provider = existing.get('provider_id') if existing and existing.get('provider_id') in ids else ids[0]
-            provider = ui.select(ids, label='插件上下文', value=retained_provider or workspace.fields.get('provider',initial_provider)).classes('w-full')
-            bind_field('provider', provider)
-            if existing and existing.get('context_id'): provider.disable()
-            run_options = {'': '独立观察（不使用运行会话）'}
-            runs = await self.controller.call('run.context.sessions', task_id=target_task_id)
-            if not current():
-                dialog.close()
-                return
-            eligible_runs, initial_run, missing_retained = form_state.run_choices(
-                runs, (workspace.recording.options.get('run_id') or '') if retained_provider else None,
-                initial=(existing or {}).get('source_session_id', ''))
-            run_options.update({r['run_id']: execution_title(r) + ' · ' + STATUS[r['status']] for r in eligible_runs})
-            if missing_retained:
-                run_options[initial_run] = '原录制会话 · ' + initial_run[:8]
-            run = ui.select(run_options, label='观察会话（可选）', value=initial_run).classes('w-full')
-            bind_field('run', run)
-            target_area = ui.column().classes('w-full gap-1')
-            target_state = {'picker': None}
-            request_forms, request_groups = {}, {}
-            for identifier in ids:
-                schema = request_schemas.get(identifier, {'type':'object','properties':{}})
-                if existing and identifier == initial_provider:
-                    schema = copy.deepcopy(schema)
-                    for key, value in existing.get('request', {}).items():
-                        if key in schema.get('properties', {}):
-                            schema['properties'][key]['default'] = value
-                with ui.column().classes('w-full') as group:
-                    request_forms[identifier] = ValueForm(schema)
-                request_groups[identifier] = group
-                bind_form(identifier, request_forms[identifier], schema)
+            with ui.column().classes('tw-context-collection-body w-full'):
+                if provider_removed:
+                    ui.label('步骤的插件能力已变化，原录制仍保留。可停止或丢弃；保存素材需恢复原插件能力。').classes('text-sm text-amber-700')
+                with ui.row().classes('tw-context-basics w-full items-start'):
+                    name = ui.input('上下文名称', value=workspace.fields.get('name',initial_name)).classes('w-full')
+                    bind_field('name', name)
+                    notes = ui.textarea('操作说明（可选）', value=workspace.fields.get('notes',initial_notes)).props('autogrow').classes('w-full')
+                    bind_field('notes', notes)
 
-            def update_request_form(_=None):
-                picker=target_state['picker']
-                for identifier,group in request_groups.items():
-                    group.set_visibility(identifier == workspace.fields['provider'])
-                    request_forms[identifier].hide_fields(context_hidden_parameters(request_schemas.get(identifier,{}),identifier == workspace.fields['provider'] and picker is not None and not picker.uses_parameters))
+                staged_title = ui.label().classes('font-medium')
+                staged_area = ui.column().classes('w-full gap-2')
+                deleted_area = ui.column().classes('w-full gap-1')
+                capture_actions = ui.row().classes('tw-context-collection-actions w-full items-end gap-3 flex-wrap')
+                rendered_count = len(draft.entries)
 
-            async def load_targets():
-                return await self.controller.call('context.targets', step_id=saved['step_id'], provider_id=workspace.fields['provider'], run_id=workspace.fields['run'] or None)
+                with ui.column().classes('tw-context-parameters w-full'):
+                    ui.label('采集参数').classes('tw-context-parameter-heading')
 
-            async def select_provider(_=None):
-                selected=workspace.fields.get('target',(existing or {}).get('request',{}).get('target_id'))
-                if not current():
-                    dialog.close()
-                    return
-                target_area.clear(); options=context_target_options(request_schemas.get(workspace.fields['provider'],{})); target_state['picker']=None; form_state.target=None
-                if options and not workspace.recording.pending and workspace.fields['provider'] in available_providers:
-                    with target_area: picker=ContextTargetPicker(load_targets,options)
-                    target_state['picker']=picker; form_state.target=picker.interaction
-                    picker.select.on_value_change(lambda event: form_state.change('target', event.value))
-                    picker.select.on_value_change(update_request_form); await picker.refresh()
+                    initial_provider = existing.get('provider_id') if existing and existing.get('provider_id') in ids else ids[0]
+                    selectors = ui.row().classes("tw-context-param-selectors tw-context-param-step w-full")
+                    with selectors, ui.column().classes("tw-context-param-field w-full gap-0") as provider_field:
+                        provider = ui.select(ids, label='插件上下文', value=retained_provider or workspace.fields.get('provider',initial_provider)).classes('w-full')
+                        compact_field(provider)
+                    bind_field('provider', provider)
+                    if existing and existing.get('context_id'): provider.disable()
+                    run_options = {'': '独立观察（不使用运行会话）'}
+                    runs = await self.controller.call('run.context.sessions', task_id=target_task_id)
                     if not current():
                         dialog.close()
                         return
-                    if selected and selected in picker.targets: picker.select.value=selected
-                update_request_form()
+                    eligible_runs, initial_run, missing_retained = form_state.run_choices(
+                        runs, (workspace.recording.options.get('run_id') or '') if retained_provider else None,
+                        initial=(existing or {}).get('source_session_id', ''))
+                    run_options.update({r['run_id']: execution_title(r) + ' · ' + STATUS[r['status']] for r in eligible_runs})
+                    if missing_retained:
+                        run_options[initial_run] = '原录制会话 · ' + initial_run[:8]
+                    with selectors, ui.column().classes("tw-context-param-field w-full gap-0") as run_field:
+                        run = ui.select(run_options, label='观察会话（可选）', value=initial_run).classes('w-full')
+                        compact_field(run)
+                    bind_field('run', run)
+                    with selectors:
+                        target_area = ui.column().classes('tw-context-param-target w-full gap-0')
+                    target_state = {'picker': None}
+                    host_fields = {'$provider': provider_field, '$session': run_field, '$target': target_area}
+                    selectors.set_visibility(False)
+                    request_forms, request_groups = {}, {}
+                    for identifier in ids:
+                        schema = request_schemas.get(identifier, {'type':'object','properties':{}})
+                        if existing and identifier == initial_provider:
+                            schema = copy.deepcopy(schema)
+                            for key, value in existing.get('request', {}).items():
+                                if key in schema.get('properties', {}):
+                                    schema['properties'][key]['default'] = value
+                        with ui.column().classes('tw-context-request-grid w-full') as group:
+                            request_forms[identifier] = ValueForm(schema, compact=True)
+                        request_groups[identifier] = group
+                        bind_form(identifier, request_forms[identifier], schema)
 
-            async def refresh_targets(_=None):
-                if not current():
-                    dialog.close()
-                    return
-                if target_state['picker'] and not workspace.recording.pending:
-                    await target_state['picker'].refresh()
-                    if not current():
-                        dialog.close()
-                        return
+                    def update_request_form(_=None):
+                        picker=target_state['picker']
+                        for identifier,group in request_groups.items():
+                            group.set_visibility(identifier == workspace.fields['provider'])
+                            request_forms[identifier].hide_fields(context_hidden_parameters(request_schemas.get(identifier,{}),identifier == workspace.fields['provider'] and picker is not None and not picker.uses_parameters))
+
+                        selected = workspace.fields['provider']
+                        selected_schema = request_schemas.get(selected, {})
+                        hidden = context_hidden_parameters(selected_schema, picker is not None and not picker.uses_parameters)
+                        active_host = dict(host_fields)
+                        if not context_target_options(selected_schema):
+                            active_host.pop('$target', None)
+                        if context_view_default(selected_schema) is None:
+                            active_host.pop('$preview', None)
+                        arrange_context_fields(selected_schema, request_groups[selected], request_forms[selected], active_host, hidden)
+
+                    async def load_targets():
+                        return await self.controller.call('context.targets', step_id=saved['step_id'], provider_id=workspace.fields['provider'], run_id=workspace.fields['run'] or None)
+
+                    async def select_provider(_=None):
+                        selected=workspace.fields.get('target',(existing or {}).get('request',{}).get('target_id'))
+                        if not current():
+                            dialog.close()
+                            return
+                        target_area.clear(); options=context_target_options(request_schemas.get(workspace.fields['provider'],{})); target_state['picker']=None; form_state.target=None
+                        target_area.set_visibility(bool(options))
+                        if options and not workspace.recording.pending and workspace.fields['provider'] in available_providers:
+                            with target_area: picker=ContextTargetPicker(load_targets,options,compact=True)
+                            target_state['picker']=picker; form_state.target=picker.interaction
+                            picker.select.on_value_change(lambda event: form_state.change('target', event.value))
+                            picker.select.on_value_change(update_request_form); await picker.refresh()
+                            if not current():
+                                dialog.close()
+                                return
+                            if selected and selected in picker.targets: picker.select.value=selected
+                        update_request_form()
+
+                    async def refresh_targets(_=None):
+                        if not current():
+                            dialog.close()
+                            return
+                        if target_state['picker'] and not workspace.recording.pending:
+                            await target_state['picker'].refresh()
+                            if not current():
+                                dialog.close()
+                                return
+                            update_request_form()
+                    provider.on_value_change(select_provider); run.on_value_change(refresh_targets); await select_provider()
+                    view_default=context_view_default(request_schemas.get(workspace.fields['provider'],{})); view_state={'supported':view_default is not None}
+                    include_view=ui.checkbox('同时生成预览',value=workspace.fields.get('include_view',(existing or {}).get('include_view',view_default is True))); include_view.set_visibility(view_state['supported'])
+                    include_view.props('dense').classes('tw-context-param-preview')
+                    host_fields['$preview'] = include_view
                     update_request_form()
-            provider.on_value_change(select_provider); run.on_value_change(refresh_targets); await select_provider()
-            view_default=context_view_default(request_schemas.get(workspace.fields['provider'],{})); view_state={'supported':view_default is not None}
-            include_view=ui.checkbox('同时生成预览',value=workspace.fields.get('include_view',(existing or {}).get('include_view',view_default is True))); include_view.set_visibility(view_state['supported'])
-            bind_field('include_view', include_view)
-            def update_view_option(_=None):
-                value=context_view_default(request_schemas.get(workspace.fields['provider'],{})); view_state['supported']=value is not None; include_view.set_visibility(view_state['supported'])
-                if not existing: include_view.value=value is True
-            provider.on_value_change(update_view_option)
-            advanced_values=context_advanced_overrides(request_schemas.get(initial_provider,{}),(existing or {}).get('request',{}))
-            with ui.expansion('高级参数 JSON（可选）',icon='tune').classes('w-full border rounded'):
-                advanced=ui.textarea('JSON 对象',value=workspace.fields.get('advanced',json.dumps(advanced_values,ensure_ascii=False,indent=2))).classes('w-full')
+                    bind_field('include_view', include_view)
+                    def update_view_option(_=None):
+                        update_request_form()
+                        value=context_view_default(request_schemas.get(workspace.fields['provider'],{})); view_state['supported']=value is not None; include_view.set_visibility(view_state['supported'])
+                        if not existing: include_view.value=value is True
+                    provider.on_value_change(update_view_option)
+                    advanced_values=context_advanced_overrides(request_schemas.get(initial_provider,{}),(existing or {}).get('request',{}))
+                    with ui.expansion('高级参数 JSON',icon='tune').props('dense').classes('tw-context-advanced w-full'):
+                        advanced=ui.textarea('JSON 对象',value=workspace.fields.get('advanced',json.dumps(advanced_values,ensure_ascii=False,indent=2))).classes('w-full')
 
-            bind_field('advanced', advanced)
+                    bind_field('advanced', advanced)
 
-            async def preview_item(entry):
-                if not current():
-                    dialog.close()
-                    return
-                capture=entry['capture'] if entry.get('is_new') else await self.controller.call('context.capture.get',context_id=existing['context_id'],capture_id=entry['capture_id'],step_id=target_step_id)
-                if not current():
-                    dialog.close()
-                    return
-                await show_context_preview(entry.get('label') or '采集项', capture,
-                    self.controller.result_renderers, self.render_result_view,
-                    redact_on_display=self.controller.privacy_settings()['redact_on_display'],
-                    is_active=current, register_dialog=self._dialogs.append)
-
-            def render_staged():
-                if not current(): return
-                staged_area.clear(); deleted_area.clear()
-                with staged_area:
-                    render_context_draft_rows(draft, preview_item, render_staged)
-                if draft.deleted:
-                    with deleted_area:
-                        ui.label('待删除（可撤销）').classes('text-xs text-gray-500')
-                        for entry in draft.deleted:
-                            with ui.row().classes('items-center gap-2'):
-                                ui.label(entry.get('label') or '采集项')
-                                ui.button('撤销删除',on_click=lambda item=entry:(draft.undo_delete(item),render_staged())).props('flat dense')
-            render_staged()
-
-            async def collect():
-                if workspace.busy or workspace.recording.committed: return
-                if not current():
-                    dialog.close()
-                    return
-                workspace.busy=True
-                recording_controls.sync()
-                try:
-                    options, selected_view = form_state.start_options(environment_id=self.environment_id(), step=True)
-                    capture = await self.controller.call('context.read', step_id=target_step_id,
-                        **{**options, 'environment_id': self.environment_id() or None}, include_view=selected_view)
+                async def preview_item(entry):
                     if not current():
                         dialog.close()
                         return
-                    label=(capture.get('items') or [{}])[0].get('source') or f'采集 {len(draft.entries)+1}'
-                    draft.append(capture, options['request'], selected_view, options['run_id'], source_page, label)
-                    render_staged(); ui.notify(f'已暂存采集项：{label}，可继续采集',type='positive')
-                except Exception as exc: ui.notify(f'采集失败，暂存内容仍保留：{exc}',type='negative')
-                finally:
-                    workspace.busy=False
-                    if not dialog.is_deleted: recording_controls.sync()
+                    capture=entry['capture'] if entry.get('is_new') else await self.controller.call('context.capture.get',context_id=existing['context_id'],capture_id=entry['capture_id'],step_id=target_step_id)
+                    if not current():
+                        dialog.close()
+                        return
+                    await show_context_preview(entry.get('label') or '采集项', capture,
+                        self.controller.result_renderers, self.render_result_view,
+                        redact_on_display=self.controller.privacy_settings()['redact_on_display'],
+                        is_active=current, register_dialog=self._dialogs.append)
 
-            async def cancel():
-                if workspace.busy: return
-                if workspace.recording.committed:
-                    ui.notify('上下文已保存，请重试确认保存完成录制确认；关闭弹窗会保留草稿。',type='warning')
-                    return
-                if not current():
-                    dialog.close()
-                    return
-                async def confirm_discard():
-                    with ui.dialog() as confirm, ui.card():
-                        self._dialogs.append(confirm)
-                        ui.label('关闭将丢弃本次未保存的编辑和采集项。')
-                        with ui.row():
-                            ui.button('继续编辑',on_click=lambda:confirm.submit(False)).props('outline')
-                            ui.button('丢弃并关闭',on_click=lambda:confirm.submit(True)).props('text-color=red-7')
-                    answer = await confirm
-                    if confirm in self._dialogs: self._dialogs.remove(confirm)
-                    return answer
-                if workspace.recording.pending:
-                    if not await confirm_discard(): return
-                elif not await self.may_discard_draft(draft, workspace.fields['name'], workspace.fields['notes'], initial_name, initial_notes, confirm_discard):
-                    return
-                if not current():
-                    dialog.close()
-                    return
-                try: await workspace.recording.discard()
-                except Exception as exc:
-                    ui.notify(f'丢弃失败，录制仍保留：{exc}',type='negative')
-                    return
-                workspace.forget()
-                dialog.close()
-                if dialog in self._dialogs: self._dialogs.remove(dialog)
+                def render_staged():
+                    nonlocal rendered_count
+                    if not current(): return
+                    staged_title.text = f"已采集 · {len(draft.entries)}"
+                    staged_area.clear(); deleted_area.clear()
+                    deleted_area.set_visibility(bool(draft.deleted))
+                    with staged_area:
+                        render_context_draft_rows(draft, preview_item, render_staged, scroll_target=capture_actions if len(draft.entries) > rendered_count else None,
+                                                  redact_on_display=self.controller.privacy_settings()["redact_on_display"])
+                    rendered_count = len(draft.entries)
+                    if draft.deleted:
+                        with deleted_area:
+                            ui.label('待删除（可撤销）').classes('text-xs text-gray-500')
+                            for entry in draft.deleted:
+                                with ui.row().classes('items-center gap-2'):
+                                    ui.label(entry.get('label') or '采集项')
+                                    ui.button('撤销删除',on_click=lambda item=entry:(draft.undo_delete(item),render_staged())).props('flat dense')
+                render_staged()
 
-            async def save_batch():
-                if workspace.busy: return
-                if not current():
-                    dialog.close()
-                    return
-                if existing and not workspace.recording.pending and not workspace.recording.committed and not draft.dirty and (workspace.fields['name'] or '') == initial_name and (workspace.fields['notes'] or '') == initial_notes:
+                async def collect():
+                    if workspace.busy or workspace.recording.committed: return
+                    if not current():
+                        dialog.close()
+                        return
+                    workspace.busy=True
+                    recording_controls.sync()
+                    try:
+                        options, selected_view = form_state.start_options(environment_id=self.environment_id(), step=True)
+                        capture = await self.controller.call('context.read', step_id=target_step_id,
+                            **{**options, 'environment_id': self.environment_id() or None}, include_view=selected_view)
+                        if not current():
+                            dialog.close()
+                            return
+                        label=(capture.get('items') or [{}])[0].get('source') or f'采集 {len(draft.entries)+1}'
+                        draft.append(capture, options['request'], selected_view, options['run_id'], source_page, label)
+                        render_staged(); ui.notify(f'已暂存采集项：{label}，可继续采集',type='positive')
+                    except Exception as exc: ui.notify(f'采集失败，暂存内容仍保留：{exc}',type='negative')
+                    finally:
+                        workspace.busy=False
+                        if not dialog.is_deleted: recording_controls.sync()
+
+                async def cancel():
+                    if workspace.busy: return
+                    if workspace.recording.committed:
+                        ui.notify('上下文已保存，请重试确认保存完成录制确认；关闭弹窗会保留草稿。',type='warning')
+                        return
+                    if not current():
+                        dialog.close()
+                        return
+                    async def confirm_discard():
+                        with ui.dialog() as confirm, ui.card().classes('tw-confirm-dialog'):
+                            self._dialogs.append(confirm)
+                            ui.label('丢弃未保存的内容？').classes('tw-confirm-title')
+                            ui.label('本次编辑和采集项将不会保存。').classes('tw-confirm-description')
+                            with ui.row().classes('tw-confirm-actions'):
+                                ui.button('继续编辑',on_click=lambda:confirm.submit(False)).props('outline').classes('tw-confirm-cancel')
+                                ui.button('丢弃并关闭',on_click=lambda:confirm.submit(True)).props('outline color=negative').classes('tw-confirm-danger')
+                        answer = await confirm
+                        if confirm in self._dialogs: self._dialogs.remove(confirm)
+                        return answer
+                    if workspace.recording.pending:
+                        if not await confirm_discard(): return
+                    elif not await self.may_discard_draft(draft, workspace.fields['name'], workspace.fields['notes'], initial_name, initial_notes, confirm_discard):
+                        return
+                    if not current():
+                        dialog.close()
+                        return
+                    try: await workspace.recording.discard()
+                    except Exception as exc:
+                        ui.notify(f'丢弃失败，录制仍保留：{exc}',type='negative')
+                        return
                     workspace.forget()
                     dialog.close()
-                    return
-                async def commit():
-                    return await self.save_batch(existing,workspace.fields['provider'],(workspace.fields['name'] or '').strip(),workspace.fields['notes'] or '',draft,
-                                          step_id=target_step_id,generation=generation,task_id=target_task_id)
-                async def save():
-                    await workspace.recording.persist(commit)
-                    workspace.forget()
-                    dialog.close(); ui.notify('上下文已保存',type='positive')
                     if dialog in self._dialogs: self._dialogs.remove(dialog)
-                await recording_controls.run(save)
 
-            def start_options():
-                if not current(): raise TaskError('CONTEXT_SESSION_CHANGED')
-                return form_state.start_options(environment_id=self.environment_id(), step=True)
+                async def save_batch():
+                    if workspace.busy: return
+                    if not current():
+                        dialog.close()
+                        return
+                    if existing and not workspace.recording.pending and not workspace.recording.committed and not draft.dirty and (workspace.fields['name'] or '') == initial_name and (workspace.fields['notes'] or '') == initial_notes:
+                        workspace.forget()
+                        dialog.close()
+                        return
+                    async def commit():
+                        return await self.save_batch(existing,workspace.fields['provider'],(workspace.fields['name'] or '').strip(),workspace.fields['notes'] or '',draft,
+                                              step_id=target_step_id,generation=generation,task_id=target_task_id)
+                    async def save():
+                        await workspace.recording.persist(commit)
+                        workspace.forget()
+                        dialog.close(); ui.notify('上下文已保存',type='positive')
+                        if dialog in self._dialogs: self._dialogs.remove(dialog)
+                    await recording_controls.run(save)
 
-            capture_control = None
-            def lock_inputs(locked):
-                for control in (provider,run,include_view,advanced):
-                    control.set_enabled(not locked and not (control is provider and existing and existing.get('context_id')))
-                for form in request_forms.values():
-                    for _,control in form.controls.values(): control.set_enabled(not locked)
-                picker=target_state['picker']
-                if picker: picker.select.set_enabled(not locked)
-                for control in (name,notes): control.set_enabled(not workspace.busy and not workspace.recording.committed)
-                if capture_control is not None:
-                    capture_control.set_enabled(workspace.fields['provider'] in available_providers and not workspace.busy and not workspace.recording.committed)
-                if workspace.recording.committed:
-                    for element in staged_area.descendants():
-                        if hasattr(element,'disable'): element.disable()
+                def start_options():
+                    if not current(): raise TaskError('CONTEXT_SESSION_CHANGED')
+                    return form_state.start_options(environment_id=self.environment_id(), step=True)
 
-            recording_controls=RecordingControls(workspace,dialog,start_options,lock_inputs,render_staged)
-            def recording_supported():
-                return workspace.fields['provider'] in available_providers and request_schemas.get(workspace.fields['provider'],{}).get('x-taskweave-context-recording') is True
-            recording_controls.sync(recording_supported())
-            provider.on_value_change(lambda _:recording_controls.sync(recording_supported()))
-            workspace.capture_fields = None
-            async def hidden():
-                if workspace.dialog is not dialog: return
-                try: await workspace.hide()
-                except Exception as exc: ui.notify(f'暂停录制失败，原实例仍保留：{exc}',type='negative')
-            dialog.on('hide',hidden)
-            workspace.dialog=dialog
+                capture_control = None
+                def lock_inputs(locked):
+                    for control in (provider,run,include_view,advanced):
+                        control.set_enabled(not locked and not (control is provider and existing and existing.get('context_id')))
+                    for form in request_forms.values():
+                        for _,control in form.controls.values(): control.set_enabled(not locked)
+                    picker=target_state['picker']
+                    if picker: picker.select.set_enabled(not locked)
+                    for control in (name,notes): control.set_enabled(not workspace.busy and not workspace.recording.committed)
+                    if capture_control is not None:
+                        capture_control.set_enabled(workspace.fields['provider'] in available_providers and not workspace.busy and not workspace.recording.committed)
+                    if workspace.recording.committed:
+                        for element in staged_area.descendants():
+                            if hasattr(element,'disable'): element.disable()
 
-            capture_control = self.button('采集一项',collect,primary=True)
-            recording_controls.sync()
-            ui.label('采集结果仅暂存在弹窗；确认保存后才会进入 AI 输入。浏览器等外部操作不会因取消自动回滚。').classes('text-xs text-gray-500')
-            with ui.row().classes('w-full justify-end gap-2'):
+                with capture_actions:
+                    recording_controls=RecordingControls(workspace,dialog,start_options,lock_inputs,render_staged)
+                def recording_supported():
+                    return workspace.fields['provider'] in available_providers and request_schemas.get(workspace.fields['provider'],{}).get('x-taskweave-context-recording') is True
+                recording_controls.sync(recording_supported())
+                provider.on_value_change(lambda _:recording_controls.sync(recording_supported()))
+                workspace.capture_fields = None
+                async def hidden():
+                    if workspace.dialog is not dialog: return
+                    try: await workspace.hide()
+                    except Exception as exc: ui.notify(f'暂停录制失败，原实例仍保留：{exc}',type='negative')
+                dialog.on('hide',hidden)
+                workspace.dialog=dialog
+
+                with capture_actions:
+                    capture_control = self.button('采集一项',collect,primary=True)
+                recording_controls.sync()
+            with ui.row().classes('tw-context-dialog-actions w-full justify-end gap-2'):
                 ui.button('取消',on_click=cancel).props('outline')
                 ui.button('确认保存',on_click=save_batch).props('unelevated color=primary')
         dialog.open()

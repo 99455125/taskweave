@@ -19,6 +19,7 @@ include = ["taskweave*"]
 
 [tool.setuptools.package-data]
 "taskweave.infrastructure" = ["sql/*.sql"]
+"taskweave.integration" = ["skill_assets/*.md", "skill_assets/references/*.md"]
 
 [project.optional-dependencies]
 browser = ["taskweave-playwright"]
@@ -33,6 +34,9 @@ wordpress = ["taskweave-wordpress"]
 uniapp = ["taskweave-uniapp"]
 wechat_dev = ["taskweave-wechat-dev"]
 gui = ["nicegui>=3,<4", "pywebview>=6,<7"]
+mcp = [
+    "mcp>=2.3,<3",
+]
 
 [dependency-groups]
 build = ["pyinstaller>=6.11,<7"]

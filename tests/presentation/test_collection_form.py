@@ -63,3 +63,35 @@ class RunSessionChoiceTests(unittest.TestCase):
         self.assertEqual([r['run_id'] for r in eligible], ['paused'])
         self.assertEqual((selected, retained), ('', False))
         self.assertEqual(form.run_choices(runs, 'gone')[1:], ('gone', True))
+
+
+class ContextFormLayoutTests(unittest.TestCase):
+    def rows(self, schema, visible):
+        from taskweave.presentation.forms import context_form_rows
+        return context_form_rows(schema, visible)
+
+    def test_plugin_order_weights_and_absent_host_controls(self):
+        schema = {'properties': {'table': {}, 'database': {}},
+                  'x-taskweave-context-form': {'rows': [
+                      ['$provider', {'field': 'table', 'width': 2}, 'database', '$preview']]}}
+        self.assertEqual(self.rows(schema, ['$provider', 'table', 'database', '$preview']),
+                         [[('$provider', 1), ('table', 2), ('database', 1), ('$preview', 1)]])
+        self.assertEqual(self.rows(schema, ['$provider', 'table']), [[('$provider', 1), ('table', 2)]])
+
+    def test_undeclared_fields_and_host_session_are_preserved(self):
+        schema = {'properties': {'old': {}, 'new': {}},
+                  'x-taskweave-context-form': {'rows': [['$provider', 'old']]}}
+        rows = self.rows(schema, ['$provider', '$session', 'old', 'new'])
+        self.assertEqual([key for row in rows for key, _ in row], ['$session', '$provider', 'old', 'new'])
+
+    def test_legacy_complex_fields_get_full_rows_without_url_special_case(self):
+        schema = {'properties': {'url': {'type': 'string'}, 'rows': {'type': 'array'}}}
+        rows = self.rows(schema, ['$provider', 'url', 'rows'])
+        self.assertEqual(rows, [[('$provider', 1), ('url', 1)], [('rows', 1)]])
+
+    def test_invalid_declarations_are_observable(self):
+        for rows in (None, [['missing']], [['a', 'a']], [[{'field': 'a', 'width': 0}]],
+                     [[{'field': 'a', 'width': True}]], [['$unknown']], [[]]):
+            with self.subTest(rows=rows), self.assertRaises(TaskError) as raised:
+                self.rows({'properties': {'a': {}}, 'x-taskweave-context-form': {'rows': rows}}, ['a'])
+            self.assertEqual(raised.exception.code, 'CONTEXT_FORM_LAYOUT_INVALID')

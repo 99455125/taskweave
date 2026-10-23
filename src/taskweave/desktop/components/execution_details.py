@@ -216,6 +216,7 @@ class ExecutionDetails:
                             ui.label(task["name"]).classes("text-lg font-medium")
                             ui.label(STATUS.get(run["status"], run["status"])).classes("text-sm text-gray-500")
                         with ui.row().classes("items-center gap-2"):
+                            self.button('查看验收', lambda rid=run['run_id']: self.controller.open_review('run', rid))
                             async def delete_selected(r=run):
                                 with ui.dialog() as dialog, ui.card():
                                     ui.label("删除这次执行及其日志、结果？其他执行和任务配置保留。")
@@ -469,7 +470,7 @@ class ExecutionDetails:
                             ui.icon("article").classes("text-blue-600")
                             with ui.column().classes("gap-0"):
                                 ui.label(f"{definition['steps'].index(step) + 1:02d} · {step['name']}").classes("text-lg font-semibold")
-                                ui.label("所选步骤 · 选择进度节点只查看详情，不会启动执行").classes("text-sm text-gray-500")
+                                ui.label("所选步骤").classes("text-sm text-gray-500")
                         ui.label(step_status).classes("tw-status " + ("tw-status-" + latest["status"].lower() if latest else "tw-status-ready"))
                     with ui.row().classes("w-full items-center justify-between gap-3 flex-wrap mt-3"):
                         ui.label(f"前置间隔：{step.get('delay_after_previous_seconds', 0)} 秒").classes("text-sm text-gray-500")

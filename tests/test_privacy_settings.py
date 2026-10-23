@@ -90,7 +90,7 @@ class PrivacySettingsTests(unittest.TestCase):
             fake_ui.card.return_value = card
 
             async def visible_capture_text():
-                with patch("taskweave.desktop.planning.ui", fake_ui):
+                with patch("taskweave.desktop.contexts.ui", fake_ui):
                     await page.show_context_preview(
                         "页面", {"items": [{"content": "password=abcd1234"}], "views": []}
                     )

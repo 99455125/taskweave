@@ -91,9 +91,6 @@ class SequencesPage(Page):
         with ui.row().classes("w-full items-end gap-2"):
             chooser = ui.select(task_options, label="添加任务", with_input=True).classes("min-w-60 grow")
             self.button("添加到末尾", lambda: self.add_node(chooser.value), icon="add")
-        if not draft.nodes:
-            ui.label("选择任务后按顺序添加。每个节点可以配置启动输入和前序输出映射。")\
-                .classes("text-gray-500")
         for index, node in enumerate(draft.nodes):
             with ui.card().classes("w-full gap-3"):
                 with ui.row().classes("w-full justify-between items-center"):
@@ -283,8 +280,6 @@ class SequencesPage(Page):
                         if member["run_id"]:
                             self.button("查看执行", lambda item=member: self.show_child(item["run_id"]), flat=True)
                 await self._run_controls(run)
-            else:
-                ui.label("保存并执行组合后，进度会显示在这里。").classes("text-gray-500")
 
     async def show_child(self, run_id):
         child = await self.controller.call("run.get", run_id=run_id)
@@ -298,6 +293,7 @@ class SequencesPage(Page):
         sequence_run_id = run["sequence_run_id"]
         status = run["status"]
         with ui.row().classes("gap-2 flex-wrap"):
+            self.button('查看验收', lambda: self.controller.open_review('sequence', sequence_run_id))
             if status in {"READY", "RUNNING"}:
                 self.button("暂停", lambda: self._control("sequence.pause", sequence_run_id))
                 self.button("取消", lambda: self._control("sequence.cancel", sequence_run_id))

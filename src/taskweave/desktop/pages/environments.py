@@ -115,13 +115,13 @@ class EnvironmentPage(Page):
                         return False
                     if decision_kind == 'allow':
                         return True
-                    with ui.dialog() as decision, ui.card():
-                        ui.label("环境配置有未保存修改")
-                        ui.label("保存后继续、舍弃修改，或继续编辑当前环境。")
-                        with ui.row().classes("gap-2 flex-wrap"):
-                            ui.button("保存更改", on_click=lambda: decision.submit("save")).props("outline")
-                            ui.button("舍弃更改", on_click=lambda: decision.submit("discard")).props("outline")
-                            ui.button("继续编辑", on_click=lambda: decision.submit("stay")).props("outline")
+                    with ui.dialog() as decision, ui.card().classes("tw-confirm-dialog"):
+                        ui.label("环境有未保存的更改").classes("tw-confirm-title")
+                        ui.label("切换前，可保存或丢弃本次更改。").classes("tw-confirm-description")
+                        with ui.row().classes("tw-confirm-actions"):
+                            ui.button("继续编辑", on_click=lambda: decision.submit("stay")).props("outline").classes("tw-confirm-cancel")
+                            ui.button("丢弃更改", on_click=lambda: decision.submit("discard")).props("outline color=negative").classes("tw-confirm-danger")
+                            ui.button("保存更改", on_click=lambda: decision.submit("save")).props("unelevated color=primary")
                     return await self.interaction.leave(form_identity, await decision)
 
                 self.prepare_leave = prepare_leave
@@ -162,14 +162,11 @@ class EnvironmentPage(Page):
                         self.button("删除环境", delete_selected, flat=True).props("icon=delete_outline outline dense").classes("tw-danger")
                 with ui.column().classes("tw-panel w-full gap-4"):
                     if selected is None and not self._creating:
-                        ui.label("选择一个环境，或新建环境配置变量。").classes("text-gray-500")
                         return
 
                     name = ui.input("环境名称", value=draft.name).props("outlined dense").classes("w-full")
                     name.on_value_change(lambda event: setattr(draft, 'name', event.value))
-                    ui.label("变量保存在 TaskWeave 本地配置，不修改系统环境变量。步骤通过 inputs[\"变量名\"] 引用；统一优先级为：步骤变量 > 任务变量 > 环境变量。").classes("text-sm text-gray-500")
                     ui.label("环境变量").classes("font-medium")
-                    ui.label("普通值直接填写；对象、数组、数字和布尔值支持 JSON。密钥仅保存 env: 引用，不保存明文。").classes("tw-info-note text-sm")
                     area = ui.column().classes("w-full gap-2")
                     def render_row(record):
                         secret = record.secret_reference is not None

@@ -40,7 +40,6 @@ class LiveRunLogs:
         self.button = ui.button('实时日志', on_click=self.toggle).props('flat')
         self.area = ui.column().classes('w-full min-w-0')
         with self.area:
-            ui.label('仅增量显示最近日志；完整内容可用查看 / 刷新日志及复制功能。').classes('text-xs text-gray-500')
             self.output = ui.textarea('实时日志').props('readonly rows=10').classes('w-full font-mono')
             self.status = ui.label().classes('text-xs text-gray-500')
         self.area.set_visibility(False)

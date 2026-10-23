@@ -81,7 +81,6 @@ class PluginsPage(Page):
             selected = next((plugin for plugin in installed if plugin["id"] == self.selected_plugin_id), None)
             with detail:
                 if selected is None:
-                    ui.label("选择一个插件查看能力和配置说明。").classes("text-gray-500")
                     return
                 name = selected["id"]
                 with ui.row().classes("tw-plugin-detail-heading w-full items-center justify-between gap-3 flex-wrap"):
@@ -134,7 +133,6 @@ class PluginsPage(Page):
                                 ui.label("调用示例").classes("font-medium mt-3")
                                 example = {key: f"<填写 {key}>" for key in spec.get("input_schema", {}).get("required", [])}
                                 ui.code("result = await ctx.call(" + repr(spec["id"]) + ", " + repr(example) + ")", language="python").classes("w-full")
-                                ui.label("示例占位值按参数类型与约束替换；页面不会执行动作。效果类别不代表不会改变页面或外部状态。" ).classes("text-sm text-gray-500")
                     else:
                         ui.label("插件未加载，暂无动作和工具契约。启用后可查看完整说明。").classes("text-sm text-gray-500")
                     requests = (manifest or {}).get("context_requests", {})
@@ -142,13 +140,11 @@ class PluginsPage(Page):
                         ui.label("采集能力").classes("font-medium mt-4")
                         for provider, schema in requests.items():
                             with ui.expansion(provider, icon="collections_bookmark").classes("tw-plugin-capability-card w-full"):
-                                ui.label("从插件提供方采集上下文证据；参数和目标选择规则如下。")
                                 ui.code(_document_text(schema), language="json").classes("w-full")
 
                 variables = (manifest or {}).get("config_variables", [])
                 with ui.card().classes("tw-plugin-section w-full"):
                     ui.label("配置变量").classes("text-lg font-semibold")
-                    ui.label("在环境或任务参数中维护，任务参数优先；此处仅展示插件声明。").classes("text-sm text-gray-500")
                     if variables:
                         rows = [[v["key"], v.get("type", "未知"), "是" if v.get("required") else "否", _document_text(v["default"]) if "default" in v else "未声明", v.get("description", "")] for v in variables]
                         ui.table(columns=[{"name": key, "label": label, "field": key, "align": "left"} for key, label in [("key", "变量"), ("type", "类型"), ("required", "必填"), ("default", "默认值"), ("description", "说明")]], rows=[dict(zip(("key", "type", "required", "default", "description"), row)) for row in rows]).classes("w-full tw-plugin-config-table")
@@ -192,10 +188,6 @@ class PluginsPage(Page):
                     ui.badge("正常加载" if manifest and not error else "未加载" if not manifest else "加载错误").props("color=green" if manifest and not error else "color=red" if error else "color=grey")
                     if error:
                         ui.label("加载错误：" + str(error)).classes("text-red-700 whitespace-pre-wrap")
-                    elif not manifest:
-                        ui.label("该插件当前未启用或未加载；启用会通过 plugin.configure 校验本地已安装插件。").classes("text-sm text-gray-600")
-                    else:
-                        ui.label("插件契约已由当前本地运行时加载。").classes("text-sm text-gray-600")
 
         def render():
             render_plugin_list()

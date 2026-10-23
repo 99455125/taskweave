@@ -118,8 +118,8 @@ class Application:
     def instances(self):
         return self.runs.instances()
 
-    def end_instance(self, instance_type, owner_id):
-        return self.runs.end_instance(instance_type, owner_id)
+    def end_instance(self, instance_type, owner_id, command_id=None):
+        return self.runs.end_instance(instance_type, owner_id, command_id)
 
     def dispatch(self, operation, params=None):
         return dispatch_operation(self, operation, params)

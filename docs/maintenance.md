@@ -6,6 +6,7 @@
 | --- | --- | --- | --- |
 | 任务、步骤、导入复制、确认 | [任务与步骤](modules/tasks.md) | application/tasks.py、steps.py、task_transfer.py；presentation/tasks.py、editor.py、step_actions.py | application.tasks、application.steps、ui.tasks、ui.editor |
 | 规划、生成记录与导入 | [规划](modules/planning.md) | application/planning.py；presentation/planning.py；desktop/pages/planning.py | application.planning、ui.planning |
+| 外部AI发现、编写、调用与验收 | [外部AI](modules/agent.md) | application/agent/；integration/；infrastructure/agent_store.py、agent_connection.py；desktop/components/agent_review.py | application.agent、integration.agent、ui.agent |
 | 步骤编写、校验、插件诊断与AI候选 | [步骤编写与校验](modules/authoring.md) | application/authoring.py、authoring_sessions.py、ai_requests.py；presentation/authoring.py、chat.py | application.authoring、ui.debug |
 | 采集、目标、录制与素材 | [上下文](modules/contexts.md) | application/contexts.py；infrastructure/context_sessions.py；presentation/context_collection.py、collection_form.py | domain.contexts、repository.contexts、ui.contexts |
 | 运行、补录、重跑、恢复与结果 | [执行](modules/execution.md) | application/runs.py；infrastructure/run_coordinator.py、coordinator_pool.py、worker_transport.py、worker.py | application.runs、ui.executions、ui.results、ui.debug |

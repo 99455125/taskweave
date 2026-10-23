@@ -660,12 +660,13 @@ class Workbench:
                         except (TaskError, ValueError, TypeError) as exc:
                             response = WorkspaceFailure(str(exc), getattr(exc, "code", type(exc).__name__))
                 elif action.kind == 'ask_leave':
-                    with ui.dialog() as dialog, ui.card():
-                        ui.label("步骤有尚未保存的修改，是否离开？")
-                        with ui.row():
-                            ui.button("继续编辑", on_click=lambda: dialog.submit("stay")).props("outline")
-                            ui.button("舍弃未保存修改并离开", on_click=lambda: dialog.submit("discard"))
-                            ui.button("保存并离开", on_click=lambda: dialog.submit("save")).props("outline")
+                    with ui.dialog() as dialog, ui.card().classes("tw-confirm-dialog"):
+                        ui.label("步骤有未保存的更改").classes("tw-confirm-title")
+                        ui.label("离开前，可保存或丢弃本次更改。").classes("tw-confirm-description")
+                        with ui.row().classes("tw-confirm-actions"):
+                            ui.button("继续编辑", on_click=lambda: dialog.submit("stay")).props("outline").classes("tw-confirm-cancel")
+                            ui.button("丢弃并离开", on_click=lambda: dialog.submit("discard")).props("outline color=negative").classes("tw-confirm-danger")
+                            ui.button("保存并离开", on_click=lambda: dialog.submit("save")).props("unelevated color=primary")
                     response = await dialog
                 elif action.kind == 'save_editor':
                     try:

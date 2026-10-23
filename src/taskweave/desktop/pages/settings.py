@@ -9,6 +9,7 @@ from taskweave.application.ai_requests import DEFAULT_AI_REQUEST_LIMIT_KIB, MAX_
 class SettingsPage(Page):
     SECTIONS = (
         ("AI 连接与请求", "ai"),
+        ('外部 AI / MCP', 'external_ai'),
         ("脱敏设置", "privacy"),
         ("执行设置", "execution"),
         ("工作空间", "workspace"),
@@ -54,6 +55,26 @@ class SettingsPage(Page):
                 heading = ui.label().classes("text-2xl font-semibold")
                 panels = {}
 
+                with ui.column().classes('tw-panel w-full gap-4') as external_panel:
+                    from taskweave.integration.skill import connection_config, install_skill
+                    import json
+                    from pathlib import Path
+                    ui.label('让外部 AI 编写和调用 TaskWeave').classes('font-medium')
+                    ui.label('在运行桥接命令的 Python 环境安装 taskweave[mcp]；源码开发可用 uv run --extra mcp。')
+                    config = json.dumps(connection_config(self.controller.workspace_home), ensure_ascii=False, indent=2)
+                    ui.code(config, language='json').classes('w-full')
+                    self.button('复制 MCP 配置', lambda: ui.clipboard.write(config))
+                    ui.label('将配置添加到所用 AI 客户端的 MCP 设置；配置中不含工作空间访问令牌。')
+                    import sys
+                    if getattr(sys, 'frozen', False):
+                        ui.label('桌面打包版需另安装 taskweave[mcp] 命令行桥接；配置使用 PATH 中的 taskweave。')
+                    destination = ui.input('Skill 安装目录', value=str(Path.home() / '.agents' / 'skills' / 'taskweave')).props('outlined dense').classes('w-full')
+                    async def export_skill():
+                        result = install_skill(destination.value)
+                        ui.notify('Skill 已安装' if result['status'] == 'installed' else 'Skill 已是当前版本')
+                    self.button('安装 / 导出 TaskWeave Skill', export_skill)
+                panels['external_ai'] = external_panel
+
                 with ui.column().classes("tw-panel w-full gap-4") as ai_panel:
                     ui.label("AI 编写连接（可选）").classes("font-medium")
                     url = ui.input(
@@ -68,9 +89,6 @@ class SettingsPage(Page):
                         "API Key 所在环境变量名",
                         value=model_settings.get("key_env", "TASKWEAVE_MODEL_API_KEY"),
                     ).props("outlined dense").classes("w-full")
-                    ui.label(
-                        "API Key 与连接配置保存在本地，重启后自动读取；也可使用环境变量。执行固定步骤不调用模型。"
-                    ).classes("text-gray-500")
 
                     for control, key in ((url, 'url'), (model, 'model'), (key_env, 'key_env'), (api_key, 'api_key')):
                         bind(control, key)
@@ -96,7 +114,6 @@ class SettingsPage(Page):
                         "AI 请求大小上限（KiB）", value=ai_limits["ai_request_limit_kib"],
                         min=1, max=MAX_AI_REQUEST_LIMIT_KIB, step=1,
                     ).props("outlined dense").classes("w-full")
-                    ui.label(f"默认 {DEFAULT_AI_REQUEST_LIMIT_KIB} KiB，最高 {MAX_AI_REQUEST_LIMIT_KIB} KiB；此值不是模型 token 上限。").classes("text-gray-500")
 
                     bind(request_limit, 'request_limit')
 
@@ -133,7 +150,6 @@ class SettingsPage(Page):
                         value=workbench_settings.get("executor_max_threads", 8),
                         min=1, max=8, step=1,
                     ).props("outlined dense").classes("w-full")
-                    ui.label("单条运行内的步骤顺序执行；不同运行最多并行 8 条。超出上限时新运行直接报错。").classes("text-gray-500")
 
                     bind(executor_threads, 'executor_threads')
 
@@ -147,7 +163,6 @@ class SettingsPage(Page):
                 with ui.column().classes("tw-panel w-full gap-4") as workspace_panel:
                     ui.label("本地工作空间").classes("font-medium")
                     ui.label(str(self.controller.workspace_home))
-                    ui.label("总库保存配置与执行记录；每个任务的数据库保存返回结果。")
                     destination = ui.input("新的工作空间目录").props("outlined dense").classes("w-full")
 
                     bind(destination, 'destination')

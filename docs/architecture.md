@@ -31,6 +31,8 @@ infrastructure → core契约：SQLite、worker、资源会话、模型适配
 
 ## 执行与资源
 
+外部 AI 通过 integration 的可选 MCP/function calling 适配进入 application/agent；发现、材料、执行回执和验收复用原任务/运行用例。工作台及 serve 的 agent 端点共享当前 Application，私有连接描述符提供实例校验。默认核心安装不引入 MCP SDK；查询、固定执行和证据核对不调用模型。详见[外部 AI 模块](modules/agent.md)。
+
 `RunUseCases → CoordinatorPool → Coordinator → WorkerTransport → worker → 插件动作`。含控制节点的任务由Coordinator调用FlowRunner推进流程树；纯线性任务保留现有顺序路径。流程决策在core/flow_machine.py完成，执行游标和每轮实例由FlowRunRepository持久化。
 
 实例池选择调试/正式运行实例并控制容量；Coordinator持有运行编排与锁，通过窄查询/事件/租约/写入端口更新持久状态；WorkerTransport负责进程与管道生命周期，worker校验并执行步骤。调试资源按任务复用，正式资源按运行隔离。命令回执、租约与尝试有效性由持久化事实约束，不依赖页面内存。

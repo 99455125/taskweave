@@ -19,7 +19,6 @@ class ExecutionsPage(Page):
         tasks = await self.controller.call("task.list")
         if not tasks:
             ui.label("执行").classes("text-xl font-medium")
-            ui.label("暂无任务。请先在任务菜单中创建并确认步骤。").classes("tw-panel w-full text-gray-500")
             return
         valid_ids = {task["task_id"] for task in tasks}
         self.state.task_ids = [value for value in self.state.task_ids if value in valid_ids]

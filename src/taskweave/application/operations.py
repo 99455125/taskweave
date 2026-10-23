@@ -9,6 +9,7 @@ from taskweave.core.validation import TaskError
 
 
 LOCK_EXEMPT_OPERATIONS = frozenset({
+    "agent.discover", "agent.describe", "agent.author", "agent.context", "agent.execute", "agent.wait", "agent.inspect", "agent.review",
     "ai.settings.get", "ai.settings.update", "capabilities", "context.ai",
     "context.capture.get", "context.list", "context.read", "context.targets", "context.record",
     "draft.export", "feedback.export", "instance.end", "instance.list",
@@ -27,6 +28,14 @@ LOCK_EXEMPT_OPERATIONS = frozenset({
 
 def _operation_handlers(app):
     sync = {
+        "agent.discover": app.agent.discover,
+        "agent.describe": app.agent.describe,
+        "agent.author": app.agent.author,
+        "agent.context": app.agent.context,
+        "agent.execute": app.agent.execute,
+        "agent.wait": app.agent.wait,
+        "agent.inspect": app.agent.inspect,
+        "agent.review": app.agent.review,
         "plugin.configure": app.configure_plugin,
         "plugin.list": app.installed_plugins,
         "organization.category.list": app.organization.categories,

@@ -155,6 +155,28 @@ def launch(home=None, port=None, browser=False):
         holder["controller"].native = not browser
         holder["controller"].open_logs = open_logs
         holder["controller"].server_logs = logs
+        from taskweave.infrastructure.agent_connection import AgentHost
+        holder['agent_host'] = AgentHost(holder['application'])
+        holder['agent_host'].__enter__()
+        loop = asyncio.get_running_loop()
+        clients = holder.setdefault('review_clients', {})
+        async def show_review(kind, identity):
+            from taskweave.core.validation import TaskError
+            current = next((client for client in reversed(list(clients.values())) if client.has_socket_connection), None)
+            if current is None:
+                raise TaskError('REVIEW_UI_UNAVAILABLE', '请打开工作台后重试')
+            with current:
+                await holder['controller'].open_review(kind, identity)
+        def open_review(kind, identity):
+            from concurrent.futures import TimeoutError as FutureTimeout
+            from taskweave.core.validation import TaskError
+            future = asyncio.run_coroutine_threadsafe(show_review(kind, identity), loop)
+            try:
+                future.result(timeout=10)
+            except FutureTimeout as exc:
+                future.cancel()
+                raise TaskError('REVIEW_UI_UNAVAILABLE', '工作台暂未响应，请在执行列表查看验收') from exc
+        holder['application'].agent.review_opener = open_review
         logging.getLogger(__name__).info('服务启动，监听 127.0.0.1:%s', port)
 
     def workbench_model():
@@ -174,6 +196,8 @@ def launch(home=None, port=None, browser=False):
         if viewer and viewer.is_alive():
             viewer.terminate()
             await asyncio.to_thread(viewer.join, 5)
+        if holder.get('agent_host'):
+            await asyncio.to_thread(holder.pop('agent_host').__exit__, None, None, None)
         if holder.get("application"):
             await asyncio.to_thread(holder.pop("application").close)
         root_logger.removeHandler(logs)
@@ -204,6 +228,8 @@ def launch(home=None, port=None, browser=False):
     @ui.page("/")
     async def index(view: str = "home", task_id: str | None = None, step_id: str | None = None, debug: bool = False):
         client = ui.context.client
+        holder['review_clients'][client.id] = client
+        client.on_delete(lambda: holder['review_clients'].pop(client.id, None))
         def write_route(payload):
             import json
             client.run_javascript("""

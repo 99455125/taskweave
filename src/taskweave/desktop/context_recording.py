@@ -70,7 +70,7 @@ class RecordingControls:
         from nicegui import ui
         self.workspace, self.dialog = workspace, dialog
         self.start_options, self.lock_inputs, self.changed = start_options, lock_inputs, changed
-        with ui.column().classes('tw-context-recording w-full gap-2') as self.area:
+        with ui.column().classes('tw-context-recording gap-2') as self.area:
             self.status = ui.label().classes('text-sm text-gray-600')
             with ui.row().classes('gap-2 items-center'):
                 self.start = ui.button('开始录制', icon='fiber_manual_record', on_click=self.begin).props('outline')
@@ -86,9 +86,10 @@ class RecordingControls:
         state = self.workspace.recording
         self.area.set_visibility(self.supported or state.pending)
         self.status.text = ('已保存，等待确认；请重试确认保存' if state.committed else
-            {'RECORDING':'正在录制人工操作；关闭弹窗会暂停，草稿仍保留',
-             'PAUSED':'录制已暂停，可继续或停止并暂存',
-             'STOPPED':'录制已停止，暂存后确认保存'}.get(state.state, '录制人工操作；快照采集仍可使用'))
+            {'RECORDING':'正在录制',
+             'PAUSED':'录制已暂停',
+             'STOPPED':'录制已停止'}.get(state.state, ''))
+        self.status.set_visibility(bool(self.status.text))
         self.start.set_visibility(not state.pending)
         self.pause.set_visibility(state.pending and state.state in {'RECORDING','PAUSED'})
         self.pause.text = '继续录制' if state.state == 'PAUSED' else '暂停录制'
@@ -130,10 +131,11 @@ class RecordingControls:
 
     async def confirm_discard(self):
         from nicegui import ui
-        with ui.dialog() as confirm, ui.card():
-            ui.label('丢弃此录制？不会撤销已发生的浏览器操作。')
-            with ui.row():
-                ui.button('保留', on_click=lambda:confirm.submit(False)).props('outline')
-                ui.button('丢弃录制', on_click=lambda:confirm.submit(True)).props('color=negative')
+        with ui.dialog() as confirm, ui.card().classes('tw-confirm-dialog'):
+            ui.label('丢弃录制？').classes('tw-confirm-title')
+            ui.label('录制内容将被丢弃，已发生的浏览器操作会保留。').classes('tw-confirm-description')
+            with ui.row().classes('tw-confirm-actions'):
+                ui.button('保留录制', on_click=lambda:confirm.submit(False)).props('outline').classes('tw-confirm-cancel')
+                ui.button('丢弃录制', on_click=lambda:confirm.submit(True)).props('outline color=negative').classes('tw-confirm-danger')
         if await confirm:
             await self.run(self.workspace.recording.discard)

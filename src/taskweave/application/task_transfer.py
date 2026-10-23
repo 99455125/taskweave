@@ -120,10 +120,12 @@ def validate_task_package(registry, authoring, package, *, expected_origin=None)
             if origin == "ai_generated" and document["step_content"] == "":
                 pass  # An AI planning draft may defer code until the user collects more evidence.
             elif must_be_complete:
-                asyncio.run(authoring.validate_step(document))
+                diagnostics.extend({"step_key": entry["key"], **item}
+                                   for item in asyncio.run(authoring.validate_step(document)))
             else:
                 try:
-                    asyncio.run(authoring.validate_step(document))
+                    diagnostics.extend({"step_key": entry["key"], **item}
+                                       for item in asyncio.run(authoring.validate_step(document)))
                 except TaskError as exc:
                     diagnostics.append({"step_key": entry["key"], "code": exc.code, "message": str(exc)})
         except TaskError as exc:

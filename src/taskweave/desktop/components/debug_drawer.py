@@ -34,7 +34,6 @@ class StepDebugDrawer:
                 with ui.row().classes('w-full items-center justify-between gap-2'):
                     with ui.column().classes('gap-0'):
                         ui.label('调试 · ' + step['name']).classes('text-lg font-medium')
-                ui.label('输入来自已保存的配置；运行调试前会先保存当前草稿。').classes('text-xs text-gray-500')
                 environment = await self.environment_select()
                 environment.classes(remove='w-72', add='w-full min-w-0')
                 if not current(): return False

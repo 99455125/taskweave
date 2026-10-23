@@ -322,6 +322,21 @@ CREATE INDEX flow_instances_run_order ON flow_instances(run_id,instance_no);
 """
 
 
+CONTROL_V23 = """
+CREATE TABLE agent_requests (
+ request_id TEXT PRIMARY KEY, fingerprint TEXT NOT NULL,
+ state TEXT NOT NULL CHECK(state IN ('PENDING','COMPLETED')),
+ result_json TEXT, created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE agent_records (
+ category TEXT NOT NULL, identity TEXT NOT NULL, value_json TEXT NOT NULL,
+ created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ PRIMARY KEY(category,identity)
+);
+"""
+
+
 def migrate(db, path, target, migrations):
     current = db.execute("PRAGMA user_version").fetchone()[0]
     if current > target:
@@ -360,8 +375,8 @@ def initialize(path, name):
         migrate(
             db,
             path,
-            22 if name == "control" else 2,
-            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8, 9: CONTROL_V9, 10: CONTROL_V10, 11: CONTROL_V11, 12: CONTROL_V12, 13: CONTROL_V13, 14: CONTROL_V14, 15: CONTROL_V15, 16: CONTROL_V16, 17: CONTROL_V17, 18: CONTROL_V18, 19: CONTROL_V19, 20: CONTROL_V20, 21: CONTROL_V21, 22: CONTROL_V22},
+            23 if name == "control" else 2,
+            {2: CONTROL_V2 if name == "control" else TASK_V2, 3: CONTROL_V3, 4: CONTROL_V4, 5: CONTROL_V5, 6: CONTROL_V6, 7: CONTROL_V7, 8: CONTROL_V8, 9: CONTROL_V9, 10: CONTROL_V10, 11: CONTROL_V11, 12: CONTROL_V12, 13: CONTROL_V13, 14: CONTROL_V14, 15: CONTROL_V15, 16: CONTROL_V16, 17: CONTROL_V17, 18: CONTROL_V18, 19: CONTROL_V19, 20: CONTROL_V20, 21: CONTROL_V21, 22: CONTROL_V22, 23: CONTROL_V23},
         )
 
 
