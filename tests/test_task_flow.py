@@ -15,17 +15,10 @@ def flow_api():
 
 
 class TaskFlowTests(unittest.TestCase):
-    def test_legacy_action_chain_becomes_sequence_in_step_order(self):
-        flow = flow_api().normalize_flow(
-            {"entry_node_id": "first", "nodes": [
-                {"id": "first", "kind": "action", "config": {"step_id": "first"}, "next": "second"},
-                {"id": "second", "kind": "action", "config": {"step_id": "second"}, "next": None},
-            ]},
-            [{"step_id": "first", "position": 0}, {"step_id": "second", "position": 1}],
-        )
-        self.assertEqual(flow["version"], 2)
-        self.assertEqual([node["step_id"] for node in flow["root"]["children"]], ["first", "second"])
-        self.assertTrue(flow_api().is_linear_flow(flow))
+    def test_action_chain_is_rejected(self):
+        with self.assertRaises(TaskError) as error:
+            flow_api().normalize_flow({"entry_node_id": None, "nodes": []}, [])
+        self.assertEqual(error.exception.code, "FLOW_INVALID")
 
     def test_nested_flow_rejects_reused_action_and_depth_over_eight(self):
         api = flow_api()
@@ -89,10 +82,10 @@ class TaskFlowTests(unittest.TestCase):
     def test_condition_cannot_read_future_action(self):
         api = flow_api()
         flow = {"version": 2, "root": {"id": "root", "kind": "sequence", "children": [
-            {"id": "branch", "kind": "if", "condition": {"op": "exists", "value": {
+            {"id": "branch", "kind": "if", "cases": [{"id": "match", "condition": {"op": "exists", "value": {
                 "ref": {"source": "step", "step_id": "future", "pointer": ""}}},
-             "then": {"id": "yes", "kind": "sequence", "children": []},
-             "else": {"id": "no", "kind": "sequence", "children": []}},
+             "body": {"id": "yes", "kind": "sequence", "children": []}}],
+             "default": {"id": "fallback", "body": {"id": "no", "kind": "sequence", "children": []}}},
             {"id": "future", "kind": "action", "step_id": "future"},
         ]}}
         with self.assertRaises(TaskError) as error:
@@ -118,10 +111,10 @@ class FlowConfirmationTests(CoreFixture):
         self.app.confirm_step_manual(step["step_id"], step["content_hash"])
         repo = self.app.repo.repositories.tasks
         flow = {"version": 2, "root": {"id": "root", "kind": "sequence", "children": [
-            {"id": "branch", "kind": "if", "condition": {"op": "eq", "left": {"literal": 1}, "right": {"literal": 1}},
-             "then": {"id": "yes", "kind": "sequence", "children": [
-                 {"id": step["step_id"], "kind": "action", "step_id": step["step_id"]}]},
-             "else": {"id": "no", "kind": "sequence", "children": []}},
+            {"id": "branch", "kind": "if", "cases": [{"id": "match", "condition": {"op": "eq", "left": {"literal": 1}, "right": {"literal": 1}},
+             "body": {"id": "yes", "kind": "sequence", "children": [
+                 {"id": step["step_id"], "kind": "action", "step_id": step["step_id"]}]}}],
+             "default": {"id": "fallback", "body": {"id": "no", "kind": "sequence", "children": []}}},
         ]}}
         repo.save_flow(task, flow, repo.definition_hash(task))
         with self.assertRaises(TaskError) as error:

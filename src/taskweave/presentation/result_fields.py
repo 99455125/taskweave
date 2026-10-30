@@ -20,3 +20,19 @@ def result_fields(value, limit=64):
                 break
     visit(value, '', 0)
     return fields
+
+
+def schema_fields(schema, limit=64):
+    """Offer declared object paths even when parameters have no default value."""
+    fields = {}
+    def visit(spec, path, depth):
+        if not isinstance(spec, dict) or len(fields) >= limit:
+            return
+        kind = spec.get('type')
+        fields[path] = {'label': path or '全部结果', 'type': kind}
+        if depth >= 4:
+            return
+        for key, child in spec.get('properties', {}).items():
+            visit(child, path + '/' + key.replace('~', '~0').replace('/', '~1'), depth + 1)
+    visit(schema, '', 0)
+    return fields

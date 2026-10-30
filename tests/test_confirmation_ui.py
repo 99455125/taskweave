@@ -139,7 +139,7 @@ class ConfirmationUi(unittest.TestCase):
                     self.assertEqual(repaint.await_count, 1 if evidence == 'success' or approval else 0)
         asyncio.run(scenario())
 
-    def test_ai_repair_selects_transport_or_cancels_and_requires_current_feedback(self):
+    def test_ai_repair_selects_transport_and_checks_available_feedback(self):
         async def scenario():
             feedback = {"run_id":"run-current-full-id", "attempt_id":"attempt-current-full-id", "summary":"failure"}
             for choice in [("api", -1, True, "note"), ("chat", 3, False, "note"), None]:
@@ -253,19 +253,19 @@ class ConfirmationUi(unittest.TestCase):
                 ui.notify.assert_called_once()
             editor.generate_content.assert_not_awaited()
 
-            # Keep the cross-step guard aligned with generate_content: the
-            # latest valid failure controls which step can be repaired.
+            # A different step's failure is not attached to this revision.
             controller = SimpleNamespace(
                 call=AsyncMock(return_value={"attempts": [{"valid": True, "step_id": "other-step", "status": "FAILED", "attempt_id": "attempt-other"}]}),
                 trial_feedback=AsyncMock(),
             )
             editor = StepAIEditor(controller, AsyncMock(), AsyncMock(), lambda: None, lambda: {},
                                   lambda: identity, debug_state=DebugState(), trials={"step":"run-current-full-id"})
-            editor.generate_content = AsyncMock()
+            editor.generate_content = AsyncMock(return_value=None)
             with patch("taskweave.desktop.components.step_ai.ui", MagicMock()) as ui:
                 ui.dialog.return_value = ChangedAttemptDialog()
                 await editor.choose_repair_mode(repaint=AsyncMock())
                 ui.notify.assert_not_called()
             controller.trial_feedback.assert_not_awaited()
-            editor.generate_content.assert_not_awaited()
+            editor.generate_content.assert_awaited_once()
+            self.assertEqual(editor.generate_content.await_args.kwargs['feedback_override'], {})
         asyncio.run(scenario())

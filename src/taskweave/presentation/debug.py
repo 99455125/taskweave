@@ -144,7 +144,10 @@ class InputScopeDraft:
                     raise TaskError('FORM_INVALID', f'{name} 为必录项')
                 continue
             kind = spec.get('type', 'string')
-            if kind in {'object', 'array'}:
+            from taskweave.presentation.array_inputs import supports_row_input, row_values
+            if supports_row_input(spec):
+                value = row_values(value, spec, name)
+            elif kind in {'object', 'array'}:
                 try:
                     value = json.loads(value)
                 except (TypeError, ValueError) as exc:

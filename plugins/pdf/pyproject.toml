@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "taskweave-pdf"
+version = "0.1.0"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["pypdfium2>=5.14,<6"]
+
+[project.entry-points."taskweave.plugins"]
+pdf = "taskweave_pdf:PdfPlugin"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+taskweave_pdf = ["fonts/*.ttf", "fonts/*.zlib", "fonts/*.txt", "fonts/*.md"]

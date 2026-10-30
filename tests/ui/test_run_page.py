@@ -33,7 +33,6 @@ class RunPageTests(unittest.TestCase):
         from nicegui import ui
         from nicegui.client import Client
         from nicegui.page import page as nicegui_page
-        from taskweave.presentation.debug import TrialInputDraft
         from tests.presentation.test_run_creation import Application
 
         async def scenario():
@@ -43,18 +42,9 @@ class RunPageTests(unittest.TestCase):
                 actions[label] = action
                 return ui.button(label)
             environment = ui.select({'env': 'Environment'}, value='env')
-            forms = []
-            async def inputs(step, environment, *, task_id):
-                draft = TrialInputDraft()
-                draft.set_environment(environment.value)
-                draft.task.configure({'properties': {'count': {'type': 'integer'}}}, {})
-                control = ui.number('count')
-                control.on_value_change(lambda event: draft.task.change('count', event.value))
-                forms.append(control)
-                return SimpleNamespace(input_draft=draft)
             details = SimpleNamespace(refresh=AsyncMock(), own_timer=lambda timer: timer.cancel())
             run_page = RunPage(app, ExecutionPageState(), button, AsyncMock(),
-                AsyncMock(return_value=environment), inputs, details, lambda: 'run', lambda: 1)
+                AsyncMock(return_value=environment), AsyncMock(), details, lambda: 'run', lambda: 1)
             completed = AsyncMock()
             if standalone:
                 await run_page.open_create(on_created=completed)
@@ -68,6 +58,7 @@ class RunPageTests(unittest.TestCase):
             else:
                 await run_page.render()
                 await actions['新建执行']()
+            forms = [element for element in client.elements.values() if isinstance(element, ui.number) and 'count' in str(element.props.get('label', ''))]
             forms[-1].value = 7
             # Delete render handles: submitting must still consume ordinary state.
             forms[-1].delete()

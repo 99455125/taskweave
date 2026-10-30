@@ -13,7 +13,9 @@
         "tests.test_task_transfer",
         "tests.test_task_copy_lifecycle",
         "tests.test_task_flow",
-        "tests.test_flow_machine"
+        "tests.test_flow_machine",
+        "tests.test_flow_parallel.ParallelFlowTests",
+        "tests.test_current_flow_contract"
       ],
       "depends_on": [],
       "browser_targets": []
@@ -127,7 +129,8 @@
         "tests.repositories.test_context_return_contracts",
         "tests.repositories.test_plan_context_repository",
         "tests.test_context_collection",
-        "tests.test_context_captures"
+        "tests.test_context_captures",
+        "tests.test_context_transfer"
       ],
       "depends_on": [
         "domain.contexts",
@@ -232,13 +235,17 @@
         "src/taskweave/application/operations.py",
         "src/taskweave/application/composition.py",
         "src/taskweave/application/organization.py",
-        "src/taskweave/application/settings.py"
+        "src/taskweave/application/settings.py",
+        "src/taskweave/application/step_derivation.py"
       ],
       "targets": [
         "tests.application.test_step_run_repository_port",
         "tests.test_step_authoring",
         "tests.test_step_outputs",
-        "tests.test_http_task_api"
+        "tests.test_http_task_api",
+        "tests.test_step_derivation",
+        "tests.test_flow_canvas_editing",
+        "tests.test_debug_scenes"
       ],
       "depends_on": [
         "repository.steps",
@@ -334,7 +341,9 @@
         "src/taskweave/application/organization.py",
         "src/taskweave/infrastructure/resource_sessions.py",
         "src/taskweave/application/settings.py",
-        "src/taskweave/infrastructure/flow_runner.py"
+        "src/taskweave/infrastructure/flow_runner.py",
+        "src/taskweave/infrastructure/parallel_flow_runner.py",
+        "src/taskweave/infrastructure/execution_capacity.py"
       ],
       "targets": [
         "tests.application.test_step_run_repository_port",
@@ -346,7 +355,11 @@
         "tests.test_context_recording_runtime",
         "tests.test_runtime_architecture",
         "tests.test_flow_execution",
-        "tests.test_flow_recovery"
+        "tests.test_flow_recovery",
+        "tests.test_flow_parallel",
+        "tests.test_flow_parallel_context",
+        "tests.test_debug_scenes",
+        "tests.test_scene_reservations"
       ],
       "depends_on": [
         "repository.tasks",
@@ -375,7 +388,8 @@
         "tests.test_workspace_navigation",
         "tests.presentation.test_task_organization",
         "tests.presentation.test_task_import",
-        "tests.presentation.test_catalog"
+        "tests.presentation.test_catalog",
+        "tests.presentation.test_chat_export"
       ],
       "depends_on": [
         "application.tasks",
@@ -395,10 +409,15 @@
         "src/taskweave/desktop/components/debug_drawer.py",
         "src/taskweave/desktop/components/flow_tree.py",
         "src/taskweave/desktop/components/flow_controls.py",
-        "src/taskweave/presentation/flow_editor.py"
+        "src/taskweave/desktop/components/flow_branches.py",
+        "src/taskweave/desktop/components/branch_form.py",
+        "src/taskweave/presentation/flow_editor.py",
+        "src/taskweave/desktop/components/step_derivation.py",
+        "src/taskweave/desktop/components/step_reuse.py"
       ],
       "targets": [
         "tests.ui.test_step_editor_state",
+        "tests.ui.test_step_io",
         "tests.ui.test_step_list",
         "tests.ui.test_step_ai_editor",
         "tests.test_desktop_step_save",
@@ -407,18 +426,27 @@
         "tests.test_workbench_changes.WorkbenchChanges.test_step_reorder_moves_existing_controls_and_updates_visible_positions",
         "tests.test_workspace_navigation",
         "tests.presentation.test_step_actions",
-        "tests.ui.test_flow_editor"
+        "tests.ui.test_flow_editor",
+        "tests.ui.test_flow_branches",
+        "tests.ui.test_branch_form",
+        "tests.ui.test_flow_tree_branches",
+        "tests.ui.test_parallel_branch_form",
+        "tests.ui.test_step_derivation",
+        "tests.ui.test_step_reuse"
       ],
       "depends_on": [
         "application.steps",
         "application.authoring",
         "ui.contexts",
         "shared.ui",
-        "presentation.interactions"
+        "presentation.interactions",
+        "ui.codegen"
       ],
       "browser_targets": [
         "tests.test_workbench_browser.WorkbenchAcceptance.test_real_task_authoring_ai_trial_run_history_and_configuration",
-        "tests.test_input_ui.InputUi.test_dependency_picker_and_task_then_step_input"
+        "tests.test_input_ui.InputUi.test_dependency_picker_and_task_then_step_input",
+        "tests.test_flow_canvas_layout",
+        "tests.test_flow_canvas_browser"
       ]
     },
     "ui.debug": {
@@ -427,7 +455,9 @@
         "src/taskweave/desktop/components/trial_inputs.py",
         "src/taskweave/desktop/components/run_inputs.py",
         "src/taskweave/desktop/components/run_logs.py",
-        "src/taskweave/presentation/chat.py"
+        "src/taskweave/presentation/chat.py",
+        "src/taskweave/desktop/components/debug_paths.py",
+        "src/taskweave/desktop/components/debug_sources.py"
       ],
       "targets": [
         "tests.ui.test_step_debug_session",
@@ -446,7 +476,11 @@
         "tests.test_execution_interactions",
         "tests.presentation.test_debug_inputs",
         "tests.presentation.test_ai_state",
-        "tests.presentation.test_input_dialog"
+        "tests.presentation.test_input_dialog",
+        "tests.ui.test_debug_paths",
+        "tests.ui.test_debug_sources",
+        "tests.ui.test_execution_entry",
+        "tests.ui.test_sequence_execution_entry"
       ],
       "depends_on": [
         "application.runs",
@@ -475,7 +509,8 @@
         "tests.presentation.test_planning",
         "tests.presentation.test_collection_form",
         "tests.ui.test_collection_form",
-        "tests.presentation.test_catalog"
+        "tests.presentation.test_catalog",
+        "tests.presentation.test_chat_export"
       ],
       "depends_on": [
         "application.planning",
@@ -503,7 +538,9 @@
         "tests.test_workbench_changes.WorkbenchChanges.test_context_draft_is_committed_once_as_a_batch",
         "tests.ui.test_context_recording",
         "tests.presentation.test_collection_form",
-        "tests.ui.test_collection_form"
+        "tests.ui.test_collection_form",
+        "tests.ui.test_branch_context_panel",
+        "tests.ui.test_context_transfer"
       ],
       "depends_on": [
         "application.planning",
@@ -521,7 +558,8 @@
         "src/taskweave/desktop/pages/executions.py",
         "src/taskweave/desktop/pages/history.py",
         "src/taskweave/desktop/components/execution_details.py",
-        "src/taskweave/desktop/components/run_inputs.py"
+        "src/taskweave/desktop/components/run_inputs.py",
+        "src/taskweave/desktop/components/sequence_execution.py"
       ],
       "targets": [
         "tests.ui.test_executions_page",
@@ -532,16 +570,21 @@
         "tests.test_execution_interactions",
         "tests.presentation.test_run_creation",
         "tests.presentation.test_execution_queries",
-        "tests.presentation.test_input_dialog"
+        "tests.presentation.test_input_dialog",
+        "tests.ui.test_unified_executions",
+        "tests.ui.test_execution_entry",
+        "tests.ui.test_sequence_execution_entry"
       ],
       "depends_on": [
         "application.runs",
         "ui.debug",
         "shared.ui",
-        "presentation.interactions"
+        "presentation.interactions",
+        "application.sequences"
       ],
       "browser_targets": [
-        "tests.test_workbench_browser.WorkbenchAcceptance.test_real_task_authoring_ai_trial_run_history_and_configuration"
+        "tests.test_workbench_browser.WorkbenchAcceptance.test_real_task_authoring_ai_trial_run_history_and_configuration",
+        "tests.test_unified_executions_browser"
       ]
     },
     "ui.results": {
@@ -660,7 +703,9 @@
         "tests.test_storage_integrity",
         "tests.test_control_db_migration",
         "tests.test_workbench_changes.WorkbenchChanges.test_workspace_migration_copies_then_removes_only_after_new_workspace_starts",
-        "tests.test_storage_layering"
+        "tests.test_storage_layering",
+        "tests.test_schema_flow_maintenance",
+        "tests.test_workspace_maintenance"
       ],
       "depends_on": [],
       "browser_targets": []
@@ -682,7 +727,8 @@
         "src/taskweave/core/json_types.py",
         "src/taskweave/core/capability_contracts.py",
         "src/taskweave/core/context_contracts.py",
-        "src/taskweave/core/model_ports.py"
+        "src/taskweave/core/model_ports.py",
+        "src/taskweave/core/codegen_contracts.py"
       ],
       "targets": [
         "tests.repositories.test_repository_contracts",
@@ -709,23 +755,31 @@
         "src/taskweave/desktop/state.py",
         "src/taskweave/desktop/launcher.py",
         "src/taskweave/desktop/chat.py",
+        "src/taskweave/desktop/components/chat_export.py",
         "src/taskweave/desktop/dialogs.py",
         "src/taskweave/desktop/dependencies.py",
         "src/taskweave/desktop/theme.py",
         "src/taskweave/desktop/platform.py",
         "src/taskweave/desktop/settings.py",
-        "src/taskweave/desktop/pages/home.py"
+        "src/taskweave/desktop/pages/home.py",
+        "src/taskweave/desktop/components/array_input.py",
+        "src/taskweave/desktop/components/startup_inputs.py"
       ],
       "targets": [
         "tests.ui.test_navigation",
         "tests.ui.test_workbench_home",
         "tests.ui.test_button_dispatch",
+        "tests.ui.test_chat_export",
         "tests.test_desktop_port",
         "tests.test_architecture_boundaries",
-        "tests.test_display"
+        "tests.test_display",
+        "tests.ui.test_array_inputs",
+        "tests.ui.test_startup_inputs"
       ],
       "depends_on": [],
-      "browser_targets": []
+      "browser_targets": [
+        "tests.test_flow_canvas_layout"
+      ]
     },
     "plugins.playwright": {
       "source_globs": [
@@ -735,7 +789,9 @@
         "tests.test_plugin_contract",
         "tests.test_context_targets_playwright",
         "tests.test_workbench_changes.WorkbenchChanges.test_playwright_task_parameters_override_environment",
-        "tests.test_plugin_architecture"
+        "tests.test_plugin_architecture",
+        "tests.test_local_codegen.LocalCodegenTests",
+        "tests.test_playwright_result_artifacts"
       ],
       "depends_on": [
         "shared.contracts"
@@ -749,7 +805,8 @@
         "tests.test_playwright_choices.PlaywrightChoiceTests.test_press_and_native_select_option",
         "tests.test_image_locators.ImageLocators.test_unnamed_images_in_separate_parents_have_unique_capture_locators",
         "tests.test_playwright_browser_integration.BrowserTests",
-        "tests.test_playwright_recording_runtime"
+        "tests.test_playwright_recording_runtime",
+        "tests.test_playwright_codegen_recording"
       ]
     },
     "plugins.ocr": {
@@ -785,6 +842,50 @@
       ],
       "targets": [
         "tests.test_file_plugin"
+      ],
+      "depends_on": [
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "plugins.dataset": {
+      "source_globs": [
+        "plugins/dataset/**",
+        "src/taskweave/core/dataset_contracts.py",
+        "src/taskweave/infrastructure/datasets.py",
+        "src/taskweave/infrastructure/dataset_sql.py"
+      ],
+      "targets": [
+        "tests.test_dataset_plugin",
+        "tests.test_data_plugins_packaging"
+      ],
+      "depends_on": [
+        "shared.contracts",
+        "shared.storage"
+      ],
+      "browser_targets": []
+    },
+    "plugins.excel": {
+      "source_globs": [
+        "plugins/excel/**"
+      ],
+      "targets": [
+        "tests.test_excel_plugin",
+        "tests.test_data_plugins_packaging"
+      ],
+      "depends_on": [
+        "plugins.dataset"
+      ],
+      "browser_targets": []
+    },
+    "plugins.pdf": {
+      "source_globs": [
+        "plugins/pdf/**"
+      ],
+      "targets": [
+        "tests.test_pdf_plugin",
+        "tests.test_pdf_packaging",
+        "tests.test_plugin_architecture"
       ],
       "depends_on": [
         "shared.contracts"
@@ -958,7 +1059,8 @@
       ],
       "targets": [
         "tests.test_macos_bundle",
-        "tests.test_macos_packaging"
+        "tests.test_macos_packaging",
+        "tests.test_pdf_packaging"
       ],
       "depends_on": [],
       "browser_targets": []
@@ -984,12 +1086,16 @@
         "tests.presentation.test_step_actions",
         "tests.presentation.test_run_creation",
         "tests.presentation.test_execution_queries",
+        "tests.presentation.test_execution_paths",
         "tests.presentation.test_history",
         "tests.presentation.test_ai_state",
         "tests.presentation.test_collection_form",
         "tests.presentation.test_operation_ports",
         "tests.presentation.test_input_dialog",
-        "tests.presentation.test_catalog"
+        "tests.presentation.test_catalog",
+        "tests.presentation.test_chat_export",
+        "tests.presentation.test_branch_context_selection",
+        "tests.presentation.test_startup_inputs"
       ],
       "depends_on": [
         "domain.steps",
@@ -1001,20 +1107,24 @@
     "domain.sequences": {
       "source_globs": [
         "src/taskweave/core/task_sequences.py",
-        "src/taskweave/core/sequence_ports.py"
+        "src/taskweave/core/sequence_ports.py",
+        "src/taskweave/core/sequence_flow.py"
       ],
       "targets": [
         "tests.test_task_sequences_storage",
-        "tests.test_task_sequences"
+        "tests.test_task_sequences",
+        "tests.test_sequence_control_flow"
       ],
       "depends_on": [
-        "domain.tasks"
+        "domain.tasks",
+        "shared.contracts"
       ],
       "browser_targets": []
     },
     "repository.sequences": {
       "source_globs": [
-        "src/taskweave/infrastructure/repositories/sequences.py"
+        "src/taskweave/infrastructure/repositories/sequences.py",
+        "src/taskweave/infrastructure/repositories/sequence_instances.py"
       ],
       "targets": [
         "tests.test_task_sequences_storage",
@@ -1030,11 +1140,14 @@
     "application.sequences": {
       "source_globs": [
         "src/taskweave/application/sequences.py",
-        "src/taskweave/application/sequence_driver.py"
+        "src/taskweave/application/sequence_driver.py",
+        "src/taskweave/application/sequence_values.py"
       ],
       "targets": [
         "tests.test_task_sequences",
-        "tests.test_task_sequences_lifecycle"
+        "tests.test_task_sequences_lifecycle",
+        "tests.test_sequence_control_flow",
+        "tests.test_sequence_startup_inputs"
       ],
       "depends_on": [
         "repository.sequences",
@@ -1046,17 +1159,25 @@
     "ui.sequences": {
       "source_globs": [
         "src/taskweave/desktop/pages/sequences.py",
-        "src/taskweave/presentation/sequences.py"
+        "src/taskweave/presentation/sequences.py",
+        "src/taskweave/desktop/components/sequence_flow_editor.py"
       ],
       "targets": [
-        "tests.ui.test_sequences_page"
+        "tests.ui.test_sequences_page",
+        "tests.ui.test_parallel_branch_form",
+        "tests.ui.test_sequence_flow_canvas",
+        "tests.ui.test_sequence_startup_inputs",
+        "tests.ui.test_sequence_execution_entry"
       ],
       "depends_on": [
         "application.sequences",
-        "shared.ui"
+        "shared.ui",
+        "ui.editor"
       ],
       "browser_targets": [
-        "tests.test_sequences_browser"
+        "tests.test_sequences_browser",
+        "tests.test_sequence_canvas_browser",
+        "tests.test_flow_canvas_layout"
       ]
     },
     "application.agent": {
@@ -1106,6 +1227,49 @@
       "browser_targets": [
         "tests.test_agent_browser"
       ]
+    },
+    "application.codegen": {
+      "source_globs": [
+        "src/taskweave/application/codegen.py"
+      ],
+      "targets": [
+        "tests.test_local_codegen.CodegenApplicationTests"
+      ],
+      "depends_on": [
+        "repository.contexts",
+        "repository.steps",
+        "shared.contracts"
+      ],
+      "browser_targets": []
+    },
+    "ui.codegen": {
+      "source_globs": [
+        "src/taskweave/presentation/codegen.py",
+        "src/taskweave/desktop/components/step_codegen.py"
+      ],
+      "targets": [
+        "tests.presentation.test_local_codegen",
+        "tests.ui.test_step_codegen"
+      ],
+      "depends_on": [
+        "application.codegen",
+        "shared.ui"
+      ],
+      "browser_targets": [
+        "tests.test_codegen_browser"
+      ]
+    },
+    "plugins.nacos": {
+      "source_globs": [
+        "plugins/nacos/**"
+      ],
+      "targets": [
+        "tests.test_nacos_plugin"
+      ],
+      "depends_on": [
+        "shared.contracts"
+      ],
+      "browser_targets": []
     }
   }
 }

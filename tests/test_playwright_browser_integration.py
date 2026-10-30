@@ -30,6 +30,27 @@ from mock_site import make_site
     "Install browser extra to run Chromium integration tests",
 )
 class BrowserTests(unittest.TestCase):
+    def test_page_steps_automatically_save_screenshot_view_without_changing_business_data(self):
+        step = self.step('async def run(ctx, inputs):\n    await ctx.call("playwright.page_open", {"url": "' + self.url + '"})\n    return ctx.result(data=[1, 2])', ['playwright.page_open'])
+        for trial in (True, False):
+            if trial:
+                done = self.trial(step)
+            else:
+                self.app.steps.confirm_manual(step['step_id'], step['content_hash'])
+                self.app.tasks.confirm_flow(step['task_id'], self.app.tasks.definition_hash(step['task_id']))
+                run = self.app.runs.create(step['task_id'], environment_id=self.env)
+                self.app.runs.start(run['run_id'], uid())
+                done = self.app.coordinator.wait(run['run_id'])
+            self.assertEqual(done['status'], 'SUCCEEDED', done)
+            self.assertEqual(self.app.runs.output(done['run_id'], step['step_id']), [1, 2])
+            saved = [self.app.runs.read_result(ref['result_id']) for ref in done['results']]
+            data = next(item for item in saved if item.get('name') == 'data')
+            self.assertEqual(data['data'], [1, 2])
+            view = next(view for view in data['views'] if view['renderer'] == 'playwright.screenshot')
+            picture = next(item for item in saved if item.get('name') == view['output'])
+            self.assertEqual(picture['media_type'], 'image/png')
+            self.assertTrue(Path(picture['path']).read_bytes().startswith(b'\x89PNG\r\n\x1a\n'))
+
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory(prefix="taskweave-browser-")
         self.app = Application(self.tmp.name)
@@ -196,10 +217,13 @@ class BrowserTests(unittest.TestCase):
         self.assertEqual(attempt["effect_state"], "UNKNOWN")
         self.assertIsNone(self.app.repo.receipt(attempt))
         self.assertTrue(done["results"], self.app.repo.events(done["run_id"]))
-        file = self.app.repo.read_result(
-            done["results"][0]["result_id"], self.app.registry
-        )
+        file_ref = next(ref for ref in done['results'] if ref['kind'] == 'file')
+        file = self.app.repo.read_result(file_ref['result_id'], self.app.registry)
         self.assertTrue(Path(file["path"]).is_file())
+        data_ref = next(ref for ref in done['results'] if ref['kind'] == 'json')
+        diagnostic = self.app.repo.read_result(data_ref['result_id'], self.app.registry)
+        self.assertEqual(diagnostic['views'][0]['renderer'], 'playwright.screenshot')
+        self.assertEqual(file['name'], diagnostic['views'][0]['output'])
         advice = asyncio.run(self.app.authoring.diagnose(attempt["attempt_id"]))
         self.assertEqual(advice[0]["code"], "CHECK_BROWSER_STATE")
         with self.assertRaises(TaskError):

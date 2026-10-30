@@ -344,6 +344,8 @@ class Workbench:
             confirmation_step=self.step_for_confirmation,
             author_step=controller.author_step if hasattr(type(controller), 'author_step') else None,
             authoring_request=controller.authoring_request if hasattr(type(controller), 'authoring_request') else None,
+            review_host=lambda: self._step_editor().view.get('candidate_host'),
+            start_debug=self._start_adopted_debug,
         )
         self.busy = False
         self.save_lock = self.step_state.save_lock
@@ -433,6 +435,7 @@ class Workbench:
             controller, self.execution_state, self.button, self.paint, self.environment_select,
             self.trial_variables, self.execution_details, lambda: self.page,
             lambda: self.page_generation,
+            open_sequence=self.open_sequence_execution,
         )
         self.executions_page = ExecutionsPage(controller, self.execution_state, self.button, self.run_page.render)
         self.planning_page = PlanningPage(
@@ -645,6 +648,10 @@ class Workbench:
     async def prepare_step_editor_leave(self):
         """Present the framework-independent leave workflow's requested actions."""
         from taskweave.presentation.workspace import WorkspaceFailure
+        editor_view = getattr(getattr(self, 'step_editor', None), 'view', {})
+        control_leave = editor_view.get('prepare_control_leave')
+        if control_leave is not None and not await control_leave():
+            return 'stay'
         flow = self._workspace_navigation().leave_editor()
         response = None
         try:
@@ -864,6 +871,31 @@ class Workbench:
         with ui.context.client:
             await self.run_page.open_create(on_created=lambda: self.navigate("executions"))
 
+    async def open_sequence_execution(self, sequence_id):
+        """Launch a saved combination while preserving its separate editor draft."""
+        if not hasattr(self, '_sequence_execution_launchers'):
+            self._sequence_execution_launchers = {}
+        launch = self._sequence_execution_launchers.get(sequence_id)
+        if launch is None:
+            async def started():
+                self.execution_state.run_id = launch.draft.selected_run_id
+                self.execution_state.selected_step_id = self.execution_state.selected_step_run_id = None
+                self.execution_state.signature = None
+                key = 'sequence:' + sequence_id
+                if self.execution_state.task_ids and key not in self.execution_state.task_ids:
+                    self.execution_state.task_ids.append(key)
+                self.execution_state.statuses = []
+                self.execution_state.search_query = ''
+                await self.navigate('executions')
+            launch = SequencesPage(self.controller, self.button, started,
+                                   identity=lambda: (self.page, self.page_generation), execution=True)
+            self._sequence_execution_launchers[sequence_id] = launch
+        definition = await self.controller.call('sequence.get', sequence_id=sequence_id)
+        if launch.draft.sequence_id != sequence_id or launch.draft.revision != definition['revision']:
+            launch.draft.load(definition)
+        await launch._load()
+        await launch.launch_dialog()
+
     async def open_task_execution(self, task_id):
         if self.page == "home":
             with ui.context.client:
@@ -1051,10 +1083,25 @@ class Workbench:
                 label.text = '保存失败，点击重试'
             raise
         if editor.identity() == identity:
+            editor.update_step_validation(saved)
             if label and not label.is_deleted:
                 label.text = '未保存修改' if self._step_editor_is_dirty() else '已保存'
             await editor.refresh_trial_inputs(saved, preserve_values=True)
         return saved
+
+    async def _start_adopted_debug(self, saved, identity):
+        def current():
+            return (self.step_ai_editor.identity() == identity and self.edit_controls
+                    and self.edit_controls['code'].value == saved['step_content'])
+        if not current():
+            raise TaskError('EDIT_CONFLICT', '当前步骤或代码已变化，请重新开始调试。')
+        open_debug = self._step_editor().view.get('open_debug')
+        if open_debug is None:
+            raise TaskError('EDIT_CONFLICT', '当前调试入口不可用。')
+        await open_debug()
+        if not current():
+            raise TaskError('EDIT_CONFLICT', '当前步骤或代码已变化，请重新开始调试。')
+        await self.step_debug_session.start_trial(continue_session=True)
 
     async def step_for_confirmation(self):
         if self._step_editor_is_dirty():
@@ -1293,14 +1340,14 @@ class Workbench:
         return await self.execution_details.refresh()
 
     async def reconcile_dialog(self, attempt):
-        with ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
-            ui.label("先在业务系统查询，再记录核对结果。")
+        with ui.dialog() as dialog, ui.card().classes("tw-confirm-dialog"):
+            ui.label("核对业务结果").classes("tw-confirm-title")
             decision = ui.select(
                 {"completed": "确认已完成", "not_completed": "确认未完成"},
                 label="业务结果",
                 value=None,
-            )
-            evidence = ui.textarea("说明（可选）").classes("w-full")
+            ).classes("w-full")
+            evidence = ui.textarea("核对说明（可选）").props("rows=3").classes("w-full")
 
             async def submit():
                 if decision.value not in {'completed', 'not_completed'}:
@@ -1315,7 +1362,17 @@ class Workbench:
                 dialog.close()
                 await self.refresh_run()
 
-            self.button("保存核对结果", submit, primary=True)
+            with ui.row().classes("tw-confirm-actions"):
+                ui.button("取消", on_click=dialog.close).props("outline").classes("tw-confirm-cancel")
+                save = self.button("保存核对结果", submit, primary=True)
+            def update_save():
+                enabled = decision.value in {'completed', 'not_completed'}
+                if hasattr(save, '_tw_before_busy'):
+                    save._tw_before_busy = enabled
+                else:
+                    save.set_enabled(enabled)
+            update_save()
+            decision.on_value_change(lambda _: update_save())
         dialog.open()
 
     async def step_result_dialog(self, run, step, attempt_id=None):

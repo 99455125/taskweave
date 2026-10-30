@@ -180,6 +180,11 @@ class FlowRunner:
         run = c.queries.run(run_id)
         definition = json.loads(run["definition_json"])
         flow = definition["flow"]
+        from taskweave.core.flow_machine import _nodes
+        if any("cases" in node for node in _nodes(flow).values()):
+            from taskweave.infrastructure.parallel_flow_runner import ParallelFlowRunner
+            ParallelFlowRunner(c).drive(run_id, mode, target)
+            return
         trial_target = (run["trial_step_id"] if run["mode"] == "TRIAL"
                         and json.loads(run["request_json"]).get("flow_trial") else None)
         steps = {step["step_id"]: step for step in c.steps.steps(run["task_id"])}

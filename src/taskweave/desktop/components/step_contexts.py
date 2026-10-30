@@ -14,7 +14,7 @@ from taskweave.desktop.forms import ValueForm, compact_field, arrange_context_fi
 from taskweave.presentation.collection_form import CollectionForm
 from taskweave.desktop.context_recording import collection_workspace, RecordingControls
 
-STATUS = {"PAUSED":"已暂停", "FAILED":"失败", "SUCCEEDED":"成功"}
+STATUS = {"PAUSED":"已暂停", "FAILED":"失败", "INTERRUPTED":"需要核对", "SUCCEEDED":"成功"}
 
 
 class StepContextPanel:
@@ -135,15 +135,22 @@ class StepContextPanel:
             await self.mark_pending()
 
         expanded = self.cards.expanded if self.cards else set()
+        async def append():
+            try:
+                await self.collect()
+            except TaskError as exc:
+                if self._collection_active(generation, task_id, step_id):
+                    ui.notify(str(exc), type='warning' if exc.code == 'CONTEXT_PROVIDER_UNAVAILABLE' else 'negative')
         with panel:
             self.cards = ContextCards(
                 self.state.entries, save, self.remove_group,
                 move=self.move_group, recollect=self._recollect,
-                append=lambda: self.collect(),
+                append=append,
                 preview_capture=lambda group, capture: self.preview_capture({**group, **capture}),
                 delete_capture=self.delete_capture,
                 move_capture=self.move_capture,
                 update_capture=self.update_capture_label,
+                transfer=self.transfer_dialog,
                 redact_on_display=self.controller.privacy_settings()["redact_on_display"],
                 is_active=lambda:self._active(generation), expanded=expanded,
             )
@@ -181,7 +188,7 @@ class StepContextPanel:
         provider_removed = form_state.provider_removed(retained_provider)
         if provider_removed:
             ids = form_state.provider_choices(retained_provider)
-        if not ids: raise TaskError('CONTEXT_PROVIDER_UNAVAILABLE', '所选插件没有提供上下文')
+        if not ids: raise TaskError('CONTEXT_PROVIDER_UNAVAILABLE', '请选择可采集的插件。')
         if not await workspace.prepare_dialog(ui.context.client):
             return
         draft = workspace.draft
@@ -236,9 +243,9 @@ class StepContextPanel:
                         dialog.close()
                         return
                     eligible_runs, initial_run, missing_retained = form_state.run_choices(
-                        runs, (workspace.recording.options.get('run_id') or '') if retained_provider else None,
-                        initial=(existing or {}).get('source_session_id', ''))
-                    run_options.update({r['run_id']: execution_title(r) + ' · ' + STATUS[r['status']] for r in eligible_runs})
+                        runs, ((workspace.recording.options.get('run_id') or '') + ('|' + workspace.recording.options['execution_path'] if workspace.recording.options.get('execution_path') else '')) if retained_provider else None,
+                        initial=(existing or {}).get('source_session_id', ''), step_id=target_step_id)
+                    run_options.update({r.get('selection_id', r['run_id']): execution_title(r) + ' · ' + STATUS[r['status']] + (f' · 分支会话 {index + 1}' if r.get('selection_id') else '') for index, r in enumerate(eligible_runs)})
                     if missing_retained:
                         run_options[initial_run] = '原录制会话 · ' + initial_run[:8]
                     with selectors, ui.column().classes("tw-context-param-field w-full gap-0") as run_field:
@@ -280,7 +287,7 @@ class StepContextPanel:
                         arrange_context_fields(selected_schema, request_groups[selected], request_forms[selected], active_host, hidden)
 
                     async def load_targets():
-                        return await self.controller.call('context.targets', step_id=saved['step_id'], provider_id=workspace.fields['provider'], run_id=workspace.fields['run'] or None)
+                        return await self.controller.call('context.targets', step_id=saved['step_id'], provider_id=workspace.fields['provider'], **form_state.session_options())
 
                     async def select_provider(_=None):
                         selected=workspace.fields.get('target',(existing or {}).get('request',{}).get('target_id'))
@@ -375,7 +382,7 @@ class StepContextPanel:
                             dialog.close()
                             return
                         label=(capture.get('items') or [{}])[0].get('source') or f'采集 {len(draft.entries)+1}'
-                        draft.append(capture, options['request'], selected_view, options['run_id'], source_page, label)
+                        draft.append(capture, options['request'], selected_view, workspace.fields.get('run') or None, source_page, label)
                         render_staged(); ui.notify(f'已暂存采集项：{label}，可继续采集',type='positive')
                     except Exception as exc: ui.notify(f'采集失败，暂存内容仍保留：{exc}',type='negative')
                     finally:
@@ -474,4 +481,94 @@ class StepContextPanel:
             with ui.row().classes('tw-context-dialog-actions w-full justify-end gap-2'):
                 ui.button('取消',on_click=cancel).props('outline')
                 ui.button('确认保存',on_click=save_batch).props('unelevated color=primary')
+        dialog.open()
+
+    def ensure_transfer_ready(self, step_id, context_id):
+        cache = getattr(self.controller, '_collection_workspaces', {})
+        if any(key[0] == 'step' and key[1] == step_id and key[2] in (None, context_id) for key in cache):
+            raise TaskError('CONTEXT_RECORDING_PENDING', '请先保存或丢弃该步骤的采集草稿，再转移材料')
+
+    async def transfer_dialog(self, group, capture=None, mode='move'):
+        generation = self._generation
+        task_id, step_id = self.task_id(), self.step_id()
+        def current():
+            return self._collection_active(generation, task_id, step_id)
+        try:
+            self.ensure_transfer_ready(step_id, group['context_id'])
+            steps = await self.controller.call('step.list', task_id=task_id)
+            if not current(): return
+        except TaskError as exc:
+            ui.notify(str(exc), type='warning')
+            return
+        action = '移动' if mode == 'move' else '复制'
+        submitting = False
+        with ui.dialog() as dialog, ui.card().classes('w-full max-w-2xl'):
+            self._dialogs.append(dialog)
+            ui.label(f'{action}上下文材料').classes('text-lg font-medium')
+            ui.label('移动会从原组移除所选材料；复制会保留原材料并创建独立副本。').classes('text-sm text-gray-600')
+            selection = ui.select({c['capture_id']: c.get('label') or '采集项' for c in group.get('captures', [])},
+                                  value=[capture['capture_id']] if capture else [c['capture_id'] for c in group.get('captures', [])],
+                                  label='采集项（可多选）', multiple=True).classes('w-full').props('use-chips')
+            target_step = ui.select({s['step_id']: f"{index:02d} · {s.get('name') or s['step_id']}" for index, s in enumerate(steps, 1)},
+                                    label='目标步骤', value=step_id, with_input=True).classes('w-full')
+            target_group = ui.select({'': '新建上下文组'}, value='', label='目标上下文组').classes('w-full')
+            target_name = ui.input('新组名称', value=group.get('name') or '上下文').classes('w-full')
+            choices = {}
+            loading = {'generation': 0, 'busy': False}
+            async def load_groups():
+                if submitting: return
+                loading['generation'] += 1
+                request_generation = loading['generation']
+                loading['busy'] = True
+                try:
+                    groups = await self.controller.call('context.list', step_id=target_step.value)
+                    if not current() or dialog.is_deleted or request_generation != loading['generation']: return
+                    choices.clear()
+                    choices.update({g['context_id']: g for g in groups if g['context_id'] != group['context_id'] and g['provider_id'] == group['provider_id']})
+                    target_group.set_options({'': '新建上下文组', **{key: f"{index} · {g['name']} · {len(g.get('captures', []))} 项" for index, (key, g) in enumerate(choices.items(), 1)}}, value='')
+                finally:
+                    if request_generation == loading['generation']: loading['busy'] = False
+            target_step.on_value_change(load_groups)
+            target_group.on_value_change(lambda e: target_name.set_visibility(not e.value))
+            await load_groups()
+            if not current(): return
+            progress = ui.label('正在保存，关闭窗口不会取消已提交的操作。').classes('text-sm text-gray-600')
+            progress.set_visibility(False)
+            async def transfer():
+                nonlocal submitting
+                if submitting or loading['busy'] or not current() or not dialog.value: return
+                if not selection.value:
+                    ui.notify('请至少选择一项上下文材料', type='warning')
+                    return
+                submitting = True
+                dialog.props('no-backdrop-dismiss')
+                progress.set_visibility(True)
+                for control in (submit, cancel, selection, target_step, target_group, target_name):
+                    control.disable()
+                submit.props('loading')
+                try:
+                    self.ensure_transfer_ready(step_id, group['context_id'])
+                    self.ensure_transfer_ready(target_step.value, target_group.value or None)
+                    destination = choices.get(target_group.value)
+                    await self.controller.call('context.capture.transfer', step_id=step_id, context_id=group['context_id'],
+                        capture_ids=list(selection.value or []), target_step_id=target_step.value, mode=mode,
+                        expected_revision=group['revision'], target_context_id=target_group.value or None,
+                        target_expected_revision=destination['revision'] if destination else None,
+                        target_name=target_name.value)
+                    if not current(): return
+                    await self.reload()
+                    dialog.close()
+                    ui.notify(f'材料已{action}', type='positive')
+                except Exception as exc:
+                    if current(): ui.notify(str(exc), type='negative')
+                finally:
+                    submitting = False
+                    if not dialog.is_deleted: dialog.props(remove='no-backdrop-dismiss')
+                    if not progress.is_deleted: progress.set_visibility(False)
+                    if not submit.is_deleted: submit.props(remove='loading')
+                    for control in (submit, cancel, selection, target_step, target_group, target_name):
+                        if not control.is_deleted: control.enable()
+            with ui.row().classes('w-full justify-end'):
+                cancel = ui.button('取消', on_click=lambda: dialog.close() if not submitting else None).props('outline')
+                submit = ui.button(f'确认{action}', on_click=transfer)
         dialog.open()

@@ -66,6 +66,8 @@ class Recorder:
         self.receive_lock = asyncio.Lock()
         self.finished = []
         self.script = self._script()
+        from .recording_codegen import CodegenRecording
+        self.codegen = CodegenRecording(resource)
 
     def _script(self):
         # Never send raw event objects, HTML, cookies or keyboard text. Value
@@ -92,6 +94,7 @@ window[ns].document_id=crypto.randomUUID?.()||Array.from(crypto.getRandomValues(
 })();'''.replace('NS', json.dumps(self.namespace)).replace('BINDING', json.dumps(self.binding))
 
     async def install(self):
+        await self.codegen.install()
         await self.context.expose_binding(self.binding, self.receive)
         await self.context.add_init_script(self.script)
         self.context.on('page', self.watch_page)
@@ -222,17 +225,21 @@ return describe(e,true);
             payload['target_id'] = self.target_id(page)
             recording.append(payload)
 
-    async def command(self, command, page=None, *, include_view=False):
+    def ensure_start_available(self):
+        pending = sum(key not in self.finished for key in self.recordings)
+        if self.active or pending >= 16:
+            raise PluginError('CONTEXT_RECORDING_BUSY', 'Finish or discard the existing recording first')
+
+    async def command(self, command, page=None, *, include_view=False, role='operator'):
         await self.flush()
         if command.operation == 'start':
-            pending = sum(key not in self.finished for key in self.recordings)
-            if self.active or pending >= 16:
-                raise PluginError('CONTEXT_RECORDING_BUSY', 'Finish or discard the existing recording first')
+            self.ensure_start_available()
             recording = Recording(page, self.context.pages)
             self.recordings[recording.id] = recording
             document_id = await page.evaluate('(ns)=>window[ns]?.document_id', self.namespace)
             await self.baseline(recording, page, document_id, timing="recording_start")
             self.active = recording
+            await self.codegen.start(recording.id, page, role)
         else:
             recording = self.recordings.get(command.recording_id)
             if recording is None:
@@ -246,6 +253,9 @@ return describe(e,true);
                     recording.state = {'pause': 'PAUSED', 'resume': 'RECORDING', 'stop': 'STOPPED'}[operation]
                     if operation == 'stop':
                         self.active = None
+                        await self.codegen.stop(recording.id)
+                    else:
+                        await self.codegen.pause(recording.id, operation == 'pause')
             elif operation == 'ack':
                 if command.through > recording.delivered:
                     raise PluginError('CONTEXT_RECORDING_ACK_INVALID', 'Cannot acknowledge unread evidence')
@@ -257,6 +267,8 @@ return describe(e,true);
                     # but it no longer occupies the pending recording budget.
                     self.remember_finished(recording.id)
             elif operation == 'discard':
+                if self.codegen.current and self.codegen.current['id'] == recording.id:
+                    await self.codegen.stop(recording.id)
                 recording.events = []
                 recording.bytes = 0
                 recording.available_after = recording.sequence
@@ -293,18 +305,22 @@ return describe(e,true);
                               {'image_base64': base64.b64encode(image).decode('ascii'), 'mime_type': 'image/png'}),)
         collection = ContextCollection((ContextItem('text', 'application/json', json.dumps(
             {'recording_id': recording.id, 'events': entries,
+             **({'codegen': self.codegen.snapshot(recording.id)}
+                if not more and recording.state == 'STOPPED' and self.codegen.snapshot(recording.id) is not None else {}),
              **({'preview_status': preview_status} if preview_status is not None else {})}, ensure_ascii=False), 'playwright.recording',
             truncated=recording.dropped > 0),), views)
         return ContextRecordingBatch(recording.id, recording.state, cursor, collection,
                                      recording.available_after, recording.dropped, more)
 
     def remember_finished(self, recording_id):
+        self.codegen.records.pop(recording_id, None)
         if recording_id not in self.finished:
             self.finished.append(recording_id)
         if len(self.finished) > 64:
             self.recordings.pop(self.finished.pop(0), None)
 
     async def close(self):
+        await self.codegen.close()
         self.closed = True
         self.active = None
         self.context.remove_listener('page', self.watch_page)
@@ -315,10 +331,10 @@ return describe(e,true);
         await asyncio.gather(*tuple(self.tasks), return_exceptions=True)
 
 
-async def record(resource, page, command, *, include_view):
+async def record(resource, page, command, *, include_view, role='operator'):
     recorder = resource.get('context_recorder')
     if recorder is None:
         recorder = Recorder(resource)
         await recorder.install()
         resource['context_recorder'] = recorder
-    return await recorder.command(command, page, include_view=include_view)
+    return await recorder.command(command, page, include_view=include_view, role=role)

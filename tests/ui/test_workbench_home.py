@@ -12,6 +12,64 @@ from taskweave.desktop.workbench import Workbench
 
 
 class WorkbenchHomeTests(unittest.TestCase):
+    def test_reconciliation_requires_choice_and_cancel_does_not_write(self):
+        from nicegui.client import Client
+        from nicegui.page import page
+
+        client = Client(page('/reconcile-choice'))
+
+        async def scenario():
+            workbench = Workbench.__new__(Workbench)
+            workbench.controller = SimpleNamespace(call=AsyncMock())
+            workbench.refresh_run = AsyncMock()
+            workbench.busy = True
+            callbacks = {}
+
+            def button(title, callback, **kwargs):
+                callbacks[title] = callback
+                return Workbench.button(workbench, title, callback, **kwargs)
+
+            workbench.button = button
+            with client:
+                await workbench.reconcile_dialog({'attempt_id': 'attempt-exact'})
+                dialog = next(el for el in client.elements.values() if isinstance(el, ui.dialog) and el.value)
+                controls = list(dialog.descendants())
+                save = next(el for el in controls if getattr(el, 'text', None) == '保存核对结果')
+                self.assertFalse(save.enabled)
+                # Opening the dialog is itself a busy workbench action. Its
+                # completion must preserve the form's disabled state.
+                self.assertFalse(save._tw_before_busy)
+                save.set_enabled(save._tw_before_busy)
+                del save._tw_before_busy
+                workbench.busy = False
+                cancel = next(el for el in controls if getattr(el, 'text', None) == '取消')
+                next(event.handler for event in cancel._event_listeners.values() if event.type == 'click')(None)
+                self.assertFalse(dialog.value)
+                workbench.controller.call.assert_not_awaited()
+
+                await workbench.reconcile_dialog({'attempt_id': 'attempt-exact'})
+                dialog = next(el for el in client.elements.values() if isinstance(el, ui.dialog) and el.value)
+                controls = list(dialog.descendants())
+                decision = next(el for el in controls if isinstance(el, ui.select))
+                decision.value = 'not_completed'
+                evidence = next(el for el in controls if isinstance(el, ui.textarea))
+                evidence.value = '纯计算超时，无外部动作'
+                save = next(el for el in controls if getattr(el, 'text', None) == '保存核对结果')
+                self.assertTrue(save.enabled)
+                await callbacks['保存核对结果']()
+                args = workbench.controller.call.await_args
+                self.assertEqual(args.args, ('run.reconcile',))
+                self.assertEqual(args.kwargs['attempt_id'], 'attempt-exact')
+                self.assertEqual(args.kwargs['decision'], 'not_completed')
+                self.assertEqual(args.kwargs['evidence'], {'manual_query': '纯计算超时，无外部动作'})
+                self.assertFalse(dialog.value)
+                workbench.refresh_run.assert_awaited_once()
+
+        try:
+            asyncio.run(scenario())
+        finally:
+            client.delete()
+
     def test_home_shows_active_actions_pending_reconciliation_and_recent_results(self):
         from nicegui.client import Client
         from nicegui.page import page

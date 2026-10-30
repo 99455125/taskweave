@@ -78,6 +78,19 @@ class StepDebugSession:
         if inspect.isawaitable(result):
             await result
 
+    async def remember_scene(self, run_id, step_id, identity):
+        if self.debug_state.scene is None or self.identity() != identity:
+            return
+        scenes = await self.controller.call('step.trial.sessions', step_id=step_id,
+                                             environment_id=self.debug_state.environment_id)
+        if self.identity() != identity:
+            return
+        selected = next((scene for scene in scenes if scene['run_id'] == run_id), None)
+        if selected:
+            self.debug_state.scene = {'run_id': selected['run_id'], 'session_id': selected['session_id']}
+            if hasattr(self, 'refresh_sources'):
+                await self.refresh_sources()
+
     async def start_flow_trial(self):
         identity = self.identity()
         saved = await self.save_editor()
@@ -89,11 +102,19 @@ class StepDebugSession:
         eligible = [step for step in steps if step["position"] <= saved["position"]]
         if not eligible:
             return
+        from taskweave.core.task_flow import is_linear_flow
+        flow = await self.controller.call('task.flow.get', task_id=self.task_id())
+        if self.identity() != identity:
+            return
+        controlled = not is_linear_flow(flow)
         with ui.context.client.layout, ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
             self.flow_dialog_open = True
             dialog.on("hide", lambda: setattr(self, "flow_dialog_open", False))
-            ui.label("从选定步骤调试到当前步骤").classes("text-lg")
+            ui.label("按流程调试到当前步骤" if controlled else "从选定步骤调试到当前步骤").classes("text-lg")
             start = ui.select({step["step_id"]: f"{i + 1}. {step['name']}" for i, step in enumerate(eligible)}, value=eligible[0]["step_id"], label="开始步骤").classes("w-full")
+            start.set_visibility(not controlled)
+            if controlled:
+                ui.label('从流程起点按实际条件执行，到当前步骤后停止；目标未命中时显示实际路径。').classes('text-sm text-gray-500')
 
             async def launch():
                 if self.identity() != identity:
@@ -104,12 +125,16 @@ class StepDebugSession:
                     "step.trial.flow", step_id=saved["step_id"], inputs=inputs.task.values(),
                     step_inputs={saved["step_id"]: inputs.step.values()},
                     environment_id=inputs.state.environment_id, command_id=command_id(),
-                    defer_inputs=True, start_step_id=start.value,
+                    defer_inputs=True, start_step_id=None if controlled else start.value,
+                    **({'new_session': True} if self.debug_state.scene == {} else
+                       {'session_run_id': self.debug_state.scene['run_id'],
+                        'expected_session_id': self.debug_state.scene['session_id']} if self.debug_state.scene else {}),
                 )
                 if not self.interaction.accept_run(identity, self.identity(), saved['step_id'], run):
                     return
                 dialog.close()
                 await self.settle_trial_start(run["run_id"])
+                await self.remember_scene(run['run_id'], saved['step_id'], identity)
 
             with ui.row().classes("w-full items-center gap-2 flex-wrap"):
                 self.button("开始调试", launch, primary=True)
@@ -126,6 +151,18 @@ class StepDebugSession:
             return
         await self._reset_feedback()
         inputs = TrialInputDraft(self.debug_state)
+        if self.debug_state.scene is not None:
+            # Resource scene and result sample are independent selections.
+            run = await self.controller.trial(saved, inputs.values(), inputs.state.environment_id,
+                continue_session=bool(self.debug_state.scene), scene=self.debug_state.scene,
+                source_run_id=self.debug_state.source_run_id,
+                source_paths=self.debug_state.source_paths,
+                explicit_sources=True)
+            if not self.interaction.accept_run(identity, self.identity(), saved['step_id'], run):
+                return
+            await self.settle_trial_start(run['run_id'])
+            await self.remember_scene(run['run_id'], saved['step_id'], identity)
+            return
         if continue_session:
             previous_id = self.trials.get(saved["step_id"])
             if previous_id:
@@ -215,6 +252,13 @@ class StepDebugPanel:
         self.navigate_step_debug, self.debug_round_fresh = navigate_step_debug, debug_round_fresh
         self.trial_area = None
         self.logs_area = None
+        self.run_status = None
+        self.repair_evidence_area = None
+        self.repair_button = None
+        self.history_control = None
+        self._history_signature = None
+        self._history_generation = 0
+        self._updating_history = False
         self.actions = {}
         self._refresh_lock = asyncio.Lock()
         self._settled_identity = None
@@ -232,7 +276,113 @@ class StepDebugPanel:
             self._live_logs = None
         self.trial_area = None
         self.logs_area = None
+        self.run_status = None
+        self.repair_evidence_area = None
+        self.repair_button = None
+        self.history_control = None
+        self._history_signature = None
+        self._history_generation += 1
         self.actions.clear()
+
+    async def select_history_run(self, selected):
+        if not selected or self._updating_history:
+            return
+        identity = self.identity()
+        previous = self.run_id(identity[1])
+        self._history_generation += 1
+        generation = self._history_generation
+        if selected == previous:
+            return
+        run = await self.controller.call('run.get', run_id=selected)
+        if (generation != self._history_generation or not self._current(identity)
+                or self.run_id(identity[1]) != previous):
+            return
+        if run.get('task_id') != identity[0] or run.get('trial_step_id') != identity[1]:
+            raise TaskError('FORM_INVALID', '请选择当前步骤的调试记录。')
+        self.trials[identity[1]] = selected
+        self.state.feedback = self.state.feedback_run_id = None
+        self.state.removed_feedback = set()
+        self.state.fresh_round = False
+        self.state.trial_signature = None
+        self._settled_identity = None
+        await self.refresh_trial()
+
+    async def refresh_history_options(self, identity, run):
+        control = self.history_control
+        if control is None or control.is_deleted:
+            return
+        run_id = run['run_id'] if run else None
+        signature = (identity, run_id, run.get('status') if run else None)
+        if signature == self._history_signature:
+            return
+        rows = await self.controller.call('run.list', task_id=identity[0])
+        if not self._current(identity, run_id) or control.is_deleted:
+            return
+        records = [row for row in reversed(rows) if row.get('trial_step_id') == identity[1]]
+        options = {row['run_id']: ' · '.join(filter(None, [
+            (row.get('started_at') or '').replace('T', ' ')[:19],
+            STATUS.get(row['status'], row['status']), row['run_id'][:8]])) for row in records}
+        if run_id and run_id not in options:
+            options[run_id] = STATUS.get(run['status'], run['status']) + ' · ' + run_id[:8]
+        self._updating_history = True
+        try:
+            control.set_options(options, value=run_id)
+            control.set_enabled(bool(options))
+        finally:
+            self._updating_history = False
+        self._history_signature = signature
+
+    def render_execution_baseline(self, run, step_id):
+        if not run.get('definition_json'):
+            return
+        snapshot = json.loads(run['definition_json'])
+        step = next((row for row in snapshot.get('steps', []) if row['step_id'] == step_id), None)
+        if step is None:
+            return
+        with ui.expansion('本次运行的步骤代码', icon='code').classes('tw-debug-baseline w-full'):
+            if run.get('definition_hash'):
+                ui.label('定义版本：' + run['definition_hash'][:12]).classes('text-xs text-gray-500').tooltip(run['definition_hash'])
+            ui.code(step.get('step_content') or '', language='python').classes('w-full')
+
+    def render_repair_evidence(self, identity, run_id, feedback=None):
+        area = self.repair_evidence_area
+        if area is None or area.is_deleted:
+            return
+        area.clear()
+        if self.repair_button is not None and not self.repair_button.is_deleted:
+            self.repair_button.set_enabled(True)
+        with area:
+            ui.label('修复目标：当前步骤代码').classes('text-xs font-medium')
+            if not feedback:
+                self.state.feedback = None
+                self.state.feedback_run_id = run_id
+                ui.label('可根据本轮修复要求调整代码；有失败记录时附带失败依据。').classes('text-xs text-gray-500')
+                return
+            ui.label('失败依据').classes('text-sm font-medium')
+            ui.label('运行：' + run_id).classes('text-xs break-all')
+            ui.label('尝试：' + str(feedback.get('attempt_id', ''))).classes('text-xs break-all')
+            controls = self.edit_controls() or {}
+            code = controls.get('code')
+            executed = feedback.get('executed_step_content')
+            if code is not None and isinstance(executed, str):
+                ui.label('失败代码与当前代码不同').classes('tw-repair-baseline text-xs').bind_visibility_from(
+                    code, 'value', lambda value: value != executed)
+            for key, title in [('executed_step_content', '实际执行代码'), ('failed_action', '失败动作'), ('failure_snapshots', '失败快照')]:
+                value = feedback.get(key)
+                if not value:
+                    continue
+                with ui.column().classes('tw-repair-part w-full gap-1'):
+                    def include(event, part=key):
+                        if not self._current(identity, run_id):
+                            return
+                        if event.value:
+                            self.state.removed_feedback.discard(part)
+                        else:
+                            self.state.removed_feedback.add(part)
+                    ui.checkbox(title, value=key not in self.state.removed_feedback).on_value_change(include)
+                    with ui.expansion('查看' + title).classes('tw-repair-detail w-full'):
+                        ui.code(value if isinstance(value, str) else document_text(value),
+                                language='python' if key == 'executed_step_content' else 'json').classes('w-full')
 
     async def poll(self):
         key = (self.identity(), self.run_id(self.identity()[1]))
@@ -259,6 +409,8 @@ class StepDebugPanel:
                 self.trials[step_id] = run_id
         run = await self.controller.call("run.get", run_id=run_id) if run_id else None
         if not self._current(identity, run_id): return
+        await self.refresh_history_options(identity, run)
+        if not self._current(identity, run_id): return
         key = (identity, run_id)
         self._settled_identity = key if not run or run["status"] in {"SUCCEEDED", "FAILED", "CANCELLED", "UNKNOWN", "INTERRUPTED"} else None
         signature = document_text({"run":run, "fresh_round":bool(self.debug_round_fresh())})
@@ -266,6 +418,7 @@ class StepDebugPanel:
         self.refresh(run)
         self.state.trial_signature = signature
         self.trial_area.clear()
+        self.render_repair_evidence(identity, run_id)
         if self.logs_area is not None and not self.logs_area.is_deleted and self._logs_identity != key:
             self._logs_identity = key
             area = self.logs_area
@@ -314,9 +467,13 @@ class StepDebugPanel:
             if not self._current(identity, run_id): return
             if not run_id:
                 return
-            ui.label("调试状态：" + STATUS.get(run["status"], run["status"]))
+            ui.label("运行状态：" + STATUS.get(run["status"], run["status"]))
+            self.render_execution_baseline(run, step_id)
             steps = await self.controller.call("step.list", task_id=task_id)
             if not self._current(identity, run_id): return
+            from taskweave.desktop.components.debug_paths import render_debug_paths
+            if run.get('definition_json'):
+                render_debug_paths(run, steps)
             names = step_names(run, steps)
             failure = next((a for a in reversed(run["attempts"])
                             if a["valid"] and a["status"] in {"FAILED", "UNKNOWN"}), None)
@@ -329,7 +486,8 @@ class StepDebugPanel:
                     ui.label(f"{attempt['error_code']}：{attempt['error_summary']}").classes("text-red-700")
                 if attempt["status"] == "SUCCEEDED" and attempt["valid"]:
                     try:
-                        value = await self.controller.call("run.output", run_id=run_id, step_id=attempt["step_id"])
+                        value = await self.controller.call("run.output", run_id=run_id, step_id=attempt["step_id"],
+                                                           execution_path=attempt.get("execution_path"))
                     except TaskError as error:
                         if error.code != "OUTPUT_NOT_AVAILABLE":
                             raise
@@ -349,19 +507,21 @@ class StepDebugPanel:
                 if not self._current(identity, run_id): return
                 self.state.feedback = feedback
                 self.state.feedback_run_id = run_id
-                with ui.expansion("本次报错上下文", icon="error_outline").classes("w-full border rounded"):
-                    for key, title in [("executed_step_content","本次实际执行的步骤内容"),("failed_action","失败动作"),("failure_snapshots","失败快照")]:
-                        value = feedback.get(key)
-                        if key in self.state.removed_feedback or not value: continue
-                        with ui.expansion(title).classes("w-full"):
-                            with ui.row().classes("w-full justify-end"):
-                                def remove_error_part(part=key):
-                                    if self._current(identity, run_id):
-                                        self.state.removed_feedback.add(part)
-                                        self.state.trial_signature = None
-                                ui.button(icon="delete", on_click=remove_error_part).props("flat round color=negative").tooltip("不再发送给 AI")
-                            ui.textarea(value=document_text(value)).props("readonly rows=8").classes("w-full font-mono")
-
+                if self.repair_evidence_area is not None and not self.repair_evidence_area.is_deleted:
+                    self.render_repair_evidence(identity, run_id, feedback)
+                else:
+                    with ui.expansion("本次报错上下文", icon="error_outline").classes("w-full border rounded"):
+                        for key, title in [("executed_step_content","本次实际执行的步骤内容"),("failed_action","失败动作"),("failure_snapshots","失败快照")]:
+                            value = feedback.get(key)
+                            if key in self.state.removed_feedback or not value: continue
+                            with ui.expansion(title).classes("w-full"):
+                                with ui.row().classes("w-full justify-end"):
+                                    def remove_error_part(part=key):
+                                        if self._current(identity, run_id):
+                                            self.state.removed_feedback.add(part)
+                                            self.state.trial_signature = None
+                                    ui.button(icon="delete", on_click=remove_error_part).props("flat round color=negative").tooltip("不再发送给 AI")
+                                ui.textarea(value=document_text(value)).props("readonly rows=8").classes("w-full font-mono")
     def render_actions(self, container, single, flow, end):
         identity = self.identity()
         def failure(action):
@@ -462,6 +622,13 @@ class StepDebugPanel:
             await refresh()
 
     def refresh(self, run):
+        if self.run_status is not None and not self.run_status.is_deleted:
+            self.run_status.text = ('尚未调试' if not run
+                                    else '调试状态：' + STATUS.get(run['status'], run['status']))
+            tone = ('text-positive' if run and run['status'] == 'SUCCEEDED' else
+                    'text-negative' if run and run['status'] in {'FAILED', 'UNKNOWN', 'INTERRUPTED'}
+                    else 'text-gray-500')
+            self.run_status.classes(remove='text-positive text-negative text-gray-500', add=tone)
         end = self.actions.get("end")
         if end is None or end.is_deleted:
             return

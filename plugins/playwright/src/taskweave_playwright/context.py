@@ -54,10 +54,23 @@ async def record_context(provider_id, ctx, command, request, *, include_view=Tru
         elif request.get('url'):
             if urlparse(request['url']).scheme not in {'http', 'https'}:
                 raise PluginError('URL_INVALID')
+            if resource is not None and resource.get('context_recorder') is not None:
+                resource['context_recorder'].ensure_start_available()
             if resource is None:
-                await page_for(ctx, role)
+                # Opening a resource already allocates its initial main page.
+                # Navigate that page instead of leaving it blank beside a second tab.
+                page = await page_for(ctx, role)
                 resource = next(resource for active_role, resource in ctx.resources.active('playwright.session') if active_role == role)
-            page = await resource['context'].new_page()
+            elif (not resource['page'].is_closed() and resource['page'].url == 'about:blank'
+                  and await resource['page'].evaluate(
+                      "() => location.href === 'about:blank' && document.title === '' "
+                      "&& document.body !== null && document.body.childNodes.length === 0")):
+                # A retained resource may also still have its untouched initial tab.
+                # A blank URL with DOM content is user work, not an unused page.
+                page = resource['page']
+            else:
+                # An existing session can contain user work; do not navigate its main page.
+                page = await resource['context'].new_page()
             await page.goto(request['url'], wait_until='domcontentloaded')
         elif resource is not None:
             page = await page_for(ctx, role, request.get('target_id'))
@@ -71,7 +84,7 @@ async def record_context(provider_id, ctx, command, request, *, include_view=Tru
         if resource is None or resource.get('context_recorder') is None:
             raise PluginError('CONTEXT_RECORDING_UNAVAILABLE')
         page = None
-    return await record(resource, page, command, include_view=include_view)
+    return await record(resource, page, command, include_view=include_view, role=role)
 
 
 async def collect_context(provider_id, ctx, request, *, include_view=True):

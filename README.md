@@ -44,7 +44,7 @@ uv run taskweave skill ~/.agents/skills/taskweave
 
 ```text
 src/taskweave/  核心契约、用例、交互、基础设施、桌面适配与SDK
-plugins/        十一独立插件包及可选依赖
+plugins/        十四独立插件包及可选依赖
 packaging/      macOS与Windows分发入口
 scripts/        工程、测试选择及构建工具
 tests/          功能、交互、仓储、应用、UI与集成验证

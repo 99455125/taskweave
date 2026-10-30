@@ -11,7 +11,421 @@ from taskweave.desktop.planning import PlanningPage, _refresh_organization_contr
 
 
 class PlanningPageTests(unittest.TestCase):
-    def test_materials_and_history_load_only_on_first_open_and_keep_drafts(self):
+    def test_save_updates_heading_summary_and_list_without_rebuilding_editor(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            plan = app.dispatch('plan.create', {'name': 'original name'})
+            client = Client(page('/planning-save-display'))
+            async def scenario():
+                with client:
+                    planning = PlanningPage(DesktopController(app), PlanningPageState(plan_id=plan['plan_id']),
+                        lambda title, callback, **kw: ui.button(title, on_click=callback), AsyncMock(), AsyncMock(), AsyncMock())
+                    await planning.render()
+                    name = next(e for e in client.elements.values() if getattr(e, 'label', '') == '规划名称')
+                    goal = next(e for e in client.elements.values() if getattr(e, 'label', '') == '任务目标')
+                    title = next(e for e in client.elements.values() if 'tw-detail-title' in e.classes)
+                    revision = next(e for e in client.elements.values() if 'tw-plan-revision' in e.classes)
+                    self.assertEqual(revision.text, f"r{plan['revision']}")
+                    self.assertTrue(any(f"r{plan['revision']}" in e.text for e in client.elements.values()
+                                        if 'tw-home-task-meta' in e.classes))
+                    tabs = next(e for e in client.elements.values() if 'tw-task-tabs' in e.classes)
+                    name.value, goal.value = '  renamed plan  ', 'updated goal'
+                    await tabs._change_handlers[-1](SimpleNamespace(value='生成记录'))
+                    await planning.state.save_callback()
+                    self.assertEqual(app.planning.get(plan['plan_id'])['name'], 'renamed plan')
+                    self.assertEqual(title.text, 'renamed plan')
+                    saved_revision = app.planning.get(plan['plan_id'])['revision']
+                    self.assertEqual(revision.text, f'r{saved_revision}')
+                    self.assertTrue(any(f'r{saved_revision}' in e.text for e in client.elements.values()
+                                        if 'tw-home-task-meta' in e.classes))
+                    summary = next(e for e in client.elements.values() if 'tw-plan-header-summary' in e.classes)
+                    self.assertEqual(summary.text, 'updated goal')
+                    self.assertTrue(summary.visible)
+                    self.assertEqual([e.text for e in client.elements.values() if 'tw-plan-list-name' in e.classes], ['renamed plan'])
+                    self.assertFalse(name.is_deleted)
+                    self.assertFalse(tabs.is_deleted)
+                    history = next(e for e in client.elements.values() if 'tw-plan-history' in e.classes)
+                    self.assertTrue(history.visible)
+                    goal.value = ''
+                    await planning.save_then(AsyncMock())
+                    self.assertFalse(summary.visible)
+                    self.assertTrue(history.visible)
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_late_save_does_not_update_another_plans_heading_or_draft(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            first = app.dispatch('plan.create', {'name': 'first plan'})
+            second = app.dispatch('plan.create', {'name': 'second plan'})
+            client = Client(page('/planning-late-save-display'))
+            async def scenario():
+                with client:
+                    entered, release = asyncio.Event(), asyncio.Event()
+                    controller = DesktopController(app)
+                    original = controller.call
+                    async def call(operation, **params):
+                        if operation == 'plan.update' and params['plan_id'] == first['plan_id']:
+                            entered.set()
+                            await release.wait()
+                        return await original(operation, **params)
+                    controller.call = call
+                    state = PlanningPageState(plan_id=first['plan_id'])
+                    planning = PlanningPage(controller, state,
+                        lambda title, callback, **kw: ui.button(title, on_click=callback), AsyncMock(), AsyncMock(), AsyncMock())
+                    with ui.column() as root:
+                        await planning.render()
+                    name = next(e for e in root.descendants() if getattr(e, 'label', '') == '规划名称')
+                    name.value = 'saved first plan'
+                    pending = asyncio.create_task(state.save_callback())
+                    await asyncio.wait_for(entered.wait(), 2)
+                    old_save_state = next(e for e in root.descendants() if getattr(e, 'text', '') == '正在保存…')
+                    try:
+                        state.plan_id = second['plan_id']
+                        state.generation += 1
+                        root.clear()
+                        with root:
+                            await planning.render()
+                        new_name = next(e for e in root.descendants() if getattr(e, 'label', '') == '规划名称')
+                        new_name.value = 'unsaved second plan'
+                        current_callback = state.save_callback
+                    finally:
+                        release.set()
+                        await pending
+                    self.assertEqual(app.planning.get(first['plan_id'])['name'], 'saved first plan')
+                    self.assertEqual(next(e for e in root.descendants() if 'tw-detail-title' in e.classes).text, 'second plan')
+                    self.assertEqual(next(e for e in root.descendants() if 'tw-plan-revision' in e.classes).text,
+                                     f"r{second['revision']}")
+                    self.assertEqual(new_name.value, 'unsaved second plan')
+                    self.assertEqual(app.planning.get(second['plan_id'])['name'], 'second plan')
+                    self.assertIs(state.save_callback, current_callback)
+                    self.assertEqual(planning.interaction.editor_session.values()['name'], 'unsaved second plan')
+                    self.assertEqual(old_save_state.text, '正在保存…')
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_more_menu_preserves_save_before_copy_and_delete(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            plan = app.dispatch('plan.create', {'name': 'original'})
+            client = Client(page('/planning-more-menu'))
+            async def scenario():
+                with client:
+                    callbacks = {}
+                    def button(title, callback, **kwargs):
+                        callbacks[title] = callback
+                        return ui.button(title, on_click=callback)
+                    planning = PlanningPage(DesktopController(app), PlanningPageState(plan_id=plan['plan_id']),
+                        button, AsyncMock(), AsyncMock(), AsyncMock())
+                    planning.copy_plan, planning.delete_plan = AsyncMock(), AsyncMock()
+                    await planning.render()
+                    menu = next(e for e in client.elements.values() if isinstance(e, ui.menu))
+                    menu_buttons = {getattr(e, 'text', '') for e in menu.descendants()}
+                    self.assertTrue({'复制规划', '删除规划'} <= menu_buttons)
+                    self.assertTrue({'保存', '生成任务', '☆'} <= callbacks.keys())
+                    self.assertTrue(any(getattr(e, 'label', '') == '分类' for e in client.elements.values()))
+                    name = next(e for e in client.elements.values() if getattr(e, 'label', '') == '规划名称')
+                    for label, value, operation in (
+                        ('复制规划', 'before copy', planning.copy_plan),
+                        ('删除规划', 'before delete', planning.delete_plan),
+                    ):
+                        name.value = value
+                        await callbacks[label]()
+                        selected = operation.await_args.args[-1]
+                        self.assertEqual(selected['plan_id'], plan['plan_id'])
+                        self.assertEqual(selected['name'], value)
+                        self.assertEqual(selected['revision'], app.planning.get(plan['plan_id'])['revision'])
+                        self.assertEqual(app.planning.get(plan['plan_id'])['name'], value)
+                        self.assertFalse(name.is_deleted)
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_generation_history_displays_actual_import_count_and_refreshes_after_new_import(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            plan = app.dispatch('plan.create', {'name': 'import counts'})
+            generation = app.planning.generations.create_generation(plan['plan_id'], plan['revision'], 'api', 'first.txt')
+            for name in ('first', 'second'):
+                task = app.repo.create_task(name)
+                app.planning.generations.mark_imported(generation['generation_id'], task['task_id'])
+            client = Client(page('/planning-import-counts'))
+            async def scenario():
+                with client:
+                    controller = DesktopController(app)
+                    controller.call = AsyncMock(wraps=controller.call)
+                    planning = PlanningPage(controller, PlanningPageState(plan_id=plan['plan_id']),
+                        lambda title, callback, **kw: ui.button(title, on_click=callback), AsyncMock(), AsyncMock(), AsyncMock())
+                    await planning.editor(plan)
+                    tabs = next(e for e in client.elements.values() if 'tw-task-tabs' in e.classes)
+                    await tabs._change_handlers[-1](SimpleNamespace(value='生成记录'))
+                    def count_labels():
+                        history = next(e for e in client.elements.values() if 'tw-plan-history' in e.classes)
+                        return [getattr(e, 'text', '') for e in history.descendants()]
+                    self.assertIn('导入 2 次', count_labels())
+                    await planning._refresh_generation_history(planning._planning_identity())
+                    reads = [call for call in controller.call.await_args_list if call.args[0] == 'plan.generation.imports']
+                    self.assertEqual(len(reads), 1, 'Unchanged generation revisions should reuse receipt counts')
+                    task = app.repo.create_task('third')
+                    app.planning.generations.mark_imported(generation['generation_id'], task['task_id'])
+                    read_receipts = planning.interaction.imports
+                    planning.interaction.imports = AsyncMock(side_effect=OSError('local receipt read failed'))
+                    with self.assertRaises(OSError):
+                        await planning._refresh_generation_history(planning._planning_identity())
+                    self.assertIn('导入 2 次', count_labels())
+                    planning.interaction.imports = read_receipts
+                    await planning._refresh_generation_history(planning._planning_identity())
+                    self.assertIn('导入 3 次', count_labels())
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_generation_history_displays_frozen_revisions_without_import_queries(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            plan = app.dispatch('plan.create', {'name': 'generation revisions'})
+            first = app.planning.generations.create_generation(plan['plan_id'], plan['revision'], 'api', 'first.txt')
+            saved = app.dispatch('plan.update', {'plan_id': plan['plan_id'], 'expected_revision': plan['revision'],
+                                                'name': 'updated generation revisions'})
+            second = app.planning.generations.create_generation(plan['plan_id'], saved['revision'], 'web_chat', 'second.txt')
+            client = Client(page('/planning-history-revisions'))
+            async def scenario():
+                with client:
+                    controller = DesktopController(app)
+                    controller.call = AsyncMock(wraps=controller.call)
+                    callbacks = []
+                    def button(title, callback, **kwargs):
+                        if title == '查看': callbacks.append(callback)
+                        return ui.button(title, on_click=callback)
+                    planning = PlanningPage(controller, PlanningPageState(plan_id=plan['plan_id']),
+                        button, AsyncMock(), AsyncMock(), AsyncMock())
+                    planning.open_generation = AsyncMock()
+                    await planning.render()
+                    controller.call.reset_mock()
+                    tabs = next(e for e in client.elements.values() if 'tw-task-tabs' in e.classes)
+                    await tabs._change_handlers[-1](SimpleNamespace(value='生成记录'))
+                    history = next(e for e in client.elements.values() if 'tw-plan-history' in e.classes)
+                    labels = [getattr(e, 'text', '') for e in history.descendants()]
+                    self.assertIn(f"基于 r{first['plan_revision']}", labels)
+                    self.assertIn(f"基于 r{second['plan_revision']}", labels)
+                    controller.call.assert_awaited_once_with('plan.generation.list', plan_id=plan['plan_id'])
+                    expected = app.planning.generation_list(plan['plan_id'])
+                    self.assertEqual(len(callbacks), len(expected))
+                    for callback, generation in zip(callbacks, expected):
+                        await callback()
+                        planning.open_generation.assert_awaited_with(generation['generation_id'], planning._planning_identity())
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_context_edits_refresh_revision_without_saving_form_draft(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            plan = app.dispatch('plan.create', {'name': 'saved plan'})
+            material = app.planning.contexts.add_context(plan['plan_id'], plan['revision'], 'fixture', 'material', '',
+                                                        None, [{'text': 'local fixture'}])
+            client = Client(page('/planning-context-revision'))
+            async def scenario():
+                with client:
+                    controller = DesktopController(app)
+                    controller.call = AsyncMock(wraps=controller.call)
+                    planning = PlanningPage(controller, PlanningPageState(plan_id=plan['plan_id']),
+                        lambda title, callback, **kw: ui.button(title, on_click=callback), AsyncMock(), AsyncMock(), AsyncMock())
+                    with patch('taskweave.desktop.pages.planning.ContextCards') as cards:
+                        await planning.render()
+                    name = next(e for e in client.elements.values() if getattr(e, 'label', '') == '规划名称')
+                    revision = next(e for e in client.elements.values() if 'tw-plan-revision' in e.classes)
+                    name.value = 'unsaved draft'
+                    controller.call.reset_mock()
+                    save_context, delete_context = cards.call_args.args[1:3]
+                    await save_context(material['context'], 'renamed material', 'updated notes')
+                    self.assertEqual(revision.text, f"r{app.planning.get(plan['plan_id'])['revision']}")
+                    await cards.call_args.kwargs['update_capture'](material['context'], material['capture'], 'renamed capture')
+                    self.assertEqual(revision.text, f"r{app.planning.get(plan['plan_id'])['revision']}")
+                    await delete_context(material['context'])
+                    self.assertEqual(revision.text, f"r{app.planning.get(plan['plan_id'])['revision']}")
+                    self.assertEqual(name.value, 'unsaved draft')
+                    self.assertEqual(app.planning.get(plan['plan_id'])['name'], 'saved plan')
+                    self.assertFalse(name.is_deleted)
+                    self.assertNotIn('plan.update', [call.args[0] for call in controller.call.await_args_list])
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_generation_dialog_summarizes_saved_materials_and_rejects_stale_selection(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        client = Client(page('/planning-generation-materials'))
+        async def scenario():
+            with client:
+                plan = {'plan_id': 'p1', 'revision': 4, 'plugin_ids': [], 'contexts': []}
+                controller = AsyncMock()
+                state = PlanningPageState(plan_id='p1', generation=2)
+                planning = PlanningPage(controller, state, MagicMock(), AsyncMock(), AsyncMock(), AsyncMock())
+                planning.generate = AsyncMock()
+                def saved():
+                    plan.update(revision=5, plugin_ids=['playwright', 'file'], contexts=[{}, {}, {}])
+                state.save_callback = AsyncMock(side_effect=saved)
+                stale = False
+                channel = 'api'
+                async def choose(dialog):
+                    labels = [getattr(e, 'text', '') for e in dialog.descendants()]
+                    self.assertIn('规划 r5', labels)
+                    self.assertIn('2 个插件 · 3 组上下文', labels)
+                    self.assertTrue({'playwright', 'file'} <= set(labels))
+                    self.assertFalse(any(getattr(e, 'label', '') == '本轮补充要求' for e in dialog.descendants()))
+                    if stale:
+                        state.plan_id, state.generation = 'p2', 3
+                    return channel
+                with patch.object(ui.dialog, '__await__', lambda dialog: choose(dialog).__await__()):
+                    for channel in ('api', 'web_chat'):
+                        await planning.save_then(planning.choose_generation_mode, plan)
+                        planning.generate.assert_awaited_with(plan, channel)
+                    self.assertEqual(planning.generate.await_count, 2)
+                    stale = True
+                    await planning.choose_generation_mode(plan)
+                    self.assertEqual(planning.generate.await_count, 2)
+                controller.call.assert_not_awaited()
+                self.assertEqual(state.save_callback.await_count, 2)
+        try:
+            asyncio.run(scenario())
+        finally:
+            client.delete()
+
+    def test_materials_load_failure_keeps_history_available_and_retry_preserves_drafts(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            plan = app.dispatch('plan.create', {'name': 'saved name'})
+            client = Client(page('/planning-materials-retry'))
+            async def scenario():
+                with client:
+                    controller = DesktopController(app)
+                    original = controller.call
+                    fail_once = True
+                    async def call(operation, **params):
+                        nonlocal fail_once
+                        if operation == 'capabilities' and fail_once:
+                            fail_once = False
+                            raise OSError('capability lookup failed')
+                        return await original(operation, **params)
+                    controller.call = call
+                    callbacks = {}
+                    def button(title, callback, **kwargs):
+                        callbacks[title] = callback
+                        return ui.button(title, on_click=callback)
+                    planning = PlanningPage(controller, PlanningPageState(plan_id=plan['plan_id']),
+                        button, AsyncMock(), AsyncMock(), AsyncMock())
+                    try:
+                        with self.assertLogs('taskweave.desktop.planning', level='WARNING'):
+                            await planning.editor(plan)
+                    except OSError as exc:
+                        self.fail(f'material lookup must not abort the planning editor: {exc}')
+                    name = next(e for e in client.elements.values() if getattr(e, 'label', '') == '规划名称')
+                    goal = next(e for e in client.elements.values() if getattr(e, 'label', '') == '任务目标')
+                    name.value, goal.value = 'unsaved name', 'unsaved goal'
+                    candidate = next(e for e in client.elements.values() if 'tw-plan-current-candidate' in e.classes)
+                    self.assertTrue(candidate.default_slot.children)
+                    tabs = next(e for e in client.elements.values() if 'tw-task-tabs' in e.classes)
+                    await tabs._change_handlers[-1](SimpleNamespace(value='生成记录'))
+                    history = next(e for e in client.elements.values() if 'tw-plan-history' in e.classes)
+                    self.assertTrue(history.visible)
+                    self.assertTrue(history.default_slot.children)
+                    await tabs._change_handlers[-1](SimpleNamespace(value='基础配置'))
+                    capability_area = next(e for e in client.elements.values() if 'tw-plan-capabilities' in e.classes)
+                    retry = next(e for e in capability_area.descendants()
+                                 if getattr(e, 'text', '') == '重新加载')
+                    self.assertTrue(retry.parent_slot.parent.visible)
+                    await callbacks['重新加载']()
+                    self.assertEqual(name.value, 'unsaved name')
+                    self.assertEqual(goal.value, 'unsaved goal')
+                    plugin = next(e for e in capability_area.descendants() if e.props.get('aria-label') == '可用插件')
+                    self.assertEqual(plugin.props.get('role'), 'group')
+                    self.assertFalse(retry.parent_slot.parent.visible)
+                    self.assertEqual(app.planning.get(plan['plan_id'])['name'], 'saved name')
+                    await planning.state.save_callback()
+                    saved = app.planning.get(plan['plan_id'])
+                    self.assertEqual(saved['name'], 'unsaved name')
+                    self.assertEqual(saved['plan_description'], 'unsaved goal')
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_plugin_checkboxes_keep_multiple_selection_and_save_only_on_request(self):
+        import tempfile
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home, registry_factory='taskweave.plugins.demo:build_registry') as app:
+            plan = app.dispatch('plan.create', {'name': 'plugin options'})
+            client = Client(page('/planning-plugin-options'))
+            async def scenario():
+                with client:
+                    planning = PlanningPage(DesktopController(app), PlanningPageState(plan_id=plan['plan_id']),
+                        lambda title, callback, **kw: ui.button(title, on_click=callback), AsyncMock(), AsyncMock(), AsyncMock())
+                    await planning.editor(plan)
+                    group = next(e for e in client.elements.values() if e.props.get('aria-label') == '可用插件')
+                    options = {e.text: e for e in group.descendants() if isinstance(e, ui.checkbox)}
+                    options['demo'].set_value(True)
+                    options['text'].set_value(True)
+                    self.assertEqual(app.planning.get(plan['plan_id'])['plugin_ids'], [])
+                    await planning.state.save_callback()
+                    self.assertEqual(app.planning.get(plan['plan_id'])['plugin_ids'], ['demo', 'text'])
+                    options['demo'].set_value(False)
+                    await planning.state.save_callback()
+                    self.assertEqual(app.planning.get(plan['plan_id'])['plugin_ids'], ['text'])
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_configuration_loads_once_in_goal_tab_and_history_stays_lazy(self):
         import tempfile
         from nicegui import ui
         from nicegui.client import Client
@@ -29,13 +443,16 @@ class PlanningPageTests(unittest.TestCase):
                         lambda title, callback, **kw: ui.button(title, on_click=callback), AsyncMock(), AsyncMock(), AsyncMock())
                     await planning.editor(plan)
                     operations = [call.args[0] for call in controller.call.await_args_list]
-                    self.assertNotIn('environment.list', operations)
-                    self.assertNotIn('capabilities', operations)
+                    self.assertEqual(operations.count('environment.list'), 1)
+                    self.assertEqual(operations.count('capabilities'), 1)
+                    basic = next(e for e in client.elements.values() if 'tw-plan-form' in e.classes)
+                    plugin = next(e for e in basic.descendants() if e.props.get('aria-label') == '可用插件')
+                    self.assertEqual(plugin.props.get('role'), 'group')
                     materials = next(e for e in client.elements.values() if 'tw-plan-materials' in e.classes)
                     history = next(e for e in client.elements.values() if 'tw-plan-history' in e.classes)
                     self.assertFalse(materials.visible)
                     self.assertFalse(history.visible)
-                    self.assertFalse(materials.default_slot.children)
+                    self.assertTrue(materials.default_slot.children)
                     self.assertFalse(history.default_slot.children)
                     name = next(e for e in client.elements.values() if getattr(e, 'label', '') == '规划名称')
                     name.value = '尚未保存的名称'
@@ -48,11 +465,11 @@ class PlanningPageTests(unittest.TestCase):
                     controls = list(materials.default_slot.children)
                     self.assertTrue(controls)
                     self.assertEqual(name.value, '尚未保存的名称')
-                    self.assertEqual([c.args[0] for c in controller.call.await_args_list].count('environment.list'), 1)
+                    self.assertEqual([c.args[0] for c in controller.call.await_args_list].count('environment.list'), 0)
                     await select(SimpleNamespace(value='基础配置'))
                     await select(SimpleNamespace(value='能力与素材'))
                     self.assertEqual(materials.default_slot.children, controls)
-                    self.assertEqual([c.args[0] for c in controller.call.await_args_list].count('environment.list'), 1)
+                    self.assertEqual([c.args[0] for c in controller.call.await_args_list].count('environment.list'), 0)
                     controller.call.reset_mock()
                     await select(SimpleNamespace(value='生成记录'))
                     await select(SimpleNamespace(value='基础配置'))
@@ -93,11 +510,12 @@ class PlanningPageTests(unittest.TestCase):
                     state = PlanningPageState(plan_id=plan['plan_id'])
                     planning = PlanningPage(controller, state,
                         lambda title, callback, **kw: ui.button(title, on_click=callback), AsyncMock(), AsyncMock(), AsyncMock())
-                    await planning.editor(plan)
-                    tabs = next(e for e in client.elements.values() if 'tw-task-tabs' in e.classes)
-                    materials = next(e for e in client.elements.values() if 'tw-plan-materials' in e.classes)
-                    pending = asyncio.create_task(tabs._change_handlers[-1](SimpleNamespace(value='能力与素材')))
+                    async def render_pending():
+                        with client:
+                            await planning.editor(plan)
+                    pending = asyncio.create_task(render_pending())
                     await asyncio.wait_for(entered.wait(), 2)
+                    materials = next(e for e in client.elements.values() if 'tw-plan-materials' in e.classes)
                     self.assertFalse(materials.default_slot.children)
                     state.plan_id = 'another-plan'
                     state.generation += 1
@@ -686,7 +1104,7 @@ class PlanningPageTests(unittest.TestCase):
     def test_render_owns_plan_selection_and_search_state(self):
         async def scenario():
             controller = AsyncMock()
-            controller.call.side_effect = [[{"plan_id": "p1", "name": "计划"}], [], {"plan_id": "p1"}]
+            controller.call.side_effect = [[{"plan_id": "p1", "name": "计划", "revision": 1}], [], {"plan_id": "p1", "revision": 1}]
             state = PlanningPageState()
             page = PlanningPage(controller, state, MagicMock(), AsyncMock(), AsyncMock(), AsyncMock())
             page.editor = AsyncMock()

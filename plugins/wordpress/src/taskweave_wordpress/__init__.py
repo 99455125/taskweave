@@ -23,7 +23,7 @@ class SiteProvider:
         finally: self.active.discard(id(resource))
 
 class JsonResultHandler:
-    def schema(self): return {'version':1,'tables':{},'migrations':{},'indexes':{}}
+    def schema(self): return {'tables':{},'indexes':{}}
     def prepare(self,request):
         require(isinstance(request.payload,dict),'WORDPRESS_RESULT_INVALID');return PreparedResult('json',payload=request.payload)
     def parse(self,stored): return stored

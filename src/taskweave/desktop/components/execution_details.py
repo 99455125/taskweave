@@ -6,16 +6,24 @@ import json
 import time
 from nicegui import ui
 from taskweave.presentation.execution import ExecutionInteraction
+from taskweave.presentation.execution_paths import ExecutionPaths
 from taskweave.presentation.history import HistoryLoadState
 from taskweave.desktop.controller import command_id
 from taskweave.desktop.display import readable_metadata, step_names
 from taskweave.desktop.components.run_logs import LiveRunLogs, render_log_text
-from taskweave.core.task_flow import is_linear_flow
+from taskweave.core.task_flow import is_linear_flow, conditional_branches
+from taskweave.desktop.components.flow_tree import FlowTree
 
 STATUS = {"READY": "就绪", "RUNNING": "执行中", "PAUSED": "已暂停", "FAILED": "失败", "INTERRUPTED": "中断 / 待核对", "SUCCEEDED": "成功", "CANCELLED": "已结束", "UNKNOWN": "结果待核对"}
 
 def document_text(value):
     return json.dumps(value, ensure_ascii=False, indent=2, default=str)
+
+def result_reference_summary(reference):
+    state = reference.get('state', 'UNKNOWN')
+    label = {'AVAILABLE': '可查看', 'UNAVAILABLE': '不可用', 'DELETING': '删除中'}.get(state, state)
+    return f"{reference.get('kind', '结果')} · {label} · {reference.get('media_type', '未知类型')}"
+
 
 def short_run_id(value):
     return str(value or "")[:8]
@@ -48,8 +56,8 @@ def flow_limits(flow):
             limits[node['id']] = node.get('max_iterations', DEFAULT_LOOP_ITERATIONS)
             visit(node['body'])
         elif kind == 'if':
-            visit(node['then'])
-            visit(node['else'])
+            for _, body in conditional_branches(node):
+                visit(body)
         elif kind == 'sequence':
             for child in node['children']:
                 visit(child)
@@ -69,7 +77,9 @@ class ExecutionDetails:
         self._logs_host = None
         self._logs_key = None
         self._live_logs = None
-        self._run_details_visible = True
+        self._run_details_visible = False
+        self._selected_tabs = {}
+        self._path_scopes = {}
 
     @property
     def visible(self): return self.interaction.polling.visible
@@ -197,7 +207,10 @@ class ExecutionDetails:
                         except (TypeError, ValueError):
                             total_steps = 0
                         completed_steps = sum(attempt.get("valid") and attempt.get("status") == "SUCCEEDED" for attempt in run.get("attempts", []))
-                        if total_steps:
+                        if run.get('execution_kind') == 'sequence':
+                            completed = sum(node['status'] == 'SUCCEEDED' for node in run['nodes'])
+                            ui.label(f"任务组合 · 已完成 {completed} 次任务调用").classes('text-xs text-gray-500')
+                        elif total_steps:
                             if not controlled_run(run):
                                 ui.linear_progress(min(1, completed_steps / total_steps), show_value=False).props("rounded size=5px color=primary")
                                 ui.label(f"{completed_steps}/{total_steps} 步").classes("text-xs text-gray-500")
@@ -205,7 +218,26 @@ class ExecutionDetails:
                                 ui.label(f"已完成 {completed_steps} 次动作").classes("text-xs text-gray-500")
 
         with self.execution_rows:
-            if active_run is None:
+            if active_run is not None and active_run.get("execution_kind") == "sequence":
+                self._run_details_visible = False
+                if self._logs_host is not None and not self._logs_host.is_deleted:
+                    self._logs_host.set_visibility(False)
+                from taskweave.desktop.components.sequence_execution import SequenceExecution
+                async def deleted(run_id):
+                    if self.run_id == run_id:
+                        self.run_id = None
+                        self.state.selected_step_id = self.state.selected_step_run_id = None
+                    self.state.signature = None
+                view = SequenceExecution(self.controller, self.button, self.refresh,
+                    identity=lambda: (self.page_generation(), self.page(), self.run_id),
+                    tasks=[dict(item, task_id=key) for key, item in tasks.items()],
+                    environments=[{"environment_id": key, "name": name} for key, name in environments.items()],
+                    on_deleted=deleted)
+                await view.render(active_run)
+            elif active_run is None:
+                self._run_details_visible = False
+                if self._logs_host is not None and not self._logs_host.is_deleted:
+                    self._logs_host.set_visibility(False)
                 ui.label("当前筛选下没有选中的执行。请调整筛选条件或选择其他执行。").classes("tw-panel w-full text-gray-500")
             else:
                 run = active_run
@@ -218,11 +250,12 @@ class ExecutionDetails:
                         with ui.row().classes("items-center gap-2"):
                             self.button('查看验收', lambda rid=run['run_id']: self.controller.open_review('run', rid))
                             async def delete_selected(r=run):
-                                with ui.dialog() as dialog, ui.card():
-                                    ui.label("删除这次执行及其日志、结果？其他执行和任务配置保留。")
-                                    with ui.row().classes("w-full items-center gap-2 flex-wrap"):
-                                        ui.button("取消", on_click=lambda: dialog.submit(False)).props("outline")
-                                        ui.button("确认删除执行", on_click=lambda: dialog.submit(True)).props("color=negative")
+                                with ui.dialog() as dialog, ui.card().classes('tw-confirm-dialog'):
+                                    ui.label('删除这次执行？').classes('tw-confirm-title')
+                                    ui.label('本次执行的日志和结果将一并删除。').classes('tw-confirm-description')
+                                    with ui.row().classes('tw-confirm-actions'):
+                                        ui.button("取消", on_click=lambda: dialog.submit(False)).props("outline").classes('tw-confirm-cancel')
+                                        ui.button("确认删除执行", on_click=lambda: dialog.submit(True)).props("outline color=negative").classes('tw-confirm-danger')
                                 if await dialog:
                                     await self.controller.call("run.delete", run_id=r["run_id"])
                                     if self.run_id == r["run_id"]:
@@ -247,132 +280,287 @@ class ExecutionDetails:
                     ui.label(f"运行编号 #{short_run_id(run['run_id'])} · 环境 {environments.get(run['environment_id'], '默认环境')} · {local_run_time(run.get('started_at'))}").classes("text-xs text-gray-500 mt-2")
 
                 definition = definition_steps or []
-                controlled = controlled_run(run)
-                total = len(definition)
-                latest_by_step = {}
-                for attempt in run["attempts"]:
-                    if attempt.get("valid"):
-                        latest_by_step[attempt["step_id"]] = attempt
-                succeeded_count = sum(item.get("status") == "SUCCEEDED" for item in latest_by_step.values())
-                with ui.card().classes("tw-run-progress-card w-full"):
-                    with ui.row().classes("w-full justify-between items-center flex-wrap gap-2"):
-                        ui.label("步骤进度").classes("text-lg font-semibold")
-                        ui.label((f"已完成 {sum(a['valid'] and a['status'] == 'SUCCEEDED' for a in run['attempts'])} 次动作 · 点击节点查看步骤"
-                                  if controlled else f"{succeeded_count} / {total} 已完成 · 点击节点查看步骤")).classes("text-sm text-gray-500")
-                    with ui.row().classes("w-full items-center gap-3 mt-2"):
-                        if not controlled:
-                            ui.linear_progress(min(1, succeeded_count / total) if total else 0, show_value=False).props("rounded size=7px color=primary").classes("grow")
-                    with ui.row().classes("tw-step-track"):
-                        for index, step in enumerate(definition):
-                            attempts = [a for a in run["attempts"] if a["step_id"] == step["step_id"] and a["valid"]]
-                            step_status = attempts[-1]["status"] if attempts else None
-                            is_selected = (
-                                self.state.selected_step_run_id == run["run_id"]
-                                and self.state.selected_step_id == step["step_id"]
-                                or self.state.selected_step_run_id != run["run_id"]
-                                and self.default_step_id(run, definition) == step["step_id"]
-                            )
-                            classes = "tw-step-node" + (" is-selected" if is_selected else "")
-                            classes += " is-succeeded" if step_status == "SUCCEEDED" else " is-failed" if step_status == "FAILED" else " is-unknown" if step_status == "UNKNOWN" else " is-running" if step_status == "RUNNING" else " is-pending"
-                            with ui.column().classes(classes):
-                                self.button("✓" if step_status == "SUCCEEDED" else str(index + 1), lambda rid=run["run_id"], sid=step["step_id"]: self.select_step(rid, sid), flat=True).props(f'round dense aria-label="查看步骤 {index + 1}"').classes("tw-step-dot")
-                                self.button(step["name"], lambda rid=run["run_id"], sid=step["step_id"]: self.select_step(rid, sid), flat=True).classes("tw-step-name")
-                                ui.label(STATUS.get(step_status, "未执行")).classes("text-xs text-gray-500")
-                                if step_status == "SUCCEEDED":
-                                    self.button("查看结果", lambda r=run, st=step: self.step_result_dialog(r, st), flat=True)
-                                elif step_status in {"FAILED", "UNKNOWN"}:
-                                    self.button("查看错误", lambda a=attempts[-1], st=step: self.step_error_dialog(a, st), flat=True)
+                selected_tab = self._selected_tabs.get(run['run_id'], 'progress')
+                with ui.tabs(value=selected_tab).props("align=left").classes("tw-run-tabs w-full") as run_tabs:
+                    ui.tab('progress', label="执行进度")
+                    ui.tab('logs', label="日志")
+                    ui.tab('results', label="结果")
+                    ui.tab('inputs', label="输入")
+                    ui.tab('snapshot', label="执行快照")
+                tab_identity = (self.page_generation(), self.page(), run['run_id'])
 
-                if controlled:
-                    with ui.card().classes("w-full tw-flow-history"):
-                        ui.label("流程路径与逐轮结果").classes("text-lg font-semibold")
-                        snapshot = json.loads(run['definition_json'])
-                        limits = flow_limits(snapshot['flow'])
-                        cursor = json.loads(run.get('flow_cursor_json') or '{}')
-                        ui.label(f"动作尝试 {len(run['attempts'])} / 100000 · 控制访问 {cursor.get('control_visits', 0)} / 1000000").classes("text-xs text-gray-500")
-                        for instance in run.get('flow_instances', []):
-                            payload = json.loads(instance.get('payload_json') or '{}')
-                            kind = instance['kind']
-                            if kind == 'action':
-                                step_name = next((item['name'] for item in definition if item['step_id'] == instance['node_id']), instance['node_id'])
-                                title = f"{round_label(instance['execution_path'])} · {step_name} · {STATUS.get(instance['status'], instance['status'])}"
-                            else:
-                                detail = (f"选择 {payload['selected']}" if 'selected' in payload else
-                                          f"{len(payload['items'])} 项" if 'items' in payload else
-                                          f"已执行 {payload['completed']} 轮" if 'completed' in payload else '')
-                                if kind in {'foreach', 'loop'}:
-                                    detail += f" / 上限 {limits.get(instance['node_id'], '?')}"
-                                title = f"{round_label(instance['execution_path'])} · {kind} · {detail} · {STATUS.get(instance['status'], instance['status'])}"
-                            with ui.row().classes("w-full items-center gap-2"):
-                                ui.label(title).classes("text-sm")
-                                if instance.get('error_code'):
-                                    ui.label('超出上限 · 需人工处理' if instance['error_code'] == 'LOOP_LIMIT_EXCEEDED'
-                                             else instance['error_code']).classes("text-sm text-red-700")
-                                if kind == 'action' and instance.get('attempt_id'):
-                                    step = next((item for item in definition if item['step_id'] == instance['node_id']), None)
-                                    if step and instance['status'] == 'SUCCEEDED':
-                                        self.button('查看本轮结果', lambda aid=instance['attempt_id'], st=step, r=run:
-                                                    self.step_result_dialog(r, st, aid), flat=True)
+                def select_tab(event):
+                    if (run_tabs.is_deleted or tab_identity !=
+                            (self.page_generation(), self.page(), self.run_id)):
+                        return
+                    self._selected_tabs[run['run_id']] = event.value
+                    self._run_details_visible = event.value == 'logs'
+                    if self._logs_host is not None and not self._logs_host.is_deleted:
+                        self._logs_host.set_visibility(self._run_details_visible)
 
-                with ui.tabs().classes("tw-run-tabs") as run_tabs:
-                    detail_tab = ui.tab("执行详情")
-                    history_tab = ui.tab("历史记录")
-                self._run_details_visible = True
-                run_tabs.on_value_change(lambda event: setattr(self, "_run_details_visible", event.value in {detail_tab, detail_tab.props['name']}))
-                with ui.tab_panels(run_tabs, value=detail_tab).classes("tw-run-tab-panels w-full"):
-                    with ui.tab_panel(detail_tab):
+                run_tabs.on_value_change(select_tab)
+                self._run_details_visible = selected_tab == 'logs'
+                if self._logs_host is not None and not self._logs_host.is_deleted:
+                    self._logs_host.set_visibility(self._run_details_visible)
+                with ui.tab_panels(run_tabs, value=selected_tab).classes("tw-run-tab-panels w-full"):
+                    with ui.tab_panel('progress').classes('tw-run-progress-panel'):
+                        self.render_progress(run, definition)
                         self.run_area = ui.column().classes("tw-run-step-detail tw-panel w-full gap-3")
-                    with ui.tab_panel(history_tab):
-                        with ui.card().classes("tw-run-history w-full"):
-                            ui.label("历史尝试").classes("text-lg font-semibold")
-                            attempts = run.get("attempts", [])
-                            if not attempts:
-                                ui.label("暂无步骤尝试记录。").classes("text-sm text-gray-500")
-                            for attempt in reversed(attempts):
-                                step_name = next((item["name"] for item in definition if item["step_id"] == attempt["step_id"]), attempt["step_id"])
-                                valid_label = "当前有效" if attempt.get("valid") else "已失效"
-                                with ui.expansion(f"{round_label(attempt.get('execution_path'))} · 尝试 {attempt['attempt_no']} · {step_name} · {STATUS.get(attempt['status'], attempt['status'])} · {valid_label}", icon="history").classes("tw-history-attempt w-full"):
-                                    ui.label(f"开始：{local_run_time(attempt.get('started_at'))} · 结束：{local_run_time(attempt.get('finished_at'))}").classes("text-xs text-gray-500")
-                                    ui.label("有效状态：" + valid_label).classes("text-sm text-gray-600")
-                                    ui.label("本次输入").classes("font-medium mt-2")
-                                    ui.code(attempt.get("input_summary_json") or "{}", language="json").classes("w-full")
-                                    attempt_refs = [ref for ref in run.get("results", []) if ref.get("attempt_id") == attempt["attempt_id"]]
-                                    ui.label("输出与结果引用").classes("font-medium mt-2")
-                                    if not attempt_refs:
-                                        ui.label("此尝试没有保存输出引用。")
-                                    for ref in attempt_refs:
-                                        with ui.row().classes("w-full items-center justify-between gap-2 flex-wrap"):
-                                            ui.label(f"{ref.get('kind', '结果')} · {ref.get('state', 'UNKNOWN')} · {ref.get('media_type', '未知类型')}")
-                                            attempt_step = next((item for item in definition if item["step_id"] == attempt["step_id"]), None)
-                                            if attempt_step and ref.get("state") == "AVAILABLE":
-                                                self.button("查看结果", lambda r=run, st=attempt_step, aid=attempt["attempt_id"]: self.step_result_dialog(r, st, aid))
-                                    ui.label("错误").classes("font-medium mt-2")
-                                    ui.label(attempt.get("error_code") or "无错误代码")
-                                    ui.label(attempt.get("error_summary") or "无错误摘要").classes("whitespace-pre-wrap")
-                                    ui.label("本次尝试日志").classes("font-medium mt-2")
-                                    logs = ui.column().classes("w-full")
-                                    history_identity = (self.page_generation(), self.page(), run["run_id"], self.state.selected_step_id)
-                                    load_state = HistoryLoadState(history_identity)
-                                    async def load_attempt_logs(target=attempt, area=logs, source_run=run, request_state=load_state):
-                                        def identity():
-                                            return (self.page_generation(), self.page(), self.run_id, self.state.selected_step_id)
-                                        token = request_state.begin(identity(), visible=not area.is_deleted)
-                                        if token is None:
-                                            return
-                                        try:
-                                            area.clear()
-                                            with area:
-                                                ui.label("正在读取本次尝试日志…").classes("text-sm text-gray-500")
-                                            events = await self.controller.call("run.events", run_id=source_run["run_id"])
-                                            if not request_state.accepts(token, identity(), visible=not area.is_deleted):
-                                                return
-                                            selected_events = [event for event in events if event.get("attempt_id") == target["attempt_id"]]
-                                            area.clear()
-                                            with area:
-                                                self.render_log_text(document_text(readable_metadata(selected_events, step_names(source_run, definition))))
-                                        finally:
-                                            request_state.finish(token)
-                                    ui.button("加载尝试日志", on_click=load_attempt_logs).props("flat dense")
+                        with ui.expansion('历史尝试', icon='history').classes('tw-run-history-expansion w-full'):
+                            self.render_history(run, definition)
+                    with ui.tab_panel('logs').classes('tw-run-log-placeholder'):
+                        # The stable log host is a sibling of the periodically rebuilt
+                        # panels. Its visibility follows this tab without losing cursor.
+                        pass
+                    with ui.tab_panel('results'):
+                        self.render_results(run, definition)
+                    with ui.tab_panel('inputs'):
+                        self.render_inputs(run, definition)
+                    with ui.tab_panel('snapshot'):
+                        self.render_snapshot(run)
+
+    def render_progress(self, run, definition):
+        controlled = controlled_run(run)
+        total = len(definition)
+        latest_by_step = {}
+        for attempt in run["attempts"]:
+            if attempt.get("valid"):
+                latest_by_step[attempt["step_id"]] = attempt
+        succeeded_count = sum(item.get("status") == "SUCCEEDED" for item in latest_by_step.values())
+        with ui.card().classes("tw-run-progress-card w-full"):
+            with ui.row().classes("w-full justify-between items-center flex-wrap gap-2"):
+                ui.label("步骤进度").classes("text-lg font-semibold")
+                ui.label((f"已完成 {sum(a['valid'] and a['status'] == 'SUCCEEDED' for a in run['attempts'])} 次动作 · 点击节点查看步骤"
+                          if controlled else f"{succeeded_count} / {total} 已完成 · 点击节点查看步骤")).classes("text-sm text-gray-500")
+            with ui.row().classes("w-full items-center gap-3 mt-2"):
+                if not controlled:
+                    ui.linear_progress(min(1, succeeded_count / total) if total else 0, show_value=False).props("rounded size=7px color=primary").classes("grow")
+            snapshot = json.loads(run.get('definition_json') or '{}')
+            flow = snapshot.get('flow')
+            if flow is None:
+                flow = {'version': 2, 'root': {'id': 'root', 'kind': 'sequence', 'children': [
+                    {'id': step['step_id'], 'kind': 'action', 'step_id': step['step_id']}
+                    for step in definition]}}
+            selected_id = (self.state.selected_step_id
+                           if self.state.selected_step_run_id == run['run_id']
+                           else self.default_step_id(run, definition))
+
+            overview = ExecutionPaths(flow, run)
+            scope = self._path_scopes.get(run['run_id'], '')
+            if scope not in overview.scopes:
+                scope = ''
+                self._path_scopes.pop(run['run_id'], None)
+            with ui.row().classes('tw-flow-legend w-full items-center gap-4 flex-wrap'):
+                ui.label('已走过').classes('tw-path-legend-taken')
+                ui.label('未命中 / 未进入').classes('tw-path-legend-skipped')
+                ui.label('尚未执行 / 尚未判定').classes('tw-path-legend-pending')
+                if overview.scopes:
+                    scope_select = ui.select({'': '全部轮次（汇总）', **overview.scopes},
+                                             value=scope, label='路径轮次').props('dense outlined options-dense')
+            if overview.scopes:
+                ui.label('汇总反映已记录轮次；选择轮次查看对应循环内的路径和节点结果，其他节点显示汇总。下方步骤详情与历史保留全部记录。').classes('text-xs text-gray-500')
+            canvas_host = ui.column().classes('w-full min-w-0')
+
+            def paint_paths(selected_scope):
+                if canvas_host.is_deleted:
+                    return
+                paths = overview if not selected_scope else ExecutionPaths(flow, run, scope=selected_scope)
+
+                def render_action(step, card):
+                    attempts = (paths.attempts(step['step_id']) if selected_scope else
+                                [a for a in run['attempts'] if a['step_id'] == step['step_id'] and a['valid']])
+                    status = attempts[-1]['status'] if attempts else None
+                    status_class = {'SUCCEEDED': 'succeeded', 'FAILED': 'failed', 'UNKNOWN': 'unknown',
+                                    'RUNNING': 'running'}.get(status, 'pending')
+                    card.classes('tw-run-flow-node is-' + status_class)
+                    mark = paths.step_marks[step['step_id']]
+                    label = STATUS.get(status, {'skipped': '未命中', 'not-entered': '未进入循环'}.get(mark.state, '尚未执行'))
+                    if controlled and attempts:
+                        prefix = '当前视角' if selected_scope else '最近一次'
+                        label = f'{prefix}：{label} · 有效尝试 {len(attempts)} 次'
+                    ui.label(label).classes('tw-flow-node-meta')
+                    if status == 'SUCCEEDED':
+                        if selected_scope:
+                            self.button('查看结果', lambda r=run, st=step, aid=attempts[-1]['attempt_id']:
+                                        self.step_result_dialog(r, st, aid), flat=True)
+                        else:
+                            self.button('查看结果', lambda r=run, st=step: self.step_result_dialog(r, st), flat=True)
+                    elif status in {'FAILED', 'UNKNOWN'}:
+                        self.button('查看错误', lambda a=attempts[-1], st=step: self.step_error_dialog(a, st), flat=True)
+
+                canvas_host.clear()
+                with canvas_host:
+                    FlowTree(definition, selected_id,
+                             lambda sid: self.select_step(run['run_id'], sid), None, None, None,
+                             read_only=True, render_action=render_action, paths=paths).render(flow)
+
+            paint_paths(scope)
+            if overview.scopes:
+                def select_scope(event):
+                    if canvas_host.is_deleted:
+                        return
+                    self._path_scopes[run['run_id']] = event.value
+                    paint_paths(event.value)
+                scope_select.on_value_change(select_scope)
+
+        if controlled:
+            with ui.card().classes("w-full tw-flow-history"):
+                ui.label("流程路径与逐轮结果").classes("text-lg font-semibold")
+                snapshot = json.loads(run['definition_json'])
+                limits = flow_limits(snapshot['flow'])
+                cursor = json.loads(run.get('flow_cursor_json') or '{}')
+                ui.label(f"动作尝试 {len(run['attempts'])} / 100000 · 控制访问 {cursor.get('control_visits', 0)} / 1000000").classes("text-xs text-gray-500")
+                for instance in run.get('flow_instances', []):
+                    payload = json.loads(instance.get('payload_json') or '{}')
+                    kind = instance['kind']
+                    if kind == 'action':
+                        step_name = next((item['name'] for item in definition if item['step_id'] == instance['node_id']), instance['node_id'])
+                        title = f"{round_label(instance['execution_path'])} · {step_name} · {STATUS.get(instance['status'], instance['status'])}"
+                    else:
+                        detail = (f"选择 {payload['selected']}" if 'selected' in payload else
+                                  f"{len(payload['items'])} 项" if 'items' in payload else
+                                  f"已执行 {payload['completed']} 轮" if 'completed' in payload else '')
+                        if kind in {'foreach', 'loop'}:
+                            detail += f" / 上限 {limits.get(instance['node_id'], '?')}"
+                        title = f"{round_label(instance['execution_path'])} · {kind} · {detail} · {STATUS.get(instance['status'], instance['status'])}"
+                    with ui.row().classes("w-full items-center gap-2"):
+                        ui.label(title).classes("text-sm")
+                        if instance.get('error_code'):
+                            ui.label('超出上限 · 需人工处理' if instance['error_code'] == 'LOOP_LIMIT_EXCEEDED'
+                                     else instance['error_code']).classes("text-sm text-red-700")
+                        if kind == 'action' and instance.get('attempt_id'):
+                            step = next((item for item in definition if item['step_id'] == instance['node_id']), None)
+                            if step and instance['status'] == 'SUCCEEDED':
+                                self.button('查看本轮结果', lambda aid=instance['attempt_id'], st=step, r=run:
+                                            self.step_result_dialog(r, st, aid), flat=True)
+
+    def render_history(self, run, definition):
+        with ui.card().classes("tw-run-history w-full"):
+            ui.label("历史尝试").classes("text-lg font-semibold")
+            attempts = run.get("attempts", [])
+            if not attempts:
+                ui.label("暂无步骤尝试记录。").classes("text-sm text-gray-500")
+            for attempt in reversed(attempts):
+                step_name = next((item["name"] for item in definition if item["step_id"] == attempt["step_id"]), attempt["step_id"])
+                valid_label = "当前有效" if attempt.get("valid") else "已失效"
+                with ui.expansion(f"{round_label(attempt.get('execution_path'))} · 尝试 {attempt['attempt_no']} · {step_name} · {STATUS.get(attempt['status'], attempt['status'])} · {valid_label}", icon="history").classes("tw-history-attempt w-full"):
+                    ui.label(f"开始：{local_run_time(attempt.get('started_at'))} · 结束：{local_run_time(attempt.get('finished_at'))}").classes("text-xs text-gray-500")
+                    ui.label("有效状态：" + valid_label).classes("text-sm text-gray-600")
+                    ui.label("本次输入").classes("font-medium mt-2")
+                    ui.code(attempt.get("input_summary_json") or "{}", language="json").classes("w-full")
+                    attempt_refs = [ref for ref in run.get("results", []) if ref.get("attempt_id") == attempt["attempt_id"]]
+                    ui.label("输出与结果引用").classes("font-medium mt-2")
+                    if not attempt_refs:
+                        ui.label("此尝试没有保存输出引用。")
+                    for ref in attempt_refs:
+                        with ui.row().classes("w-full items-center justify-between gap-2 flex-wrap"):
+                            ui.label(result_reference_summary(ref))
+                            attempt_step = next((item for item in definition if item["step_id"] == attempt["step_id"]), None)
+                            if attempt_step and ref.get("state") == "AVAILABLE":
+                                self.button("查看结果", lambda r=run, st=attempt_step, aid=attempt["attempt_id"]: self.step_result_dialog(r, st, aid))
+                    ui.label("错误").classes("font-medium mt-2")
+                    ui.label(attempt.get("error_code") or "无错误代码")
+                    ui.label(attempt.get("error_summary") or "无错误摘要").classes("whitespace-pre-wrap")
+                    ui.label("本次尝试日志").classes("font-medium mt-2")
+                    logs = ui.column().classes("w-full")
+                    history_identity = (self.page_generation(), self.page(), run["run_id"], self.state.selected_step_id)
+                    load_state = HistoryLoadState(history_identity)
+                    async def load_attempt_logs(target=attempt, area=logs, source_run=run, request_state=load_state):
+                        def identity():
+                            return (self.page_generation(), self.page(), self.run_id, self.state.selected_step_id)
+                        token = request_state.begin(identity(), visible=not area.is_deleted)
+                        if token is None:
+                            return
+                        try:
+                            area.clear()
+                            with area:
+                                ui.label("正在读取本次尝试日志…").classes("text-sm text-gray-500")
+                            events = await self.controller.call("run.events", run_id=source_run["run_id"])
+                            if not request_state.accepts(token, identity(), visible=not area.is_deleted):
+                                return
+                            selected_events = [event for event in events if event.get("attempt_id") == target["attempt_id"]]
+                            area.clear()
+                            with area:
+                                self.render_log_text(document_text(readable_metadata(selected_events, step_names(source_run, definition))))
+                        finally:
+                            request_state.finish(token)
+                    ui.button("加载尝试日志", on_click=load_attempt_logs).props("flat dense")
+
+    def render_results(self, run, definition):
+        names = step_names(run, definition)
+        attempts = [attempt for attempt in run.get('attempts', []) if attempt.get('valid')]
+        with ui.column().classes('tw-panel tw-run-results-panel w-full gap-3'):
+            ui.label('当前有效结果').classes('text-lg font-semibold')
+            available = False
+            for attempt in attempts:
+                refs = [ref for ref in run.get('results', []) if ref['attempt_id'] == attempt['attempt_id']]
+                if not refs:
+                    continue
+                available = True
+                with ui.column().classes('tw-run-result-row w-full gap-2'):
+                    with ui.row().classes('w-full items-center justify-between gap-2 flex-wrap'):
+                        with ui.column().classes('gap-1 min-w-0'):
+                            ui.label(names.get(attempt['step_id'], '步骤')).classes('font-medium')
+                            ui.label(f"{round_label(attempt.get('execution_path'))} · 尝试 {attempt['attempt_no']}").classes('text-xs text-gray-500')
+                        if any(ref.get('state') == 'AVAILABLE' for ref in refs):
+                            step = next((item for item in definition if item['step_id'] == attempt['step_id']),
+                                        {'step_id': attempt['step_id'], 'task_id': run['task_id'], 'name': names.get(attempt['step_id'], '步骤')})
+                            self.button('查看结果', lambda r=run, st=step, aid=attempt['attempt_id']: self.step_result_dialog(r, st, aid))
+                    for ref in refs:
+                        ui.label(result_reference_summary(ref)).classes('text-sm text-gray-500')
+            if not available:
+                ui.label('当前尝试暂无已保存结果').classes('text-sm text-gray-500')
+
+    def render_inputs(self, run, definition):
+        names = step_names(run, definition)
+        with ui.column().classes('tw-panel tw-run-inputs-panel w-full gap-3'):
+            ui.label('本次运行输入').classes('text-lg font-semibold')
+            # Use stored display summaries, never raw input or request values.
+            ui.code(run.get('input_summary_json') or '{}', language='json').classes('w-full')
+            for attempt in run.get('attempts', []):
+                if not attempt.get('valid'):
+                    continue
+                with ui.expansion(f"{names.get(attempt['step_id'], '步骤')} · {round_label(attempt.get('execution_path'))} · 尝试 {attempt['attempt_no']}", icon='input').classes('w-full'):
+                    ui.code(attempt.get('input_summary_json') or '{}', language='json').classes('w-full')
+
+    def render_snapshot(self, run):
+        with ui.column().classes('tw-panel tw-run-snapshot-panel w-full gap-3'):
+            with ui.row().classes('w-full items-center justify-between gap-2'):
+                ui.label('执行时快照').classes('text-lg font-semibold')
+                ui.badge('只读').props('color=grey-2 text-color=grey-7')
+            if run.get('definition_json'):
+                snapshot = json.loads(run['definition_json'])
+                task = snapshot.get('task', {})
+                steps = snapshot.get('steps', [])
+                with ui.column().classes('w-full gap-1'):
+                    ui.label(task.get('name') or '任务定义').classes('font-semibold')
+                    if task.get('description'):
+                        ui.label(task['description']).classes('text-sm text-gray-500 whitespace-pre-wrap')
+                with ui.row().classes('tw-run-snapshot-meta w-full gap-4 flex-wrap'):
+                    ui.label(f'{len(steps)} 个步骤').classes('text-sm text-gray-500')
+                    definition_hash = run.get('definition_hash') or ''
+                    ui.label('定义版本：' + (definition_hash[:12] or '未记录')).classes('text-sm text-gray-500').tooltip(definition_hash)
+                for index, step in enumerate(steps, 1):
+                    with ui.expansion(f"{index:02d} · {step.get('name') or '步骤'}", icon='code').classes('tw-run-frozen-step w-full'):
+                        if step.get('step_description'):
+                            ui.label('步骤描述').classes('text-sm font-medium')
+                            ui.label(step['step_description']).classes('text-sm whitespace-pre-wrap')
+                        if step.get('step_notes'):
+                            ui.label('步骤说明').classes('text-sm font-medium')
+                            ui.label(step['step_notes']).classes('text-sm whitespace-pre-wrap')
+                        ui.label('步骤代码').classes('text-sm font-medium')
+                        ui.code(step.get('step_content') or '', language='python').classes('w-full')
+                with ui.expansion('完整原始定义', icon='data_object').classes('w-full'):
+                    ui.code(run['definition_json'], language='json').classes('w-full')
+            else:
+                ui.label('本次运行尚未生成定义快照').classes('text-sm text-gray-500')
+            with ui.expansion('插件版本与环境指纹', icon='inventory_2').classes('w-full'):
+                request = json.loads(run.get('request_json') or '{}')
+                ui.code(document_text({
+                    'plugin_versions': json.loads(run.get('plugin_versions_json') or '{}'),
+                    'environment_id': run.get('environment_id'),
+                    'environment_hash': request.get('environment_hash'),
+                }), language='json').classes('w-full')
 
     async def refresh(self, *, force=True):
         if self.page() not in {"run", "executions"}:
@@ -389,6 +577,9 @@ class ExecutionDetails:
             return
         if self.run_area is None:
             self.run_signature = None
+            return
+        selected = self._current_runs.get(self.run_id)
+        if selected and selected.get("execution_kind") == "sequence":
             return
         run = (self._current_runs.get(self.run_id) if not force else None) or (
             await self.controller.call("run.get", run_id=self.run_id)
@@ -492,30 +683,15 @@ class ExecutionDetails:
                         ui.label("此步骤尚未执行，因此还没有输入、输出或步骤日志。").classes("tw-empty-step-state mt-3")
                     else:
                         ui.label(f"尝试 {latest['attempt_no']} · {step_status}" + (" · 当前有效" if latest["valid"] else " · 已失效")).classes("text-sm text-gray-500 mt-3")
-                        with ui.row().classes("tw-step-execution-overview w-full items-start gap-3"):
-                            with ui.column().classes("tw-step-effective-input min-w-0 gap-2"):
-                                ui.label("有效输入").classes("font-medium")
-                                ui.code(latest.get("input_summary_json") or "{}", language="json").classes("w-full")
-                            with ui.column().classes("tw-step-execution-info min-w-0 gap-2"):
-                                ui.label("执行信息").classes("font-medium")
-                                ui.label(f"尝试编号：{latest['attempt_no']} · {step_status}")
-                                ui.label(f"开始：{local_run_time(latest.get('started_at'))} · 结束：{local_run_time(latest.get('finished_at'))}").classes("text-sm text-gray-600")
-                                ui.label(f"结果引用：{sum(ref.get('attempt_id') == latest['attempt_id'] for ref in run.get('results', []))}").classes("text-sm text-gray-600")
-                                ui.label(latest.get("error_summary") or "无错误摘要").classes("text-sm text-gray-600 whitespace-pre-wrap")
+                        with ui.row().classes("tw-step-execution-info w-full gap-4 flex-wrap"):
+                            ui.label(f"开始：{local_run_time(latest.get('started_at'))}").classes("text-sm text-gray-500")
+                            ui.label(f"结束：{local_run_time(latest.get('finished_at'))}").classes("text-sm text-gray-500")
+                            ui.label(f"结果引用：{sum(ref.get('attempt_id') == latest['attempt_id'] for ref in run.get('results', []))}").classes("text-sm text-gray-500")
                         with ui.column().classes("tw-step-result-info w-full gap-2 mt-3"):
-                            ui.label("输出与结果引用").classes("font-medium")
-                            refs = [ref for ref in run["results"] if ref["attempt_id"] == latest["attempt_id"]]
-                            if not refs:
-                                ui.label("暂无此步骤输出。")
-                            for ref in refs:
-                                with ui.row().classes("w-full items-center justify-between flex-wrap"):
-                                    ui.label(f"{ref['kind']} · {ref['state']} · {ref['media_type']}")
-                                    if ref["state"] == "AVAILABLE":
-                                        self.button("查看结果", lambda r=run, st=step, aid=latest["attempt_id"]: self.step_result_dialog(r, st, aid))
                             ui.label("错误 / 核对").classes("font-medium")
                             ui.label(latest["error_code"] or "无错误").classes("text-sm")
                             ui.label(latest["error_summary"] or "").classes("whitespace-pre-wrap text-sm")
-                            if latest["valid"] and (
+                            if run["status"] in {"INTERRUPTED", "FAILED"} and latest["valid"] and (
                                 latest["status"] == "UNKNOWN"
                                 or latest["status"] == "FAILED" and latest["effect_state"] in {"UNKNOWN", "SUCCEEDED"}
                             ):
@@ -533,6 +709,7 @@ class ExecutionDetails:
             # a user's live log view or resets its incremental cursor.
             with self.execution_rows.parent_slot.parent:
                 self._logs_host = ui.column().classes('tw-run-logs-host w-full')
+        self._logs_host.set_visibility(self._run_details_visible)
         if key == self._logs_key:
             return
         if self._live_logs is not None:

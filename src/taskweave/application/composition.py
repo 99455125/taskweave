@@ -63,7 +63,9 @@ def compose_application(self, model, registry_factory):
     self.context_sessions = ContextSessions(self.registry, stores.environments, stores.plans, self.home / "plans",
         steps=stores.steps, tasks=stores.tasks)
     self.tasks = TaskUseCases(stores.tasks, stores.steps, stores.step_contexts, self.storage.unit_of_work, self.registry, self.authoring, self.coordinator, self.context_sessions)
-    self.steps = StepUseCases(stores.steps, stores.tasks, stores.runs, self.registry, self.authoring, self.coordinator, self.context_sessions)
+    self.steps = StepUseCases(stores.steps, stores.tasks, stores.runs, self.registry, self.authoring, self.coordinator, self.context_sessions, uow=self.storage.unit_of_work)
+    from taskweave.application.step_derivation import StepDerivation
+    self.step_derivation = StepDerivation(self.steps, stores.tasks, stores.step_contexts, self.storage.unit_of_work)
     self.environments = EnvironmentUseCases(stores.environments, stores.runs, self.coordinator, self.context_sessions, stores.plans)
     self.runs = RunUseCases(stores.runs, stores.tasks, stores.steps, stores.environments, stores.results, self.registry, self.authoring, self.coordinator, self.context_sessions, stores.flow_runs)
     self.runs.sequence_repository = stores.sequences
@@ -73,6 +75,8 @@ def compose_application(self, model, registry_factory):
     self.sequence_driver = SequenceDriver(self.sequences, self.storage)
     self.sequences.driver = self.sequence_driver
     self.contexts = ContextUseCases(stores.step_contexts, stores.steps, self.registry, self.authoring, self.coordinator, self.context_sessions)
+    from taskweave.application.codegen import CodeGeneration
+    self.codegen = CodeGeneration(stores.step_contexts, stores.steps, self.registry)
     self.planning = PlanningService(
         plans=stores.plans,
         contexts=stores.plan_contexts,

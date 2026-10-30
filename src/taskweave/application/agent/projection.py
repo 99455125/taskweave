@@ -8,7 +8,7 @@ from taskweave.core.validation import TaskError, fingerprint
 
 
 MAX_RESULT_BYTES = 32768
-SCHEMA_FIELDS = frozenset({"input_schema", "output_schema", "parameters", "schema", "step_schema", "task_package_schemas", 'context_requests', 'request_contract'})
+SCHEMA_FIELDS = frozenset({"input_schema", "output_schema", "parameters", "schema", "step_schema", "task_package_schema", 'context_requests', 'request_contract'})
 
 
 def contract_projection(value, sanitize):

@@ -9,20 +9,29 @@ class ContextUseCases:
         self.contexts, self.steps, self.registry, self.authoring = contexts, steps, registry, authoring
         self.coordinator, self.sessions = coordinator, sessions
 
-    def collect(self, step_id, provider_id, request=None, environment_id=None, run_id=None, expected_session_id=None, include_view=True):
+    def collect(self, step_id, provider_id, request=None, environment_id=None, run_id=None, expected_session_id=None, include_view=True, execution_path=None):
         if run_id is not None:
-            return self.coordinator.collect_context(run_id, step_id, provider_id, request, expected_session_id=expected_session_id, include_view=include_view)
+            return self.coordinator.collect_context(run_id, step_id, provider_id, request, expected_session_id=expected_session_id,
+                                                    include_view=include_view, execution_path=execution_path)
+        if execution_path is not None:
+            raise TaskError("FLOW_INSTANCE_REQUIRED")
         return self.sessions.step_collect(step_id, provider_id, request, environment_id,
             expected_session_id=expected_session_id, include_view=include_view)
 
-    def record(self, step_id, provider_id, operation, *, run_id=None, **options):
+    def record(self, step_id, provider_id, operation, *, run_id=None, execution_path=None, **options):
         if run_id is None:
+            if execution_path is not None:
+                raise TaskError("FLOW_INSTANCE_REQUIRED")
             return self.sessions.step_record(step_id, provider_id, operation, **options)
-        return self.coordinator.record_context(run_id, step_id, provider_id, operation, **options)
+        return self.coordinator.record_context(run_id, step_id, provider_id, operation,
+                                               execution_path=execution_path, **options)
 
-    def targets(self, step_id, provider_id, run_id=None, request=None):
+    def targets(self, step_id, provider_id, run_id=None, request=None, execution_path=None, expected_session_id=None):
         if run_id is not None:
-            return self.coordinator.context_targets(run_id, step_id, provider_id, request)
+            return self.coordinator.context_targets(run_id, step_id, provider_id, request,
+                                                    execution_path=execution_path, expected_session_id=expected_session_id)
+        if execution_path is not None:
+            raise TaskError("FLOW_INSTANCE_REQUIRED")
         return self.sessions.step_targets(step_id, provider_id, request)
 
     def save_batch(self, step_id, context_id, expected_revision, provider_id, name, context_notes, captures):
@@ -53,3 +62,18 @@ class ContextUseCases:
         return self.contexts.reorder_step_context(context_id, direction, expected_revision, step_id)
     def delete_group(self, context_id, expected_revision=None, step_id=None):
         return self.contexts.delete_step_context(context_id, expected_revision, step_id)
+
+    def transfer(self, step_id, context_id, capture_ids, target_step_id, *, mode,
+                 expected_revision, target_context_id=None, target_expected_revision=None, target_name=None):
+        with self.contexts.transaction():
+            source = next((g for g in self.contexts.list_step_contexts(step_id) if g['context_id'] == context_id), None)
+            if source is None:
+                raise TaskError('CONTEXT_MISMATCH', '上下文不属于来源步骤')
+            target = self.steps.step(target_step_id)
+            allowed = {provider for contribution in self.registry.contributions(target.get('capabilities', []))
+                       for provider in contribution.context_provider_ids}
+            if source['provider_id'] not in allowed:
+                raise TaskError('CONTEXT_PROVIDER_UNAVAILABLE', '目标步骤未启用此上下文的插件能力')
+            return self.contexts.transfer_step_context_captures(
+                step_id, context_id, capture_ids, target_step_id, mode=mode, expected_revision=expected_revision,
+                target_context_id=target_context_id, target_expected_revision=target_expected_revision, target_name=target_name)

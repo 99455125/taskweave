@@ -14,42 +14,19 @@ DEFAULT_FOREACH_ITEMS = 1_000
 _POINTER = re.compile(r"~(?![01])")
 
 
+def conditional_branches(node):
+    """Ordered stable branch identities and bodies for a conditional group."""
+    return [(case["id"], case["body"]) for case in [*node["cases"], node["default"]]]
+
+
 def _valid_pointer(value):
     return isinstance(value, str) and (not value or value.startswith("/")) and not _POINTER.search(value)
 
 
 def normalize_flow(graph: dict, steps: list[dict]) -> dict:
-    """Interpret the historical action chain as a structured root sequence."""
-    if not isinstance(graph, dict):
-        raise TaskError("FLOW_INVALID")
-    if graph.get("version") == FLOW_VERSION:
-        result = deepcopy(graph)
-    elif set(graph) == {"entry_node_id", "nodes"}:
-        nodes = graph["nodes"]
-        if not isinstance(nodes, list):
-            raise TaskError("FLOW_INVALID")
-        by_id = {node.get("id"): node for node in nodes if isinstance(node, dict)}
-        if len(by_id) != len(nodes):
-            raise TaskError("FLOW_INVALID")
-        ordered = []
-        seen = set()
-        current = graph["entry_node_id"]
-        while current is not None:
-            if current in seen or current not in by_id:
-                raise TaskError("FLOW_INVALID")
-            seen.add(current)
-            node = by_id[current]
-            if node.get("kind") != "action" or node.get("config", {}).get("step_id") != current:
-                raise TaskError("FLOW_INVALID")
-            ordered.append({"id": current, "kind": "action", "step_id": current})
-            current = node.get("next")
-        if seen != set(by_id):
-            raise TaskError("FLOW_INVALID")
-        result = {"version": FLOW_VERSION, "root": {"id": "root", "kind": "sequence", "children": ordered}}
-    else:
-        raise TaskError("FLOW_INVALID")
-    validate_flow(result, steps)
-    return result
+    """Validate and copy the current structured flow without converting old data."""
+    validate_flow(graph, steps)
+    return deepcopy(graph)
 
 
 def _check_operand(operand, step_ids, loop_ids, available_steps=None, branch_outputs=None):
@@ -155,24 +132,34 @@ def validate_flow(flow: dict, steps: list[dict]) -> None:
             action_ids.add(node["step_id"])
             return available | {node["step_id"]}
         elif kind == "if":
-            if not {"id", "kind", "condition", "then", "else"} <= set(node) or set(node) - {"id", "kind", "condition", "then", "else", "outputs"}:
+            if (not {"id", "kind", "cases", "default"} <= set(node)
+                    or set(node) - {"id", "kind", "cases", "default", "parallel", "outputs"}
+                    or type(node.get("parallel", False)) is not bool
+                    or not isinstance(node["cases"], list) or not node["cases"]):
                 raise TaskError("FLOW_INVALID")
+            identities = set()
+            branch_available = {}
+            for branch in [*node["cases"], node["default"]]:
+                expected = {"id", "body"} if branch is node["default"] else {"id", "condition", "body"}
+                if (not isinstance(branch, dict) or set(branch) != expected
+                        or not isinstance(branch.get("id"), str) or not branch["id"]
+                        or branch["id"] in identities
+                        or not isinstance(branch.get("body"), dict) or branch["body"].get("kind") != "sequence"):
+                    raise TaskError("FLOW_INVALID")
+                identities.add(branch["id"])
+                if "condition" in branch:
+                    _check_condition(branch["condition"], step_ids, loops, available, branch_outputs)
+                branch_available[branch["id"]] = walk(branch["body"], depth, loops, available)
             outputs = node.get("outputs", {})
             if not isinstance(outputs, dict) or any(not isinstance(name, str) or not name for name in outputs):
                 raise TaskError("FLOW_INVALID")
-            _check_condition(node["condition"], step_ids, loops, available, branch_outputs)
-            branch_available = {}
-            for branch in ("then", "else"):
-                if not isinstance(node[branch], dict) or node[branch].get("kind") != "sequence":
-                    raise TaskError("FLOW_INVALID")
-                branch_available[branch] = walk(node[branch], depth, loops, available)
             for mapping in outputs.values():
-                if not isinstance(mapping, dict) or set(mapping) != {"then", "else"}:
+                if not isinstance(mapping, dict) or set(mapping) != identities:
                     raise TaskError("FLOW_INVALID")
-                _check_operand(mapping["then"], step_ids, loops, branch_available["then"], branch_outputs)
-                _check_operand(mapping["else"], step_ids, loops, branch_available["else"], branch_outputs)
+                for identity, operand in mapping.items():
+                    _check_operand(operand, step_ids, loops, branch_available[identity], branch_outputs)
             branch_outputs[node["id"]] = set(outputs)
-            return branch_available["then"] & branch_available["else"] | {"branch:" + node["id"]}
+            return available | {"branch:" + node["id"]}
         elif kind == "foreach":
             if not {"id", "kind", "items", "body"} <= set(node) or set(node) - {"id", "kind", "items", "body", "max_items"}:
                 raise TaskError("FLOW_INVALID")

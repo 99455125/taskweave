@@ -293,7 +293,7 @@ class FailureEvidence:
 
 
 class OperationResultHandler:
-    def schema(self): return {'version':1,'tables':{},'migrations':{},'indexes':{}}
+    def schema(self): return {'tables':{},'indexes':{}}
     def prepare(self,request):
         schema=obj({'action_id':TEXT,'error_code':TEXT,'effect_state':{'enum':['UNKNOWN']},'requests':ROWS},['action_id','error_code','effect_state','requests'])
         require(Draft202012Validator(schema).is_valid(request.payload),'BAOTA_FAILURE_RESULT_INVALID')
@@ -303,7 +303,7 @@ class OperationResultHandler:
 
 
 class JsonResultHandler:
-    def schema(self): return {'version':1,'tables':{},'migrations':{},'indexes':{}}
+    def schema(self): return {'tables':{},'indexes':{}}
     def prepare(self,request):
         require(isinstance(request.payload,dict),'BAOTA_RESULT_INVALID'); return PreparedResult('json',payload=request.payload)
     def parse(self,stored): return stored

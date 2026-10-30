@@ -21,7 +21,7 @@ infrastructure → core契约：SQLite、worker、资源会话、模型适配
 | presentation | 普通草稿、选择、导航决策、请求忙状态、身份与迟到响应、恢复及轮询策略 | [presentation](../src/taskweave/presentation) |
 | desktop | 外壳、页面/组件装配、控件输入与渲染、计时器、文件/窗口/剪贴板适配 | [workbench.py](../src/taskweave/desktop/workbench.py)、[launcher.py](../src/taskweave/desktop/launcher.py) |
 | infrastructure | SQLite仓储/UoW、进程通信、运行协调、资源会话、本地HTTP、模型与隐私适配 | [infrastructure](../src/taskweave/infrastructure) |
-| plugins | 宿主SDK/发现/注册；根目录下十一插件及各自可选依赖 | [SDK](../src/taskweave/plugins/sdk.py)、[插件目录](../plugins/README.md) |
+| plugins | 宿主SDK/发现/注册；根目录下十五插件及各自可选依赖 | [SDK](../src/taskweave/plugins/sdk.py)、[插件目录](../plugins/README.md) |
 
 ## 桌面交互
 
@@ -33,21 +33,21 @@ infrastructure → core契约：SQLite、worker、资源会话、模型适配
 
 外部 AI 通过 integration 的可选 MCP/function calling 适配进入 application/agent；发现、材料、执行回执和验收复用原任务/运行用例。工作台及 serve 的 agent 端点共享当前 Application，私有连接描述符提供实例校验。默认核心安装不引入 MCP SDK；查询、固定执行和证据核对不调用模型。详见[外部 AI 模块](modules/agent.md)。
 
-`RunUseCases → CoordinatorPool → Coordinator → WorkerTransport → worker → 插件动作`。含控制节点的任务由Coordinator调用FlowRunner推进流程树；纯线性任务保留现有顺序路径。流程决策在core/flow_machine.py完成，执行游标和每轮实例由FlowRunRepository持久化。
+`RunUseCases → CoordinatorPool → Coordinator → WorkerTransport → worker → 插件动作`。含控制节点的任务由Coordinator调用FlowRunner推进流程树；显式条件组通过ParallelFlowRunner集中提交游标，并行路径派发独立分支 worker，串行分支复用当前资源会话。纯线性任务保留现有顺序路径。流程决策在core/flow_machine.py完成，执行游标和每轮实例由FlowRunRepository持久化。
 
-实例池选择调试/正式运行实例并控制容量；Coordinator持有运行编排与锁，通过窄查询/事件/租约/写入端口更新持久状态；WorkerTransport负责进程与管道生命周期，worker校验并执行步骤。调试资源按任务复用，正式资源按运行隔离。命令回执、租约与尝试有效性由持久化事实约束，不依赖页面内存。
+实例池选择调试/正式运行实例，普通动作和并行叶动作共享 ExecutionCapacity；嵌套分叉不持有执行槽位。Coordinator持有运行编排与锁，通过窄查询/事件/租约/写入端口更新持久状态；WorkerTransport负责进程与管道生命周期，worker校验并执行步骤。调试资源按任务复用，正式资源按运行隔离。命令回执、租约与尝试有效性由持久化事实约束，不依赖页面内存。
 
-任务组合由SequenceUseCases与SequenceDriver推进：先保存组合运行和当前节点的子运行关联，再提交普通运行的启动命令。组合操作使用每次组合运行的锁及持久化控制命令，与CoordinatorPool的锁保持一致的调用方向；启动恢复读取已保存的节点、命令与子运行事实，避免重复外部动作。
+任务组合由SequenceUseCases与SequenceDriver推进结构化流程：先保存组合游标、控制实例、实际任务调用与子运行关联，再提交普通运行启动命令。循环实例以组合 execution_path 区分，条件选择并行时可推进多个子运行；SequenceValues 在当前路径作用域内解析输入与聚合。组合操作使用每次组合运行的锁及持久化控制命令，与CoordinatorPool的锁保持一致的调用方向；启动恢复读取已保存的节点、命令与子运行事实，避免重复外部动作。
 
 编写通过core/authoring_ports.py的资源工厂注入基础设施会话；固定执行与编写可复用资源实现，但AI提示/模型策略仅在编写路径。独立采集会话与保留worker会话有明确身份，不因历史记录存在而重建或冒用活跃资源。
 
-## 持久化与兼容
+## 持久化与公开入口
 
-SQLiteStorage负责连接、路径、迁移和UoW，十一个仓储负责任务、步骤、环境、运行、结果、步骤上下文、规划、规划上下文、生成记录、分类收藏和任务组合。业务事务通过共享UoW组合，不按表机械拆分事务。
+SQLiteStorage负责连接、路径、现行结构初始化/校验和UoW，十一个仓储负责任务、步骤、环境、运行、结果、步骤上下文、规划、规划上下文、生成记录、分类收藏和任务组合。业务事务通过共享UoW组合，不按表机械拆分事务。
 
-控制库、任务数据与文件不是跨文件原子事务；回执、结果引用、清理和恢复逻辑负责其一致性边界。具体布局见[存储模块](modules/storage.md)。
+控制库、任务数据与文件不是跨文件原子事务；回执、结果引用、清理和恢复逻辑负责其一致性边界。控制库与任务库各维护一份完整DDL；运行时发现结构差异时拒绝打开，历史数据通过显式维护生成新目标库。具体布局与维护入口见[存储模块](modules/storage.md)。
 
-兼容入口只显式转发同一实现：storage.Store、Repository/PlanRepository、runtime.Coordinator/CoordinatorPool、core.ports公开类及旧desktop.planning/chat/dependencies导出。正常消费者使用规范模块，公开插件SDK、序列化类路径和打包入口保持兼容，不能直接删除聚合入口。
+现存聚合入口转发规范实现：storage.Store、Repository/PlanRepository、runtime.Coordinator/CoordinatorPool、core.ports公开类及旧desktop.planning/chat/dependencies导出。正常消费者使用规范模块；Store等接口仍有调用者，公开插件SDK、序列化类路径及打包入口须按实际消费者维护。并发修订号、内容哈希、插件API与包版本各自承担运行契约，不属于历史数据库迁移链。
 
 ## 依赖约束
 

@@ -57,7 +57,7 @@ class SequenceStorageTests(unittest.TestCase):
         self.assertEqual([n["node_id"] for n in self.repo.get_run(started["sequence_run_id"])["snapshot"]["nodes"]], ["a", "b"])
         child = self.repositories.runs.create_run(self.first_task, {}, {}, trial_step_id=self.first_step, defer_inputs=True)
         self.repo.attach_child(started["sequence_run_id"], "a", child["run_id"], {}, {})
-        self.assertEqual(self.repo.owner_of_child(child["run_id"]), (started["sequence_run_id"], "a"))
+        self.assertEqual(self.repo.owner_of_child(child["run_id"]), (started["sequence_run_id"], "/root/a"))
         another = self.repositories.runs.create_run(self.first_task, {}, {}, trial_step_id=self.first_step, defer_inputs=True)
         with self.assertRaises(TaskError):
             self.repo.attach_child(started["sequence_run_id"], "a", another["run_id"], {}, {})

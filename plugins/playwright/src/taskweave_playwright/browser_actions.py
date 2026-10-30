@@ -41,6 +41,11 @@ class BrowserAction:
                 'url': page.url.split('?')[0].split('#')[0], 'primary': page is resource['page']}
                 for key, page in live[:32]], 'truncated': len(live) > 32}
         page = await page_for(ctx, role, inputs.get('target_id'))
+        pages = getattr(ctx, '_playwright_result_pages', None)
+        if pages is None:
+            pages = ctx._playwright_result_pages = []
+        if not any(observed is page for _, observed in pages):
+            pages.append((role, page))
         try:
             await self.prepare_page(page, inputs)
             if inputs.get('selector') is not None:

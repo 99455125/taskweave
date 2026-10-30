@@ -13,7 +13,7 @@ async def run(ctx, inputs):
 
 ## Schema与JSON
 
-JSON使用严格序列化，不接受NaN等非JSON值。Schema采用JSON Schema 2020-12，只允许本地引用，禁止远端$ref/$dynamicRef。输入输出校验和插件能力校验分开。
+JSON使用严格序列化，不接受NaN等非JSON值。Schema采用JSON Schema 2020-12，只允许本地引用，禁止远端$ref/$dynamicRef。输入输出校验和插件能力校验分开。新步骤的 input_schema 默认为 {"type":"object"}，output_schema 默认为 {}；这些是基础定义，具体字段由已有步骤、导入定义或编辑配置提供。输出 Schema 校验 ctx.result(data=...) 的业务数据；其中 default 是 Schema 描述信息，不由运行时据此自动补输出。输入字段 default 则参与既有自动输入合并。
 
 ## 绑定与优先级
 
@@ -26,3 +26,9 @@ JSON使用严格序列化，不接受NaN等非JSON值。Schema采用JSON Schema 
 ## 并发和确认
 
 保存用expected_hash核对现存版本；confirmation/validation_state归持久化定义。普通草稿保留原基线，冲突不自动覆盖他人修改。TypedDict记录见[core/data_contracts.py](../../src/taskweave/core/data_contracts.py)，精确版本算法与保存规则见[步骤仓储](../../src/taskweave/infrastructure/repositories/steps.py)。
+
+## 条件组与路径
+
+流程的显式条件组保留 kind=if，以 cases（每项 id、condition、body）、default（id、body）和可选布尔 parallel 表达。省略 parallel 等同关闭，字符串或数字不作为布尔值接受。关闭时首个匹配，开启时冻结全部命中分支并执行；默认只在零命中时执行。分支 ID 在组内唯一且稳定，body 为顺序容器；输出映射须覆盖全部出口。
+
+并行路径不允许读取兄弟路径结果，后续通过 branch 公共输出读取按分支 ID 区分的值。控制决定和公共输出记录在实例 payload，恢复不重新判定；映射缺失或求值失败阻止汇合。步骤内容不改变，实际尝试仍归属同一 run_id，以 execution_path 区分分支及循环出现；重试精确定位原实例。完整结构及校验以 [task_flow.py](../../src/taskweave/core/task_flow.py) 为准。

@@ -11,6 +11,57 @@ from taskweave.application.service import Application
 
 
 class TaskSequenceTests(CoreFixture):
+    def test_trial_parallel_calls_to_same_task_have_independent_workers(self):
+        self.app.close()
+        self.app = Application(self.home, registry_factory="tests._parallel_plugin:build_registry")
+        task = self.task()
+        self.step(task, source='async def run(ctx, inputs):\n    result = await ctx.call("demo.timed", {"seconds": 0.2})\n    return ctx.result(data=result)\n', capabilities=['demo.timed'])
+        nodes = [{'node_id': key, 'task_id': task, 'environment_id': None,
+                  'inputs': {}, 'step_inputs': {}} for key in ('a', 'b')]
+        choose = {'id': 'choose', 'kind': 'if', 'parallel': True,
+                  'cases': [{'id': key + '-case', 'condition': {'op': 'eq', 'left': {'literal': True},
+                             'right': {'literal': True}}, 'body': {'id': key + '-body', 'kind': 'sequence',
+                             'children': [{'id': key, 'kind': 'action', 'step_id': key}]}} for key in ('a', 'b')],
+                  'default': {'id': 'fallback', 'body': {'id': 'fallback-body', 'kind': 'sequence', 'children': []}}}
+        saved = self.app.sequences.save('Parallel debug', nodes, {},
+            flow={'version': 2, 'root': {'id': 'root', 'kind': 'sequence', 'children': [choose]}})
+        done = self._wait(self.app.sequences.trial(saved['sequence_id'], 'parallel-trial', {})['sequence_run_id'])
+        self.assertEqual(done['status'], 'SUCCEEDED', done)
+        children = [self.app.runs.get(node['run_id']) for node in done['nodes']]
+        self.assertEqual(len(children), 2)
+        self.assertTrue(all(child['mode'] == 'TRIAL' for child in children))
+        step_id = self.app.repo.steps(task)[0]['step_id']
+        outputs = [self.app.runs.output(child['run_id'], step_id) for child in children]
+        self.assertNotEqual(outputs[0]['pid'], outputs[1]['pid'])
+        self.assertLess(max(item['started'] for item in outputs), min(item['finished'] for item in outputs))
+
+    def test_combination_trial_runs_unconfirmed_full_flow_without_formal_records(self):
+        task = self.task()
+        step = self.step(task, source="async def run(ctx, inputs):\n    return ctx.result(data={'value': 7})\n")
+        flow = {"version": 2, "root": {"id": "root", "kind": "sequence", "children": [
+            {"id": "each", "kind": "foreach", "items": {"literal": [1, 2]},
+             "body": {"id": "body", "kind": "sequence", "children": [
+                 {"id": step['step_id'], "kind": "action", "step_id": step['step_id']}]}}]}}
+        self.app.repo.tasks.save_flow(task, flow, self.app.repo.tasks.definition_hash(task))
+        nodes = [{"node_id": "a", "task_id": task, "environment_id": None, "inputs": {}, "step_inputs": {}}]
+        saved = self.app.sequences.save("Debug draft", nodes, {"type": "object"})
+        done = self._wait(self.app.dispatch('sequence.trial', {'sequence_id': saved['sequence_id'],
+                                           'request_id': 'trial-combination', 'inputs': {}})['sequence_run_id'])
+        self.assertEqual(done['status'], 'SUCCEEDED', done)
+        self.assertEqual(done['snapshot']['mode'], 'TRIAL')
+        child = self.app.runs.get(done['nodes'][0]['run_id'])
+        self.assertEqual(child['mode'], 'TRIAL')
+        self.assertEqual(len(child['attempts']), 2, 'Debug must finish every loop iteration')
+        self.assertFalse(any(row['mode'] == 'EXECUTION' for row in self.app.runs.list()))
+        row = next(row for row in self.app.runs.list() if row['run_id'] == child['run_id'])
+        self.assertEqual(row['sequence_run_id'], done['sequence_run_id'])
+        with self.assertRaises(TaskError) as conflict:
+            self.app.sequences.start(saved['sequence_id'], 'trial-combination', {})
+        self.assertEqual(conflict.exception.code, 'COMMAND_CONFLICT')
+        with self.assertRaises(TaskError) as unconfirmed:
+            self.app.sequences.start(saved['sequence_id'], 'formal-combination', {})
+        self.assertEqual(unconfirmed.exception.code, 'STEP_NOT_VALIDATED')
+
     def _task(self, name):
         task = self.app.repo.create_task(name, {
             "type": "object", "properties": {"value": {"type": "integer"}},

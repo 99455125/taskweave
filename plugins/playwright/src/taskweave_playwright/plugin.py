@@ -7,7 +7,7 @@ from .actions import entries as common_entries
 from .side_effects import entries as side_effect_entries
 from .session import BrowserSession
 from .browser_actions import BrowserAction, ReadTool
-from .results import FileResult, failure_results
+from .results import FileResult, failure_results, result_artifacts
 from .context import list_context_targets, collect_context, record_context
 
 class PlaywrightPlugin:
@@ -218,6 +218,14 @@ class PlaywrightPlugin:
     def resource_providers(self):
         return {"playwright.session": BrowserSession()}
 
+    def code_generators(self):
+        from .codegen import SPEC
+        return (SPEC,)
+
+    def generate_code(self, generator_id, recording, bindings, options):
+        from .codegen import generate
+        return generate(generator_id, recording, bindings, options)
+
     def authoring(self, selected_ids):
         return AuthoringContribution(
             """通过 ctx.call 使用 Playwright 动作；同一业务会话使用一致的 role，不同 role 对应独立浏览器上下文。
@@ -239,7 +247,7 @@ page_attribute 只读声明允许的 DOM/ARIA 属性，最长8192字符；不读
 page_upload 使用明确文件名、mime_type、content_base64，不接受本机路径；file.read 的 base64 输出可通过步骤绑定传入。单文件最多1MiB、总量8MiB、最多10个文件，空数组明确清除。mode=input定位input[type=file]（可隐藏）；mode=chooser定位触发文件选择的唯一可见控件，不猜新建文件框。上传返回文件大小仅证明浏览器文件已设置，仍须按本步骤要求核对页面实际接收结果。
 page_dialog 在触发click/double_click/press前安装本次动作的原生弹窗处理，dialogs须列出实际观察到的type、完整message和accept/dismiss；prompt_text仅用于接受prompt。按顺序精确匹配，额外或不符弹窗拒绝，结束/取消移除监听。普通HTML弹窗继续用DOM定位；不凭常见提示猜确认内容，不用长期自动接受监听，也不认为处理确认框就代表业务成功。
 运行时 page_inspect 读取当前保留页面；编写工具中同名动作根据 URL 在独立浏览器观察，二者现场不同。
-保存并展示截图时，把 page_screenshot 的完整返回对象交给 ctx.output("playwright.image", "capture", screenshot)，将 output 放入 outputs，将 {"output":"capture"} 放入 data，并用 playwright.screenshot view 指向该字段。临时 staged_file 不能直接展示；未要求截图时不自动增加。""",
+保存并展示截图时，把 page_screenshot 的完整返回对象交给 ctx.output("playwright.image", "capture", screenshot)，将 output 放入 outputs，将 {"output":"capture"} 放入 data，并用 playwright.screenshot view 指向该字段。临时 staged_file 不能直接展示。宿主会自动保存本步骤实际涉及页面的结束截图；需要中间状态截图时才显式调用 page_screenshot 并声明图片输出和 view。""",
             examples=(
                 """async def run(ctx, inputs):
     await ctx.call("playwright.page_open", {"url": inputs["url"], "role": "operator"})
@@ -308,3 +316,6 @@ page_dialog 在触发click/double_click/press前安装本次动作的原生弹�
 
     async def failure_results(self, ctx, error):
         return await failure_results(ctx, error)
+
+    async def result_artifacts(self, ctx, result):
+        return await result_artifacts(ctx, result)

@@ -76,7 +76,7 @@ PLAN_RULES = """本次把一个规划生成可直接导入 TaskWeave 的任务�
 
 优先使用已采集上下文中的控件信息生成任务。用户在 context_notes 中明确说明的业务操作、输入含义和操作顺序可以作为步骤规格依据；页面快照用于提供可执行定位证据，不能因为单条快照被截断就忽略用户说明。缺少某个下拉选项、业务值、最终操作入口或插件能力时，仍生成目标明确的步骤草稿，把缺项放到该步“待补充：”，不把局部问题升级为整份规划失败。例如已知要新增记录、但缺少确认按钮证据时，保留“新增记录”步骤并使 step_content 为空，说明需要补采该按钮。代码已经完整但执行结果仍需确认时，step_notes 用“待调试：”说明具体风险。
 
-只返回满足 task_package_schema 的 JSON 对象，顶层必须包含 format、origin、task、steps、plan_context_refs；format 固定为 taskweave-task-2，origin 固定为 ai_generated，所有步骤 validation_state 固定为 DRAFT。
+只返回满足 task_package_schema 的 JSON 对象，顶层必须包含 format、origin、task、steps、flow、flow_validation_state、plan_context_refs；format 固定为 taskweave-task-3，origin 固定为 ai_generated，所有步骤 validation_state 和 flow_validation_state 固定为 DRAFT。flow 使用 {"version":2,"root":{"id":"root","kind":"sequence","children":[{"id":"step-1","kind":"action","step_id":"step-1"}]}} 结构，children 按 steps 顺序列出全部步骤，id 和 step_id 使用对应步骤 key；空任务 children 为 []。
 plan_context_refs 必须覆盖 steps 中的每一个步骤 key，按本次材料中的真实 context_id 关联该步骤所依据的上下文组，例如 {"step-1":["上下文ID1","上下文ID2"],"step-2":["上下文ID2"],"step-3":[]}。同一上下文可被多个相关步骤引用，一步也可引用多个组；保持材料顺序。没有相关材料的步骤明确返回 []，不能省略步骤；有定位、操作或校验依据时必须关联，不因代码待补充或已生成而省略材料。不要把不相关的所有材料分配给每步，不能编造 ID。
 导入程序会从本次冻结的采集记录复制引用组的名称、说明、有序采集项及图片预览到对应步骤，供调试和后续 AI 编写使用。模型只返回引用，不重新生成采集正文、图片或顶层 contexts，也不把 context_id 当作代码运行参数。不要再包一层 task_package、explanation 或 Markdown。
 只有整个规划的最终目标互相矛盾，或主要业务阶段与步骤边界都无法确定，因而不能形成有意义的任务草稿时，才仅返回 {"error":{"code":"PLAN_INFORMATION_MISSING","message":"缺少必要信息","items":["真正阻塞整个任务规划的具体材料"]}}。不要虚构实现、空业务步骤或占位成功；step_content 为空的真实待编写步骤是允许的。"""
@@ -98,9 +98,3 @@ CAPABILITY_CORRECTION = """上一版代码引用了本步骤未授权的动作�
 只使用下列准确ID：{allowed_ids}
 校验错误：{validation_error}
 返回完整 step_content 和 explanation，不省略其他代码。"""
-
-# Compatibility aliases while non-authoring callers migrate to purpose-based
-# prompt assembly. They do not reintroduce the old content.
-STEP_CODE_RULES = DOMAIN_RULES + "\n" + EXECUTABLE_STEP_RULES + "\n" + STEP_CONTENT_RULES + "\n" + STEP_RESPONSE_RULES
-WEB_CHAT_JSON_RULES = WEB_CHAT_RULES + "\n" + WEB_CHAT_CODE_RULES
-WEB_CHAT_DESCRIPTION_RULES = WEB_CHAT_RULES

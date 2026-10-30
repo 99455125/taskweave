@@ -360,3 +360,32 @@ class StepContextPanelTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+class EmptyContextEntryTests(unittest.TestCase):
+    def test_collect_button_notifies_when_no_collectable_plugin_is_selected(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        async def scenario(app,client):
+            task=app.repo.create_task('no context plugin')
+            step=app.repo.save_step(task['task_id'],{'name':'empty','step_content':'async def run(ctx, inputs):\n    return ctx.result(data={})\n'})
+            original_button=ui.button
+            callbacks={}
+            def button(*args,**kwargs):
+                element=original_button(*args,**kwargs)
+                if args and args[0]=='采集上下文': callbacks['collect']=kwargs['on_click']
+                return element
+            with client,patch('nicegui.ui.button',side_effect=button):
+                from taskweave.desktop.workbench import Workbench
+                wb=Workbench(DesktopController(app))
+                await wb.navigate('editor',task_id=task['task_id'],step_id=step['step_id'])
+                callback=callbacks['collect']
+                with patch('nicegui.ui.notify') as notify:
+                    await callback()
+                self.assertTrue(notify.called)
+                self.assertIn('请选择可采集的插件',notify.call_args.args[0])
+                self.assertFalse(any('tw-context-collection-dialog' in e.classes for e in client.elements.values()))
+        with tempfile.TemporaryDirectory() as home,Application(home) as app:
+            client=Client(page('/empty-context-entry'))
+            try:asyncio.run(scenario(app,client))
+            finally:client.delete()

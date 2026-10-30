@@ -24,6 +24,7 @@ class RecordingOperation(Protocol):
                        provider_id: str, request: dict[str, JSON] | None = None,
                        recording_id: str | None = None, expected_session_id: str | None = None,
                        run_id: str | None = None, environment_id: str | None = None,
+                       execution_path: str | None = None,
                        include_view: bool = True, after: int = 0, limit: int = 100,
                        through: int | None = None) -> RecordingBatch: ...
 
@@ -193,6 +194,8 @@ class RecordingDraft:
                 raise TaskError('CONTEXT_RECORDING_PENDING', '请先处理已有录制')
             self.options = copy.deepcopy(options)
             self.source_session_id = self.options.get('run_id') or self.source_session_id
+            if self.options.get('run_id') and self.options.get('execution_path'):
+                self.source_session_id = self.options['run_id'] + '|' + self.options['execution_path']
             self.options['include_view'] = bool(include_view)
             # The first selected instance is used for start; all subsequent
             # commands freeze the identity returned by the provider.

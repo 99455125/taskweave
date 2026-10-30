@@ -46,7 +46,7 @@ class FailureEvidence:
 
 
 class TransferFailureResultHandler:
-    def schema(self): return {'version':1,'tables':{},'migrations':{},'indexes':{}}
+    def schema(self): return {'tables':{},'indexes':{}}
     def prepare(self,request):
         from jsonschema import Draft202012Validator
         schema=object_schema({'action_id':TEXT,'error_code':TEXT,'effect_state':{'enum':['UNKNOWN']},'result':TRANSFER_RESULT},['action_id','error_code','effect_state','result'])

@@ -70,6 +70,7 @@ class CollectionForm:
         self.available = set(schemas if available is None else available)
         self.form_schemas = {}
         self.target = None
+        self.sessions = {}
 
     def change(self, name, value):
         self.fields[name] = deepcopy(value)
@@ -80,14 +81,33 @@ class CollectionForm:
     def provider_choices(self, retained=None):
         return sorted(self.available | ({retained} if retained else set()))
 
-    def run_choices(self, runs, retained=None, *, initial=''):
-        eligible = [run for run in runs if run['status'] in {'PAUSED', 'FAILED', 'SUCCEEDED'}]
-        available = {run['run_id'] for run in eligible}
+    def run_choices(self, runs, retained=None, *, initial='', step_id=None):
+        eligible = []
+        self.sessions = {}
+        for run in runs:
+            if run['status'] not in {'PAUSED', 'FAILED', 'INTERRUPTED', 'SUCCEEDED'}:
+                continue
+            if step_id is not None and 'execution_paths' in run:
+                for occurrence in run['execution_paths']:
+                    if occurrence['step_id'] != step_id:
+                        continue
+                    key = run['run_id'] + '|' + occurrence['execution_path']
+                    eligible.append({**run, **occurrence, 'selection_id': key})
+                    self.sessions[key] = {'run_id': run['run_id'], 'execution_path': occurrence['execution_path'],
+                                          'expected_session_id': run['session_id']}
+            else:
+                eligible.append(run)
+                self.sessions[run['run_id']] = {'run_id': run['run_id']}
+        available = {run.get('selection_id', run['run_id']) for run in eligible}
         selected = retained if retained is not None else self.fields.get('run', initial)
         missing_retained = bool(retained and retained not in available)
         if selected not in available and not missing_retained:
             selected = ''
         return eligible, selected, missing_retained
+
+    def session_options(self):
+        selected = self.fields.get('run') or ''
+        return deepcopy(self.sessions.get(selected, {'run_id': selected or None}))
 
     def configure(self, provider, schema):
         self.form_schemas[provider] = schema
@@ -133,7 +153,12 @@ class CollectionForm:
         request = merge_context_request(self.values(provider, hidden), json.loads(self.fields.get('advanced') or '{}'), target_request)
         options = {'provider_id': provider, 'request': request, 'expected_session_id': session_id}
         if step:
-            options['run_id'] = self.fields.get('run') or None
+            selected = self.session_options()
+            if session_id is not None and selected.get('expected_session_id') not in {None, session_id}:
+                raise TaskError('CONTEXT_SESSION_CHANGED', '采集实例已变化，请刷新后重试')
+            options.update(selected)
+            if session_id is not None:
+                options['expected_session_id'] = session_id
             if not options['run_id']: options['environment_id'] = environment_id or None
         include_view = bool(self.fields.get('include_view')) if context_view_default(schema) is not None else False
         return options, include_view

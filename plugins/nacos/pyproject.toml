@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "taskweave-nacos"
+version = "0.1.0"
+requires-python = ">=3.10"
+dependencies = ["httpx>=0.28,<0.29", "ruamel.yaml>=0.18,<0.19"]
+
+[project.entry-points."taskweave.plugins"]
+nacos = "taskweave_nacos:NacosPlugin"
+
+[tool.setuptools.packages.find]
+where = ["src"]

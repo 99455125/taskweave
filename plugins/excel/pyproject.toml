@@ -1,0 +1,16 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "taskweave-excel"
+version = "0.1.0"
+description = "Read, create and write XLSX files using internal datasets"
+requires-python = ">=3.10"
+dependencies = ["openpyxl>=3.1.5,<3.2", "defusedxml>=0.7,<1", "taskweave-dataset>=0.1,<1"]
+
+[project.entry-points."taskweave.plugins"]
+excel = "taskweave_excel:ExcelPlugin"
+
+[tool.setuptools.packages.find]
+where = ["src"]

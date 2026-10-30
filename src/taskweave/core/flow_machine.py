@@ -2,8 +2,8 @@
 
 from copy import deepcopy
 
-from taskweave.core.task_flow import DEFAULT_FOREACH_ITEMS, DEFAULT_LOOP_ITERATIONS, evaluate_condition
-from taskweave.core.validation import TaskError
+from taskweave.core.task_flow import DEFAULT_FOREACH_ITEMS, DEFAULT_LOOP_ITERATIONS, evaluate_condition, conditional_branches
+from taskweave.core.validation import TaskError, dumps
 
 CONTROL_BATCH_SIZE = 128
 MAX_CONTROL_VISITS = 1_000_000
@@ -27,8 +27,8 @@ def _nodes(flow):
             for child in node["children"]:
                 visit(child)
         elif node["kind"] == "if":
-            visit(node["then"])
-            visit(node["else"])
+            for _, branch in conditional_branches(node):
+                visit(branch)
         elif node["kind"] in {"foreach", "loop"}:
             visit(node["body"])
 
@@ -63,7 +63,7 @@ def _finish(cursor, visits):
     finished = frames.pop()
     if finished["kind"] != "sequence":
         visits.append(_visit(finished, "SUCCEEDED", {
-            key: finished[key] for key in ("selected", "index", "state", "items", "completed") if key in finished
+            key: finished[key] for key in ("selected", "facts", "outputs", "index", "state", "items", "completed") if key in finished
         }))
     if not frames:
         return
@@ -87,7 +87,7 @@ def _finish(cursor, visits):
         raise TaskError("FLOW_CURSOR_INVALID")
 
 
-def next_action(flow, cursor, read_value, *, read_with_pending=None):
+def next_action(flow, cursor, read_value, *, read_with_pending=None, _batch_size=CONTROL_BATCH_SIZE):
     """Advance control nodes until one action is ready or the flow ends."""
     nodes = _nodes(flow)
     cursor = deepcopy(cursor) if cursor is not None else {
@@ -96,22 +96,25 @@ def next_action(flow, cursor, read_value, *, read_with_pending=None):
         "pending": None, "actions": 0, "control_visits": 0,
     }
     visits = []
-    def transition(action, done):
+    def transition(action, done, actions=None):
         cursor["control_visits"] = cursor.get("control_visits", 0) + sum(
             item["kind"] != "action" for item in visits)
         if cursor["control_visits"] > MAX_CONTROL_VISITS:
             frame = cursor["frames"][-1] if cursor["frames"] else {"node_id": flow["root"]["id"],
                                                                    "path": "/" + _part(flow["root"]["id"])}
             raise FlowDecisionError("FLOW_CONTROL_LIMIT_EXCEEDED", frame["node_id"], frame["path"], cursor, visits)
-        return {"cursor": cursor, "instances": visits, "action": action, "done": done}
+        return {"cursor": cursor, "instances": visits, "action": action, "done": done,
+                "errors": cursor_errors(cursor),
+                "actions": actions if actions is not None else ([action] if action is not None else [])}
 
     def read(binding, current):
+        current = {**current, "frames": [*current.get("context", []), *current["frames"]]}
         return (read_with_pending(binding, current, visits) if read_with_pending is not None
                 else read_value(binding, current))
     if cursor["pending"] is not None:
         return transition(cursor["pending"], False)
     while cursor["frames"]:
-        if len(visits) >= CONTROL_BATCH_SIZE:
+        if len(visits) >= _batch_size:
             return transition(None, False)
         frame = cursor["frames"][-1]
         node = nodes[frame["node_id"]]
@@ -133,12 +136,64 @@ def next_action(flow, cursor, read_value, *, read_with_pending=None):
                 continue
             if kind == "if":
                 if "selected" not in frame:
-                    frame["selected"] = "then" if _condition(node["condition"], cursor, read) else "else"
-                    visits.append(_visit(frame, "RUNNING", {"selected": frame["selected"]}))
-                branch = node[frame["selected"]]
-                cursor["frames"].append({"node_id": branch["id"], "kind": "sequence",
-                                         "path": frame["path"] + "/" + frame["selected"] + "/" + _part(branch["id"]),
-                                         "index": 0})
+                    selected = []
+                    facts = {}
+                    def frozen_read(binding, current):
+                        key = dumps(binding)
+                        if key not in facts:
+                            facts[key] = {"binding": deepcopy(binding), "value": deepcopy(read(binding, current))}
+                        return deepcopy(facts[key]["value"])
+                    for case in node["cases"]:
+                        if _condition(case["condition"], cursor, frozen_read):
+                            selected.append(case["id"])
+                            if not node.get("parallel", False):
+                                break
+                    frame["selected"] = selected or [node["default"]["id"]]
+                    frame["facts"] = list(facts.values())
+                    branches = dict(conditional_branches(node))
+                    frame["lanes"] = []
+                    for identity in frame["selected"]:
+                        body = branches[identity]
+                        frame["lanes"].append({"frames": [{"node_id": body["id"], "kind": "sequence",
+                            "path": frame["path"] + "/" + _part(identity) + "/" + _part(body["id"]), "index": 0}],
+                            "resource_path": (frame["path"] + "/" + _part(identity)
+                                              if node.get("parallel", False) else cursor.get("resource_path", "/")),
+                            "pending": None, "actions": 0, "control_visits": 0})
+                    visits.append(_visit(frame, "RUNNING", {"selected": frame["selected"], "facts": frame["facts"]}))
+                actions = []
+                all_done = True
+                for index, lane in enumerate(frame["lanes"]):
+                    if len(visits) >= _batch_size:
+                        all_done = False
+                        break
+                    if lane.get("error"):
+                        all_done = False
+                        continue
+                    context = [*cursor.get("context", []), *[{key: value for key, value in item.items()
+                        if key != "lanes"} for item in cursor["frames"]]]
+                    try:
+                        child = next_action(flow, {**lane, "context": context}, read_value,
+                            _batch_size=_batch_size - len(visits),
+                            read_with_pending=lambda binding, current, pending:
+                                read_with_pending(binding, current, [*visits, *pending])
+                                if read_with_pending is not None else read_value(binding, current))
+                    except FlowDecisionError as exc:
+                        failed = {"execution_path": exc.execution_path + "/$error", "node_id": exc.node_id,
+                                  "kind": "control", "status": "FAILED", "error_code": exc.code, "payload": {}}
+                        child = {"cursor": {**exc.cursor, "error": failed},
+                                 "instances": [*exc.instances, failed], "actions": [], "done": False}
+                    child["cursor"].pop("context", None)
+                    frame["lanes"][index] = child["cursor"]
+                    visits.extend(child["instances"])
+                    actions.extend(child["actions"])
+                    all_done = all_done and child["done"]
+                if not all_done:
+                    return transition(actions[0] if actions else None, False, actions)
+                frame["outputs"] = {}
+                for name, mapping in node.get("outputs", {}).items():
+                    values = {identity: _read(mapping[identity], cursor, read) for identity in frame["selected"]}
+                    frame["outputs"][name] = values if node.get("parallel", False) else values[frame["selected"][0]]
+                _finish(cursor, visits)
                 continue
             if kind == "foreach":
                 if "items" not in frame:
@@ -203,9 +258,60 @@ def next_action(flow, cursor, read_value, *, read_with_pending=None):
     return transition(None, True)
 
 
-def advance_after_action(flow, cursor, attempt_id=None):
+def cursor_errors(cursor):
+    """Frozen failures block only their lane until the group has drained."""
+    errors = [cursor["error"]] if cursor.get("error") else []
+    for frame in cursor["frames"]:
+        for lane in frame.get("lanes", []):
+            errors.extend(cursor_errors(lane))
+    return errors
+
+
+def live_resource_paths(cursor):
+    """Include suspended ancestor lanes until their own sequence has finished."""
+    owners = {cursor.get("resource_path", "/")} if cursor.get("frames") else set()
+    for frame in cursor.get("frames", []):
+        for lane in frame.get("lanes", []):
+            owners.update(live_resource_paths(lane))
+    return owners
+
+
+def pending_actions(cursor):
+    """List current leaf occurrences without advancing control decisions."""
+    actions = [cursor["pending"]] if cursor.get("pending") else []
+    for frame in cursor.get("frames", []):
+        for lane in frame.get("lanes", []):
+            actions.extend(pending_actions(lane))
+    return actions
+
+
+def action_cursor(cursor, execution_path):
+    """A pending path's read context, including all enclosing loop frames."""
+    pending = cursor.get("pending")
+    if pending and pending["execution_path"] == execution_path:
+        return {**cursor, "frames": [*cursor.get("context", []), *cursor["frames"]]}
+    context = [*cursor.get("context", []), *[{key: value for key, value in frame.items()
+               if key != "lanes"} for frame in cursor["frames"]]]
+    for frame in cursor["frames"]:
+        for lane in frame.get("lanes", []):
+            found = action_cursor({**lane, "context": context}, execution_path)
+            if found is not None:
+                return found
+    return None
+
+
+def advance_after_action(flow, cursor, attempt_id=None, *, execution_path=None):
     """Advance exactly one successful action occurrence."""
     cursor = deepcopy(cursor)
+    if execution_path is not None and (cursor.get("pending") or {}).get("execution_path") != execution_path:
+        for frame in cursor["frames"]:
+            for index, lane in enumerate(frame.get("lanes", [])):
+                if action_cursor(lane, execution_path) is not None:
+                    advanced = advance_after_action(flow, lane, attempt_id, execution_path=execution_path)
+                    frame["lanes"][index] = advanced["cursor"]
+                    cursor["actions"] += 1
+                    return {**advanced, "cursor": cursor}
+        raise TaskError("FLOW_INSTANCE_REQUIRED")
     pending = cursor.get("pending")
     if pending is None or not cursor["frames"] or cursor["frames"][-1]["kind"] != "sequence":
         raise TaskError("FLOW_CURSOR_INVALID")

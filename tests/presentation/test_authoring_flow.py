@@ -120,3 +120,49 @@ assert flow.content_candidate({'step_content':'old'}, {'stale':False,'proposed_c
             self.assertIsNone(outcome.candidate)
             self.assertEqual([notice.code for notice in outcome.notices], ['repair_changed'])
         asyncio.run(scenario())
+
+    def test_successful_trial_can_be_revised_without_failure_feedback(self):
+        Flow = self.flow_type()
+        async def scenario(attempts, web_chat):
+            identity = ('task', 'step', 0, 0)
+            saved = {'step_id': 'step', 'content_hash': 'h', 'step_content': 'original', 'step_description': 'goal'}
+            submissions = []
+            async def call(operation, **params):
+                if operation == 'run.get':
+                    return {'run_id': 'run', 'attempts': attempts}
+                self.assertEqual(operation, 'context.ai')
+                return []
+            async def request(operation, snapshot, **params):
+                submissions.append(params)
+                return {'prompt': 'revision'}
+            async def unexpected(*args):
+                self.fail('A successful trial has no failure feedback to collect or refresh')
+            flow = Flow(call=call, request=request, identity=lambda: identity, trials={'step': 'run'},
+                        trial_feedback=unexpected, repair_contexts=unexpected)
+            result = await flow.generate(saved, identity, fix_logs=True, run_id='run',
+                feedback_override={}, history_rounds=2, supplement='结果不符合预期', web_chat=web_chat)
+            self.assertIsNotNone(result.candidate)
+            self.assertFalse(submissions[0]['feedback'])
+            self.assertTrue(submissions[0]['use_history'])
+            self.assertEqual(submissions[0]['history_rounds'], 2)
+            self.assertEqual(submissions[0]['export_only'], web_chat)
+        for attempts in ([], [{'step_id': 'step', 'valid': True, 'status': 'SUCCEEDED'}],
+                         [{'step_id': 'other', 'valid': True, 'status': 'FAILED'}]):
+            for web_chat in (False, True):
+                with self.subTest(attempts=attempts, web_chat=web_chat):
+                    asyncio.run(scenario(attempts, web_chat))
+
+    def test_bound_failure_disappearing_does_not_submit_as_unbound_revision(self):
+        Flow = self.flow_type()
+        async def scenario():
+            identity = ('task', 'step', 0, 0)
+            async def call(operation, **params):
+                return {'run_id': 'run', 'attempts': []}
+            async def request(*args, **kwargs):
+                self.fail('An obsolete failure must require a fresh request')
+            flow = Flow(call=call, request=request, identity=lambda: identity, trials={'step': 'run'})
+            result = await flow.generate({'step_id': 'step'}, identity, fix_logs=True, run_id='run',
+                feedback_override={'run_id': 'run', 'attempt_id': 'old'}, feedback_run_id='run')
+            self.assertIsNone(result.candidate)
+            self.assertEqual([notice.code for notice in result.notices], ['repair_changed'])
+        asyncio.run(scenario())

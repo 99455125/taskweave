@@ -16,6 +16,7 @@ class Registry:
         self.views = dict(BUILTIN_VIEWS)
         self.versions, self.manifests = {}, {}
         self.load_errors = {}
+        self.code_generators = {}
         for plugin in self.plugins:
             m = plugin.manifest()
             name = m.get("id", "")
@@ -36,6 +37,19 @@ class Registry:
                 raise TaskError("PLUGIN_MANIFEST_INVALID", name) from exc
             self.versions[name] = m["package_version"]
             self.manifests[name] = m
+            from taskweave.core.codegen_contracts import CodeGeneratorSpec
+            declare = getattr(plugin, 'code_generators', None)
+            if declare is not None:
+                if not callable(declare) or not callable(getattr(plugin, 'generate_code', None)):
+                    raise TaskError('CODEGEN_SPEC_INVALID', name)
+                for spec in declare():
+                    if (not isinstance(spec, CodeGeneratorSpec) or not spec.id.startswith(name + '.')
+                            or spec.id in self.code_generators or not spec.name or not spec.provider_ids
+                            or not spec.sources or spec.result_version != 1
+                            or any(type(v) is not int or v < 1 for v in spec.recording_versions)):
+                        raise TaskError('CODEGEN_SPEC_INVALID', name)
+                    check_schema(spec.options_schema)
+                    self.code_generators[spec.id] = (plugin, spec)
             for vid, descriptor in getattr(plugin, 'result_views', lambda: {})().items():
                 if vid in self.views or not vid.startswith(name + '.') or not isinstance(descriptor, dict) or descriptor.get('type') not in {'json', 'table', 'image', 'report'}:
                     raise TaskError('RESULT_VIEW_INVALID', vid)
@@ -145,6 +159,7 @@ class Registry:
             "result_views": self.views,
             "resource_providers": list(self.providers),
             "manifests": self.manifests,
+            "code_generators": [asdict(spec) for _, spec in self.code_generators.values()],
         }
 
     def selected_plugins(self, capabilities):

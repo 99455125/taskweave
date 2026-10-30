@@ -29,11 +29,11 @@ sys.meta_path.insert(0, BlockImports())
             from taskweave.infrastructure.sqlite_storage import SQLiteStorage, connect, initialize
             with tempfile.TemporaryDirectory() as home:
                 store = SQLiteStorage(home)
-                assert store.query('PRAGMA user_version', one=True)['user_version'] == 17
+                assert store.query('PRAGMA user_version', one=True)['user_version'] == 0
                 path = store.task_path('00000000-0000-0000-0000-000000000001')
                 initialize(path, 'task-data')
                 with connect(path) as db:
-                    assert db.execute('PRAGMA user_version').fetchone()[0] == 2
+                    assert db.execute('PRAGMA user_version').fetchone()[0] == 0
                 try:
                     with store.transaction():
                         store.execute("INSERT INTO environments(environment_id,name) VALUES('test', 'rollback')")

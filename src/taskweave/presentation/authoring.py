@@ -111,19 +111,19 @@ class AuthoringFlow:
             return
         trial = None
         feedback = None
+        if fix_logs and feedback_override is not None and self.trials.get(saved['step_id']) != run_id:
+            yield Notice('repair_changed', 'warning')
+            return
         if fix_logs and run_id:
             trial = await self.call("run.get", run_id=run_id)
-            if self.identity() != identity:
+            if self.identity() != identity or (
+                feedback_override is not None and self.trials.get(saved['step_id']) != run_id
+            ):
                 if feedback_override is not None:
                     yield Notice('repair_changed', 'warning')
                 return
-            if trial["attempts"]:
-                failed = next((a for a in reversed(trial["attempts"])
-                               if a["valid"] and a["status"] in {"FAILED", "UNKNOWN"}), None)
-                if failed and failed["step_id"] != saved["step_id"]:
-                    definition = json.loads(trial["definition_json"])["steps"]
-                    name = next(st["name"] for st in definition if st["step_id"] == failed["step_id"])
-                    raise TaskError("FORM_INVALID", "本次流程调试失败在“" + name + "”，请切换到该步骤修复。")
+            failed = self.latest_failure(trial)
+            if failed and failed['step_id'] == saved['step_id']:
                 feedback = await self.trial_feedback(trial["run_id"], saved["step_id"])
                 if feedback_override is not None and (
                     self.identity() != identity or self.trials.get(saved["step_id"]) != trial["run_id"]
@@ -153,14 +153,15 @@ class AuthoringFlow:
                     feedback = dict(feedback_override)
                 for key in removed_feedback:
                     feedback.pop(key, None)
-        if fix_logs and feedback is None:
-            raise TaskError("VALIDATION_EVIDENCE_INVALID", "请先执行当前步骤调试")
+        if fix_logs and feedback_override and feedback is None:
+            yield Notice('repair_changed', 'warning')
+            return
         generation_contexts = context_ai_items(
             await self.call("context.ai", step_id=saved["step_id"])
         )
         if self.identity() != identity:
             return
-        if fix_logs:
+        if feedback:
             refreshed, availability = await self.repair_contexts(saved, trial["run_id"], feedback)
             if self.identity() != identity:
                 return

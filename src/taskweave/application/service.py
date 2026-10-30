@@ -41,11 +41,15 @@ class Application:
     def validate_step(self, step_id):
         return self.steps.validate(step_id)
 
-    def trial_step(self, step_id, inputs, command_id, environment_id=None, continue_session=False, defer_inputs=False):
-        return self.steps.trial(step_id, inputs, command_id, environment_id, continue_session, defer_inputs)
+    def trial_step(self, step_id, inputs, command_id, environment_id=None, continue_session=False, defer_inputs=False,
+                   new_session=False, session_run_id=None, expected_session_id=None):
+        return self.steps.trial(step_id, inputs, command_id, environment_id, continue_session, defer_inputs,
+                                new_session, session_run_id, expected_session_id)
 
-    def trial_flow(self, step_id, inputs, command_id, environment_id=None, step_inputs=None, defer_inputs=False, start_step_id=None):
-        return self.steps.trial_flow(step_id, inputs, command_id, environment_id, step_inputs, defer_inputs, start_step_id)
+    def trial_flow(self, step_id, inputs, command_id, environment_id=None, step_inputs=None, defer_inputs=False, start_step_id=None,
+                   new_session=False, session_run_id=None, expected_session_id=None):
+        return self.steps.trial_flow(step_id, inputs, command_id, environment_id, step_inputs, defer_inputs, start_step_id,
+                                    new_session, session_run_id, expected_session_id)
 
     def confirm_step(self, step_id, attempt_id, expected_hash):
         return self.steps.confirm(step_id, attempt_id, expected_hash)
@@ -95,17 +99,18 @@ class Application:
         self.runs.registry = registry
         self.sequences.registry = registry
         self.contexts.registry = registry
+        self.codegen.registry = registry
         self.planning.registry = registry
         return registry.catalog()
 
     def collect_context(
         self, step_id, provider_id, request=None, environment_id=None, run_id=None,
-        expected_session_id=None, include_view=True,
+        expected_session_id=None, include_view=True, execution_path=None,
     ):
-        return self.contexts.collect(step_id, provider_id, request, environment_id, run_id, expected_session_id, include_view)
+        return self.contexts.collect(step_id, provider_id, request, environment_id, run_id, expected_session_id, include_view, execution_path)
 
-    def context_targets(self, step_id, provider_id, run_id=None, request=None):
-        return self.contexts.targets(step_id, provider_id, run_id, request)
+    def context_targets(self, step_id, provider_id, run_id=None, request=None, execution_path=None, expected_session_id=None):
+        return self.contexts.targets(step_id, provider_id, run_id, request, execution_path, expected_session_id)
 
     def save_context_batch(self, step_id, context_id, expected_revision, provider_id, name, context_notes, captures):
         return self.contexts.save_batch(step_id, context_id, expected_revision, provider_id, name, context_notes, captures)

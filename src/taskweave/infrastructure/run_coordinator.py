@@ -1,6 +1,7 @@
 """Durable sequential coordinator; one spawn worker per active run."""
 
 from dataclasses import asdict
+from contextlib import contextmanager, nullcontext
 from datetime import datetime, timezone, timedelta
 import json
 import os
@@ -9,11 +10,13 @@ import threading
 import time
 from taskweave.core.validation import TaskError, dumps, fingerprint, resolve, validate
 from taskweave.core.repositories import EnvironmentRepository, ResultRepository, RunRepository, StepRepository, TaskRepository
-from taskweave.infrastructure.sqlite_storage import now, uid, valid_id
+from taskweave.infrastructure.sqlite_storage import now, uid, valid_id, initialize
 from taskweave.infrastructure.privacy import redact
 from taskweave.infrastructure.worker_transport import WorkerTransport
 from taskweave.core.run_ports import RunQueries, RunEvents, RunLeases, RunWrites
 from taskweave.core.task_flow import is_linear_flow
+
+_RESULT_INITIALIZATION_LOCK = threading.Lock()
 
 
 class Coordinator:
@@ -32,18 +35,27 @@ class Coordinator:
         self.thread = None
         self.session_key = self.session_run_id = None
         self.context_session_id = None
+        self.context_paths = {}
+        self.context_step_id = None
         self.context_recordings = set()
         self.context_recording_delivered = {}
         self.context_recording_capabilities = {}
         self.pause_requested = threading.Event()
         self.cancel = self.transport.cancel
         self.closing = False
+        self.branch_workers = {}
+        self.explicit_scene = False
+        self.max_parallel_actions = 8
+        self.execution_capacity = None
         if recover:
             self.leases.recover()
 
     @staticmethod
     def lease_slot(run):
-        return "trial:" + run["task_id"] if run["mode"] == "TRIAL" else "execution:" + run["run_id"]
+        if run['mode'] == 'TRIAL':
+            request = json.loads(run.get('request_json') or '{}')
+            return 'trial:' + (run['run_id'] if 'debug_scene' in request or request.get('full_flow_trial') else run['task_id'])
+        return 'execution:' + run['run_id']
 
     @property
     def process(self):
@@ -63,15 +75,41 @@ class Coordinator:
 
     def _worker(self):
         if self.transport.start():
-            self.context_session_id = uid()
+            self.transport.session_id = uid()
+        self.context_session_id = self.transport.session_id
 
     def _stop_worker(self, force=False):
+        for worker in list(self.branch_workers.values()):
+            worker._stop_worker(force)
+        self.branch_workers.clear()
         self.context_recordings.clear()
         self.context_recording_delivered.clear()
         self.context_recording_capabilities.clear()
         self.session_key = self.session_run_id = None
         self.context_session_id = None
+        self.context_paths.clear()
+        self.context_step_id = None
         self.transport.stop(force)
+
+    def has_context_recordings(self):
+        return bool(self.context_recordings) or any(
+            worker.has_context_recordings() for worker in list(self.branch_workers.values()))
+
+    def assert_scene_idle(self, allow_run_id=None):
+        for transport in (*self.transport.parents, self.transport):
+            if (transport.operation_lock.locked()
+                    and (allow_run_id is None or transport.owner_run_id != allow_run_id)):
+                raise TaskError('RUN_BUSY', '该现场正在执行或采集')
+        for worker in list(self.branch_workers.values()):
+            worker.assert_scene_idle(allow_run_id)
+
+    @contextmanager
+    def scene_guard(self):
+        self.transport.claim('lifecycle:' + uid())
+        try:
+            yield
+        finally:
+            self.transport.release()
 
     def _done(self, run_id, status):
         terminal = status in {"SUCCEEDED", "CANCELLED"}
@@ -101,7 +139,8 @@ class Coordinator:
                 body['from'] = start_step_id
 
             def operation():
-                if self.context_recordings:
+                self.assert_scene_idle()
+                if self.has_context_recordings():
                     raise TaskError('CONTEXT_RECORDING_PENDING', '请先保存确认或丢弃录制，再运行步骤')
                 run = self.queries.run(run_id)
                 if mode not in {"NEXT", "UNTIL", "ALL"}:
@@ -129,7 +168,7 @@ class Coordinator:
                         steps = steps[:next(i for i, s in enumerate(steps) if s['step_id'] == run['trial_step_id']) + 1]
                     else:
                         steps = [s for s in steps if s["step_id"] == run["trial_step_id"]]
-                elif any(
+                elif run["mode"] != "TRIAL" and any(
                     s["validation_state"] != "VALIDATED"
                     for s in steps
                 ):
@@ -155,8 +194,13 @@ class Coordinator:
                 elif run["status"] == "FAILED":
                     raise TaskError("EXPLICIT_RETRY_REQUIRED")
                 slot = self.lease_slot(run)
-                if not self.writes.start_run(run_id, body, slot, str(os.getpid()), now(), retry_ids):
-                    raise TaskError("RUN_LEASE_BUSY")
+                self.transport.claim(run_id)
+                try:
+                    if not self.writes.start_run(run_id, body, slot, str(os.getpid()), now(), retry_ids):
+                        raise TaskError("RUN_LEASE_BUSY")
+                except BaseException:
+                    self.transport.release()
+                    raise
                 started.append(True)
                 return {"run_id": run_id, "status": "RUNNING", "command_id": command_id}
 
@@ -172,17 +216,19 @@ class Coordinator:
                 self.pause_requested.clear()
                 self.cancel.clear()
                 self.thread = threading.Thread(
-                    target=self._drive, args=(run_id, mode, target_step_id), daemon=True
+                    target=self._drive_scene, args=(run_id, mode, target_step_id), daemon=True
                 )
                 self.thread.start()
             return response
 
     def control(self, run_id, command_id, operation):
-        with self.lock:
+        with self.lock, (self.scene_guard() if operation == 'abandon' else nullcontext()):
+            if operation != 'abandon':
+                self.assert_scene_idle(allow_run_id=run_id)
             owned = []
 
             def apply():
-                if self.context_recordings and operation == 'abandon':
+                if self.has_context_recordings() and operation == 'abandon':
                     raise TaskError('CONTEXT_RECORDING_PENDING', '请先保存确认或丢弃录制，再结束实例')
                 run = self.queries.run(run_id)
                 if operation == "pause":
@@ -219,14 +265,14 @@ class Coordinator:
 
     def clear_task_runs(self, task_id):
         import shutil
-        with self.lock:
+        with self.lock, self.scene_guard():
             self.tasks.task(task_id)
             runs = self.queries.runs_for_task(task_id)
             ids = {run['run_id'] for run in runs}
             if any(run['status'] == 'RUNNING' for run in runs) or (self.session_run_id in ids and self.thread and self.thread.is_alive()):
                 raise TaskError('RUN_BUSY', '请先暂停或结束正在执行的步骤，再清理任务')
             if self.session_run_id in ids:
-                if self.context_recordings:
+                if self.has_context_recordings():
                     raise TaskError('CONTEXT_RECORDING_PENDING', '请先处理未保存录制，再清理运行')
                 self._stop_worker()
             self.writes.clear_task_run_records(task_id)
@@ -236,12 +282,12 @@ class Coordinator:
             return {'task_id': task_id, 'deleted_runs': len(runs)}
 
     def delete_run(self, run_id):
-        with self.lock:
+        with self.lock, self.scene_guard():
             run = self.queries.run(run_id)
             if run['status'] == 'RUNNING' or (self.thread and self.thread.is_alive() and self.session_run_id == run_id):
                 raise TaskError('RUN_BUSY', '请先结束正在执行的步骤，再删除执行')
             if self.session_run_id == run_id:
-                if self.context_recordings:
+                if self.has_context_recordings():
                     raise TaskError('CONTEXT_RECORDING_PENDING', '请先处理未保存录制，再删除运行')
                 self._stop_worker()
             self.leases.release_lease(run_id)
@@ -251,37 +297,39 @@ class Coordinator:
 
     def restart(self, run_id, command_id, target_step_id, start_step_id=None):
         with self.lock:
-            if self.context_recordings:
+            self.assert_scene_idle()
+            if self.has_context_recordings():
                 raise TaskError('CONTEXT_RECORDING_PENDING', '请先处理未保存录制，再重新运行')
             if self.leases.has_command_receipt(command_id):
                 return self.start(run_id, command_id, mode='UNTIL', target_step_id=target_step_id, start_step_id=start_step_id)
-            run = self.queries.run(run_id)
-            frozen_flow = json.loads(run["definition_json"]).get("flow") if run["definition_json"] else None
-            if frozen_flow is not None and not is_linear_flow(frozen_flow):
-                raise TaskError("FLOW_RESTART_NEW_RUN", "含条件或循环的流程请新建执行后从头运行")
-            if run['mode'] != 'EXECUTION' or run['status'] == 'RUNNING' or (self.thread and self.thread.is_alive()):
-                raise TaskError('RUN_BUSY', '请先暂停或结束正在执行的步骤')
-            if run['definition_hash'] != self.tasks.definition_hash(run['task_id']):
-                raise TaskError('RUN_CONFIG_CHANGED')
-            if json.loads(run['request_json']).get('environment_hash') != fingerprint(self.environments.environment(run['environment_id'])):
-                raise TaskError('ENVIRONMENT_CHANGED')
-            if json.loads(run['plugin_versions_json']) != self.registry.versions:
-                raise TaskError('PLUGIN_VERSION_MISMATCH')
-            if any(s['validation_state'] != 'VALIDATED' for s in self.steps.steps(run['task_id'])):
-                raise TaskError('STEP_NOT_VALIDATED')
-            if target_step_id not in {s['step_id'] for s in self.steps.steps(run['task_id'])}:
-                raise TaskError('TARGET_INVALID')
-            if start_step_id is not None:
-                ids = [step['step_id'] for step in self.steps.steps(run['task_id'])]
-                if start_step_id not in ids or ids.index(start_step_id) > ids.index(target_step_id):
+            with self.scene_guard():
+                run = self.queries.run(run_id)
+                frozen_flow = json.loads(run["definition_json"]).get("flow") if run["definition_json"] else None
+                if frozen_flow is not None and not is_linear_flow(frozen_flow):
+                    raise TaskError("FLOW_RESTART_NEW_RUN", "含条件或循环的流程请新建执行后从头运行")
+                if run['mode'] != 'EXECUTION' or run['status'] == 'RUNNING' or (self.thread and self.thread.is_alive()):
+                    raise TaskError('RUN_BUSY', '请先暂停或结束正在执行的步骤')
+                if run['definition_hash'] != self.tasks.definition_hash(run['task_id']):
+                    raise TaskError('RUN_CONFIG_CHANGED')
+                if json.loads(run['request_json']).get('environment_hash') != fingerprint(self.environments.environment(run['environment_id'])):
+                    raise TaskError('ENVIRONMENT_CHANGED')
+                if json.loads(run['plugin_versions_json']) != self.registry.versions:
+                    raise TaskError('PLUGIN_VERSION_MISMATCH')
+                if any(s['validation_state'] != 'VALIDATED' for s in self.steps.steps(run['task_id'])):
+                    raise TaskError('STEP_NOT_VALIDATED')
+                if target_step_id not in {s['step_id'] for s in self.steps.steps(run['task_id'])}:
                     raise TaskError('TARGET_INVALID')
-                for sid in ids[:ids.index(start_step_id)]:
-                    if not self.queries.has_successful_attempt(run_id, sid):
-                        raise TaskError('TARGET_INVALID', '请从前面尚未完成的步骤开始')
-            else:
-                self._stop_worker()
-            self.leases.release_lease(run_id)
-            self.writes.reset_run_results(run_id, from_step_id=start_step_id)
+                if start_step_id is not None:
+                    ids = [step['step_id'] for step in self.steps.steps(run['task_id'])]
+                    if start_step_id not in ids or ids.index(start_step_id) > ids.index(target_step_id):
+                        raise TaskError('TARGET_INVALID')
+                    for sid in ids[:ids.index(start_step_id)]:
+                        if not self.queries.has_successful_attempt(run_id, sid):
+                            raise TaskError('TARGET_INVALID', '请从前面尚未完成的步骤开始')
+                else:
+                    self._stop_worker()
+                self.leases.release_lease(run_id)
+                self.writes.reset_run_results(run_id, from_step_id=start_step_id)
             return self.start(run_id, command_id, mode='UNTIL', target_step_id=target_step_id, start_step_id=start_step_id)
 
     def reconcile(self, attempt_id, decision, evidence, command_id):
@@ -401,6 +449,12 @@ class Coordinator:
             return self._receipt(command_id, run_id, {'operation': 'inputs', 'inputs': inputs,
                 **({'step_inputs': step_inputs} if step_inputs is not None else {}),
                 **({'expected_input_id': expected_input_id} if expected_input_id is not None else {})}, apply)
+
+    def _drive_scene(self, run_id, mode, target):
+        try:
+            self._drive(run_id, mode, target)
+        finally:
+            self.transport.release()
 
     def _drive(self, run_id, mode, target):
         try:
@@ -522,7 +576,22 @@ class Coordinator:
         self.writes.clear_waiting_step(run_id)
         return True
 
-    def _attempt(self, run, step, execution_path=None, input_resolver=None):
+    def _attempt(self, run, step, execution_path=None, input_resolver=None, *, execution_slot_reserved=False):
+        capacity = self.execution_capacity
+        if capacity is not None and not execution_slot_reserved:
+            while not capacity.try_acquire():
+                if self.cancel.is_set() or self.pause_requested.is_set() or self.closing:
+                    self._done(run["run_id"], "CANCELLED" if self.cancel.is_set() else "PAUSED")
+                    return False
+                self.leases.heartbeat(run["run_id"], now())
+                self.cancel.wait(0.05)
+        try:
+            return self._execute_attempt(run, step, execution_path, input_resolver)
+        finally:
+            if capacity is not None:
+                capacity.release()
+
+    def _execute_attempt(self, run, step, execution_path=None, input_resolver=None):
         run_id = run["run_id"]
         attempt_id = uid()
         self.writes.create_attempt(attempt_id, run["task_id"], run_id, step["step_id"], step["content_hash"], now(), execution_path=execution_path)
@@ -536,7 +605,14 @@ class Coordinator:
             self._fail(attempt_id, run_id, exc.code, "resolve", "NOT_STARTED", str(exc))
             return False
         self.writes.set_attempt_input_summary(attempt_id, dumps(redact(inputs)))
+        # First writers otherwise race on an existing, not-yet-initialized SQLite file.
+        # Prepare the shared task store before any independently spawned worker can write.
+        with _RESULT_INITIALIZATION_LOCK:
+            initialize(self.task_data_root / valid_id(run["task_id"]) / "data.db", "task-data")
         self._worker()
+        if execution_path is not None:
+            self.context_paths[step["step_id"]] = execution_path
+            self.context_step_id = step["step_id"]
         task_schema = json.loads(self.tasks.task(run['task_id'])['input_schema_json'])
         task_parameters = {key: spec['default'] for key, spec in task_schema.get('properties', {}).items() if 'default' in spec}
         task_parameters.update({key: value for key, value in json.loads(run['inputs_json']).items()
@@ -631,47 +707,116 @@ class Coordinator:
             run['can_end'] = run['status'] != 'CANCELLED' and (retained or leased)
             return run
 
+    def _retained_branch_contexts(self, run_id):
+        """Bind a live owner to each step's current occurrence, including its next pending action."""
+        from taskweave.core.flow_machine import action_cursor, pending_actions
+        retained = {owner: (worker, dict(worker.context_paths))
+                    for owner, worker in list(self.branch_workers.items())
+                    if worker.session_run_id == run_id and worker.process and worker.process.is_alive()
+                    and worker.context_session_id == worker.transport.session_id}
+        cursor = self.flow_runs.cursor(run_id) if self.flow_runs is not None else None
+        if cursor is not None:
+            for action in pending_actions(cursor):
+                owner = action_cursor(cursor, action["execution_path"]).get("resource_path", "/")
+                if owner in retained:
+                    retained[owner][1][action["step_id"]] = action["execution_path"]
+        return retained
+
+    def _branch_context_owner(self, run_id, step_id, execution_path, expected_session_id):
+        candidates = [(worker, paths[step_id]) for worker, paths in self._retained_branch_contexts(run_id).values()
+                      if step_id in paths]
+        if expected_session_id:
+            candidates = [(worker, path) for worker, path in candidates if worker.context_session_id == expected_session_id]
+            if not candidates:
+                raise TaskError("CONTEXT_SESSION_CHANGED", "资源实例已结束或变化，请刷新后重新选择")
+        if execution_path is None:
+            paths = {attempt["execution_path"] for attempt in self.queries.run_details(run_id)["attempts"]
+                     if attempt["step_id"] == step_id and attempt["valid"]}
+            paths.update(path for _, path in candidates)
+            if len(paths) > 1:
+                raise TaskError("FLOW_INSTANCE_REQUIRED", "请选择当前步骤的具体执行路径")
+        if execution_path is not None:
+            candidates = [(worker, path) for worker, path in candidates if path == execution_path]
+        if not candidates:
+            code = "CONTEXT_SESSION_CHANGED" if expected_session_id or execution_path is not None else "SESSION_NOT_AVAILABLE"
+            raise TaskError(code, "采集路径或资源实例已结束或变化，请刷新后重新选择")
+        if len(candidates) != 1:
+            raise TaskError("FLOW_INSTANCE_REQUIRED", "请选择当前步骤的具体执行路径")
+        return candidates[0]
+
     def context_sessions(self, task_id):
         with self.lock:
-            if not self.session_run_id or not self.process or not self.process.is_alive():
+            if not self.session_run_id:
                 return []
             run = self.queries.run(self.session_run_id)
-            if run['task_id'] != task_id or run['status'] not in {'PAUSED', 'FAILED', 'SUCCEEDED'} or (self.thread and self.thread.is_alive()):
+            if run['task_id'] != task_id or run['status'] not in {'PAUSED', 'FAILED', 'INTERRUPTED', 'SUCCEEDED'} or (self.thread and self.thread.is_alive()):
                 return []
-            return [self.queries.run_details(run['run_id'])]
+            if self.branch_workers:
+                details = self.queries.run_details(run['run_id'])
+                return [{**details, "session_id": worker.context_session_id, "resource_path": owner,
+                         "step_id": worker.context_step_id,
+                         "execution_path": paths.get(worker.context_step_id),
+                         "execution_paths": [{"step_id": sid, "execution_path": path} for sid, path in paths.items()]}
+                        for owner, (worker, paths) in self._retained_branch_contexts(run['run_id']).items()]
+            if (not self.process or not self.process.is_alive()
+                    or self.context_session_id != self.transport.session_id):
+                return []
+            return [{**self.queries.run_details(run['run_id']), 'session_id': self.context_session_id,
+                     'step_id': self.context_step_id,
+                     'execution_paths': [{'step_id': sid, 'execution_path': path}
+                                         for sid, path in self.context_paths.items()]}]
 
-    def collect_context(self, run_id, step_id, provider_id, request=None, expected_session_id=None, include_view=True):
-        return self._observe_context(run_id, step_id, provider_id, request, expected_session_id=expected_session_id, include_view=include_view)
+    def collect_context(self, run_id, step_id, provider_id, request=None, expected_session_id=None, include_view=True, execution_path=None):
+        return self._observe_context(run_id, step_id, provider_id, request, expected_session_id=expected_session_id,
+                                     include_view=include_view, execution_path=execution_path)
 
     def record_context(self, run_id, step_id, provider_id, operation, *, recording_id=None,
                        after=0, through=None, limit=100, request=None,
-                       expected_session_id=None, include_view=True):
+                       expected_session_id=None, include_view=True, execution_path=None):
         from taskweave.core.context_recording import recording_command
         command = recording_command(operation, recording_id=recording_id, after=after,
                                     through=through, limit=limit)
         if operation != 'start' and not expected_session_id:
             raise TaskError('CONTEXT_SESSION_CHANGED', '录制命令必须核对原运行实例')
         return self._observe_context(run_id, step_id, provider_id, request,
-            expected_session_id=expected_session_id, include_view=include_view, recording=command)
+            expected_session_id=expected_session_id, include_view=include_view, recording=command,
+            execution_path=execution_path)
 
-    def context_targets(self, run_id, step_id, provider_id, request=None):
-        return self._observe_context(run_id, step_id, provider_id, request, targets=True)
+    def context_targets(self, run_id, step_id, provider_id, request=None, execution_path=None, expected_session_id=None):
+        return self._observe_context(run_id, step_id, provider_id, request, targets=True,
+                                     execution_path=execution_path, expected_session_id=expected_session_id)
 
-    def _observe_context(self, run_id, step_id, provider_id, request=None, targets=False, expected_session_id=None, include_view=True, recording=None):
+    def _observe_context(self, run_id, step_id, provider_id, request=None, targets=False, expected_session_id=None, include_view=True, recording=None, execution_path=None):
         if not self.lock.acquire(blocking=False):
             raise TaskError("CONTEXT_SESSION_BUSY", "该实例正在执行或采集上下文")
+        claimed = False
         try:
+            self.transport.claim('context:' + run_id)
+            claimed = True
             run = self.queries.run(run_id)
             step = self.steps.step(step_id)
             if (
-                run["status"] not in {"PAUSED", "FAILED", "SUCCEEDED"}
+                run["status"] not in {"PAUSED", "FAILED", "INTERRUPTED", "SUCCEEDED"}
                 or step["task_id"] != run["task_id"]
             ):
                 raise TaskError("CONTEXT_RUN_STATE_INVALID")
             if self.thread and self.thread.is_alive():
                 raise TaskError("RUN_BUSY")
+            if self.branch_workers:
+                worker, path = self._branch_context_owner(run_id, step_id, execution_path, expected_session_id)
+                try:
+                    result = worker._observe_context(run_id, step_id, provider_id, request,
+                        targets=targets, expected_session_id=expected_session_id, include_view=include_view,
+                        recording=recording, execution_path=path)
+                except TaskError as exc:
+                    if exc.code == "CONTEXT_TIMEOUT":
+                        self._done(run_id, "INTERRUPTED")
+                    raise
+                return {**result, "session_id": worker.context_session_id,
+                        "execution_path": path, "resource_path": worker.resource_path}
             retained = self.session_run_id == run_id and self.process is not None and self.process.is_alive()
-            if expected_session_id and (not retained or self.context_session_id != expected_session_id):
+            if expected_session_id and (not retained or self.context_session_id != expected_session_id
+                                        or self.transport.session_id != expected_session_id):
                 raise TaskError("CONTEXT_SESSION_CHANGED", "采集实例已结束或变化，请刷新后重新选择")
             if targets and not retained:
                 return {"session_id": None, "targets": []}
@@ -707,6 +852,7 @@ class Coordinator:
                     "run_id": run_id,
                     "step_id": step_id,
                     "attempt_id": request_id,
+                    "execution_path": execution_path,
                 },
                 "step": step,
                 "inputs": {},
@@ -756,6 +902,8 @@ class Coordinator:
             self._done(run_id, "INTERRUPTED")
             raise TaskError("CONTEXT_TIMEOUT")
         finally:
+            if claimed:
+                self.transport.release()
             self.lock.release()
 
     def wait(self, run_id, timeout=30):
@@ -774,6 +922,8 @@ class Coordinator:
             self.closing = True
             self.pause_requested.set()
             self.cancel.set()
+            for worker in list(self.branch_workers.values()):
+                worker.cancel.set()
         if self.thread and self.thread.is_alive():
             self.thread.join(2)
             if self.thread.is_alive() and self.process and self.process.is_alive():

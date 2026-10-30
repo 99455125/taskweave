@@ -10,6 +10,238 @@ from taskweave.desktop.workbench import Workbench
 
 
 class StepEditorStateTests(unittest.TestCase):
+    def test_action_insertion_uses_cursor_line_indentation_and_preserves_return(self):
+        from taskweave.desktop.components.step_editor import insert_action_source
+        source = ('async def run(ctx, inputs):\n'
+                  '    title = "通用示例📄"\n'
+                  '    if inputs:\n'
+                  '        title = inputs["title"]\n'
+                  '    return ctx.result(data=inputs)\n')
+        position = source.index('title = inputs') + 5
+        result = insert_action_source(source, "value = await ctx.call('file.read', {'path': 'local.txt'})", position)
+        self.assertIn("        value = await ctx.call('file.read', {'path': 'local.txt'})\n        title", result)
+        self.assertIn('    return ctx.result(data=inputs)', result)
+        self.assertEqual(result.replace("        value = await ctx.call('file.read', {'path': 'local.txt'})\n", ''), source)
+        from taskweave.core.validation import TaskError
+        with self.assertRaises(TaskError):
+            insert_action_source(source, 'value = 1', 0)
+
+    def test_action_insertion_respects_multiline_statement_boundaries(self):
+        import ast
+        from taskweave.desktop.components.step_editor import insert_action_source
+        source = ('async def run(ctx, inputs):\n'
+                  '    title = """通用示例\n'
+                  '第二行\n'
+                  '    最后一行"""\n'
+                  '    return ctx.result(\n'
+                  '        data={"title": title}\n'
+                  '    )\n')
+        invocation = "value = await ctx.call('demo.echo', {})"
+        for marker, before in [('第二行', '    title ='), ('data={', '    return')]:
+            result = insert_action_source(source, invocation, source.index(marker) + 2)
+            ast.parse(result)
+            self.assertIn('    ' + invocation + '\n' + before, result)
+            self.assertEqual(result.replace('    ' + invocation + '\n', ''), source)
+
+    def test_action_preview_tracks_parameters_without_editing_code(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home, registry_factory="taskweave.plugins.demo:build_registry") as app:
+            task = app.repo.create_task('action preview')
+            step = app.repo.save_step(task['task_id'], {'name': 'local',
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n'})
+            client = Client(page('/action-preview'))
+            async def scenario():
+                with client:
+                    wb = Workbench(DesktopController(app))
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    action = next(e for e in client.elements.values() if e.props.get('label') == '插件动作')
+                    wb.edit_controls['caps'].set_value(['demo'])
+                    self.assertNotIn('text.upper', action.options)
+                    wb.edit_controls['caps'].set_value(['demo', 'text'])
+                    action.set_value('text.upper')
+                    preview = next((e for e in client.elements.values() if 'tw-action-preview' in e.classes), None)
+                    self.assertIsNotNone(preview, 'Action parameters need a live code preview')
+                    text = next(e for e in client.elements.values() if e.props.get('aria-label') == 'text · 必录')
+                    text.set_value('通用示例📄')
+                    self.assertIn("'text': '通用示例📄'", preview.content)
+                    self.assertEqual(wb.edit_controls['code'].value, step['step_content'])
+                    self.assertEqual(wb.edit_controls['caps'].value, ['demo', 'text'])
+                    wb.edit_controls['caps'].set_value(['demo'])
+                    self.assertNotIn('text.upper', action.options)
+                    self.assertNotEqual(action.value, 'text.upper')
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_web_candidate_review_closes_export_and_can_return_to_reply(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('inline web candidate')
+            step = app.repo.save_step(task['task_id'], {'name': 'read local',
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n'})
+            client = Client(page('/inline-web-review'))
+            async def scenario():
+                with client:
+                    wb = Workbench(DesktopController(app))
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    source = 'async def run(ctx, inputs):\n    return ctx.result(data={"review": 2})\n'
+                    import json
+                    reply_text = json.dumps({'step_content': source, 'explanation': 'local reply'})
+                    callbacks = {}
+                    original_button = wb.step_ai_editor.button
+                    def button(label, callback, **kwargs):
+                        callbacks[label] = callback
+                        return original_button(label, callback, **kwargs)
+                    wb.step_ai_editor.button = button
+                    await wb.step_ai_editor.web_chat_dialog(step,
+                        {'prompt': 'local fixture', 'expected_hash': step['content_hash'], 'messages': []},
+                        False, repaint=wb.paint)
+                    self.assertFalse(any(isinstance(e, ui.dialog) and e.value for e in client.elements.values()),
+                                     'Web Chat prompt and reply belong beside the current code')
+                    reply = next(e for e in client.elements.values() if e.props.get('label') == '粘贴网页 AI 回复')
+                    reply.set_value(reply_text)
+                    await callbacks['解析并预览']()
+                    self.assertFalse(any(isinstance(e, ui.dialog) and e.value for e in client.elements.values()),
+                                     'Export must close before inline review')
+                    side = next(e for e in client.elements.values() if 'tw-candidate-side' in e.classes)
+                    self.assertTrue(side.visible)
+                    back = next(e for e in side.descendants() if isinstance(e, ui.button) and e.text == '返回修改粘贴内容')
+                    next(v.handler for v in back._event_listeners.values() if v.type == 'click')(None)
+                    self.assertEqual(reply.value, reply_text)
+                    self.assertEqual(sum(isinstance(e, ui.dialog) and bool(e.value) for e in client.elements.values()), 0)
+                    chat = next(e for e in client.elements.values() if 'tw-chat-side' in e.classes)
+                    self.assertTrue(chat.visible)
+                    self.assertFalse(side.visible)
+                    self.assertEqual(wb.edit_controls['code'].value, step['step_content'])
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_ai_candidate_review_is_inline_and_discard_keeps_the_same_code(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('inline candidate')
+            step = app.repo.save_step(task['task_id'], {'name': 'read local',
+                'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n'})
+            client = Client(page('/inline-review'))
+            async def scenario():
+                with client:
+                    wb = Workbench(DesktopController(app))
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    code = wb.edit_controls['code']
+                    candidate = {'explanation': 'local review', 'diagnostics': [], 'stale': False,
+                                 'proposed_content': 'async def run(ctx, inputs):\n    return ctx.result(data={"review": 1})\n'}
+                    await wb.step_ai_editor.present_content_candidate(step, candidate, wb.step_ai_editor.identity(), wb.paint)
+                    main = next((e for e in client.elements.values() if 'tw-candidate-main' in e.classes), None)
+                    self.assertIsNotNone(main, 'Review belongs inside the code workspace')
+                    self.assertTrue(main.visible)
+                    self.assertFalse(any(isinstance(e, ui.dialog) and e.value for e in client.elements.values()))
+                    side = next(e for e in client.elements.values() if 'tw-candidate-side' in e.classes)
+                    self.assertTrue(side.visible)
+                    labels = [getattr(e, 'text', '') for e in side.descendants()]
+                    self.assertIn('仅采纳', labels)
+                    self.assertIn('采纳并调试', labels)
+                    discard = next(e for e in side.descendants() if isinstance(e, ui.button) and e.text == '舍弃')
+                    next(v.handler for v in discard._event_listeners.values() if v.type == 'click')(None)
+                    self.assertFalse(main.visible)
+                    self.assertIs(wb.edit_controls['code'], code)
+                    self.assertEqual(code.value, step['step_content'])
+                    self.assertEqual(app.repo.step(step['step_id'])['step_content'], step['step_content'])
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_code_assistant_switching_preserves_code_plugin_and_form_drafts(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('assistant layout')
+            step = app.repo.save_step(task['task_id'], {'name': '查询通用示例', 'capabilities': []})
+            client = Client(page('/code-assistant-switching'))
+            async def scenario():
+                with client:
+                    wb = Workbench(DesktopController(app))
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    tabs = next(e for e in client.elements.values() if 'tw-step-workspace-tabs' in e.classes)
+                    tabs.set_value('code')
+                    await asyncio.sleep(0)
+                    code = wb.edit_controls['code']
+                    code.set_value('async def run(ctx, inputs):\n    return ctx.result(data={"draft": True})\n')
+                    supplement = next(e for e in client.elements.values() if e.props.get('label') == '本轮编写要求')
+                    supplement.set_value('保留当前查询')
+                    action_panel = next((e for e in client.elements.values() if 'tw-action-panel' in e.classes), None)
+                    self.assertIsNotNone(action_panel, 'Actions need a switchable assistant panel')
+                    ai_panel = next(e for e in client.elements.values() if 'tw-code-assistant' in e.classes)
+                    action_selection = next(e for e in client.elements.values() if e.props.get('label') == '插件动作')
+                    original_action = action_selection.value
+                    toolbar = next(e for e in client.elements.values() if 'tw-code-toolbar' in e.classes)
+                    def click(label, container=toolbar):
+                        button = next(e for e in container.descendants() if isinstance(e, ui.button)
+                                      and (e.text == label or e.props.get('aria-label') == label))
+                        next(v.handler for v in button._event_listeners.values() if v.type == 'click')(None)
+                    click('插入动作')
+                    self.assertTrue(action_panel.visible)
+                    self.assertFalse(ai_panel.visible)
+                    click('AI 编写')
+                    self.assertTrue(ai_panel.visible)
+                    self.assertFalse(action_panel.visible)
+                    self.assertEqual(supplement.value, '保留当前查询')
+                    click('收起辅助区', next(e for e in client.elements.values() if 'tw-code-tools' in e.classes))
+                    self.assertFalse(next(e for e in client.elements.values() if 'tw-code-tools' in e.classes).visible)
+                    click('插入动作')
+                    self.assertTrue(action_panel.visible)
+                    self.assertEqual(action_selection.value, original_action)
+                    tabs.set_value('basic')
+                    tabs.set_value('code')
+                    await asyncio.sleep(0)
+                    self.assertTrue(action_panel.visible)
+                    self.assertIs(wb.edit_controls['code'], code)
+                    self.assertIn('"draft": True', wb.step_editor.document()['step_content'])
+                    self.assertEqual(wb.step_editor.document()['capabilities'], [])
+                    flow_toggle = next(e for e in client.elements.values()
+                                       if e.props.get('aria-label') == '展开或收起流程')
+                    next(v.handler for v in flow_toggle._event_listeners.values() if v.type == 'click')(None)
+                    flow_zoom = next(e for e in client.elements.values() if 'tw-flow-zoom' in e.classes)
+                    flow_zoom.set_value(0.75)
+                    # Full page rebuilds follow the existing save-then-paint contract.
+                    await wb.save_editor()
+                    await wb.paint()
+                    self.assertFalse(next(e for e in client.elements.values() if 'tw-flow-canvas' in e.classes).visible)
+                    self.assertEqual(next(e for e in client.elements.values() if 'tw-flow-zoom' in e.classes).value, 0.75)
+                    self.assertTrue(next(e for e in client.elements.values() if 'tw-action-panel' in e.classes).visible)
+                    self.assertEqual(next(e for e in client.elements.values() if e.props.get('label') == '本轮编写要求').value, '保留当前查询')
+                    tabs = next(e for e in client.elements.values() if 'tw-step-workspace-tabs' in e.classes)
+                    tabs.set_value('basic')
+                    await asyncio.sleep(0)
+                    heading = next(e for e in client.elements.values() if 'tw-step-config-heading' in e.classes)
+                    click('AI 编写', heading)
+                    self.assertEqual(tabs.value, 'code')
+                    self.assertTrue(next(e for e in client.elements.values() if 'tw-code-assistant' in e.classes).visible)
+                    self.assertIn('"draft": True', wb.step_editor.document()['step_content'])
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
     def test_opening_step_preserves_capabilities_and_timeout_until_edited(self):
         from nicegui.client import Client
         from nicegui.page import page
@@ -37,6 +269,26 @@ class StepEditorStateTests(unittest.TestCase):
                     controller.call = call
                     wb = Workbench(controller)
                     await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    tabs = next(e for e in client.elements.values() if 'tw-step-workspace-tabs' in e.classes)
+                    self.assertEqual([e.props.get('label') for e in tabs.default_slot.children],
+                                     ['基础配置', '步骤代码', '输入输出', '上下文', '调试'])
+                    original_code = wb.edit_controls['code']
+                    assistant = [e for e in client.elements.values() if 'tw-code-assistant' in e.classes]
+                    self.assertEqual(len(assistant), 1, 'Code page needs its inline AI assistant')
+                    recovery = [e for e in assistant[0].descendants() if getattr(e, 'text', '') == '查看上次 AI 结果']
+                    self.assertEqual(len(recovery), 1, 'Recovery must remain reachable after the first request without repainting')
+                    supplement = next(e for e in client.elements.values() if e.props.get('label') == '本轮编写要求')
+                    supplement.set_value('保留查询逻辑')
+                    tabs.set_value('code')
+                    tabs.set_value('basic')
+                    self.assertIs(wb.edit_controls['code'], original_code)
+                    tabs.set_value('code')
+                    await asyncio.sleep(0)
+                    await wb.paint()
+                    tabs = next(e for e in client.elements.values() if 'tw-step-workspace-tabs' in e.classes)
+                    self.assertEqual(tabs.value, 'code')
+                    supplement = next(e for e in client.elements.values() if e.props.get('label') == '本轮编写要求')
+                    self.assertEqual(supplement.value, '保留查询逻辑')
                     doc = wb.step_editor.document()
                     self.assertEqual(doc['capabilities'], step['capabilities'])
                     self.assertEqual(doc['timeout_ms'], 1500)
@@ -51,6 +303,151 @@ class StepEditorStateTests(unittest.TestCase):
                     wb.edit_controls['caps'].value = ['fixture']
                     self.assertFalse(wb._step_editor_is_dirty())
                     self.assertTrue(await wb.navigate('home'))
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_control_selection_edits_below_canvas_and_saves_existing_flow(self):
+        from unittest.mock import patch
+        from nicegui import ui
+        original_button = ui.button
+        def tracked_button(*args, **kwargs):
+            button = original_button(*args, **kwargs)
+            button.test_click = kwargs.get('on_click')
+            return button
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        from taskweave.presentation.flow_editor import insert_control, find_node
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('flow editor')
+            step = app.repo.save_step(task['task_id'], {'name': '查询'})
+            baseline = app.dispatch('task.flow.describe', {'task_id': task['task_id']})
+            flow, node_id = insert_control(baseline['flow'], 'foreach')
+            app.dispatch('task.flow.save', {'task_id': task['task_id'], 'flow': flow,
+                                          'expected_hash': baseline['definition_hash']})
+            client = Client(page('/inline-control'))
+            async def scenario():
+                with client, patch('nicegui.ui.button', side_effect=tracked_button):
+                    wb = Workbench(DesktopController(app))
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    branch = next(e for e in client.elements.values()
+                                  if e.props.get('aria-label') == '配置列表遍历')
+                    wb.edit_controls['name'].value = '尚未保存的步骤名称'
+                    await branch.test_click()
+                    self.assertEqual(app.repo.step(step['step_id'])['name'], '查询')
+                    panel = next(e for e in client.elements.values() if 'tw-control-panel' in e.classes)
+                    self.assertTrue(panel.visible)
+                    step_panel = next(e for e in client.elements.values() if 'tw-editor-panel' in e.classes)
+                    self.assertFalse(step_panel.visible)
+                    limit = next(e for e in client.elements.values() if e.props.get('label') == '最多项数')
+                    limit.value = 42
+                    self.assertTrue(any(getattr(e, 'text', '') == '未保存修改' for e in panel.descendants()),
+                                    'Control inputs must update their own saved-state indicator')
+                    class StayDialog:
+                        def __enter__(self): return self
+                        def __exit__(self, *_args): return False
+                        def __await__(self):
+                            async def choice(): return 'stay'
+                            return choice().__await__()
+                    with patch('taskweave.desktop.components.step_editor.ui.dialog', return_value=StayDialog()):
+                        self.assertFalse(await wb.step_editor.view['prepare_control_leave']())
+                    self.assertEqual(limit.value, 42)
+                    save = next(e for e in client.elements.values() if getattr(e, 'text', '') == '保存配置')
+                    await save.test_click()
+                    stored = app.dispatch('task.flow.get', {'task_id': task['task_id']})
+                    node, _ = find_node(stored, node_id)
+                    self.assertEqual(node['max_items'], 42)
+                    self.assertFalse(any(getattr(e, 'text', '') == '未保存修改' for e in panel.descendants()))
+                    back = next(e for e in client.elements.values() if getattr(e, 'text', '') == '返回步骤')
+                    await back.test_click()
+                    self.assertTrue(step_panel.visible)
+                    self.assertFalse(panel.visible)
+                    self.assertEqual(wb.edit_controls['name'].value, '尚未保存的步骤名称')
+                    wb.edit_controls['name'].value = '查询'
+                    self.assertTrue(await wb.navigate('home'))
+            try:
+                asyncio.run(scenario())
+            finally:
+                client.delete()
+
+    def test_multi_exit_branch_save_redraws_canvas_and_preserves_step_draft(self):
+        from unittest.mock import patch
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        from taskweave.application.service import Application
+        from taskweave.desktop.controller import DesktopController
+        from taskweave.presentation.flow_editor import insert_control, find_node
+        from taskweave.desktop.components.flow_branches import split_branches
+        original_button = ui.button
+        def tracked_button(*args, **kwargs):
+            button = original_button(*args, **kwargs)
+            button.test_click = kwargs.get('on_click')
+            return button
+        with tempfile.TemporaryDirectory() as home, Application(home) as app:
+            task = app.repo.create_task('multiple exits')
+            step = app.repo.save_step(task['task_id'], {'name': '查询'})
+            baseline = app.dispatch('task.flow.describe', {'task_id': task['task_id']})
+            flow, node_id = insert_control(baseline['flow'], 'if')
+            app.dispatch('task.flow.save', {'task_id': task['task_id'], 'flow': flow,
+                                          'expected_hash': baseline['definition_hash']})
+            client = Client(page('/multi-exit-control'))
+            def button(text):
+                return next(e for e in client.elements.values() if getattr(e, 'text', '') == text)
+            async def scenario():
+                with client, patch('nicegui.ui.button', side_effect=tracked_button):
+                    wb = Workbench(DesktopController(app))
+                    await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
+                    wb.edit_controls['name'].set_value('尚未保存的步骤名称')
+                    configure = next(e for e in client.elements.values()
+                                     if e.props.get('aria-label') == '配置条件分支')
+                    await configure.test_click()
+                    button('添加分支').test_click()
+                    button('添加分支').test_click()
+                    panel = next(e for e in client.elements.values() if 'tw-control-panel' in e.classes)
+                    self.assertTrue(any(getattr(e, 'text', '') == '未保存修改' for e in panel.descendants()))
+                    await button('保存配置').test_click()
+                    stored = app.dispatch('task.flow.get', {'task_id': task['task_id']})
+                    node, _ = find_node(stored, node_id)
+                    cases, _ = split_branches(node)
+                    self.assertEqual(len(cases), 3)
+                    canvas = next(e for e in client.elements.values() if 'tw-flow-canvas' in e.classes)
+                    self.assertTrue(any(getattr(e, 'text', '') == '分支 3' for e in canvas.descendants()))
+                    selected = next(e for e in canvas.descendants()
+                                    if e.props.get('aria-label') == '选择步骤：查询')
+                    self.assertIs(wb.step_editor.view['selected_step_control'], selected)
+                    self.assertFalse(selected.is_deleted)
+                    self.assertEqual(app.repo.step(step['step_id'])['name'], '查询')
+                    await button('返回步骤').test_click()
+                    self.assertEqual(wb.edit_controls['name'].value, '尚未保存的步骤名称')
+                    configure = next(e for e in client.elements.values()
+                                     if e.props.get('aria-label') == '配置条件分支')
+                    await configure.test_click()
+                    cards = [e for e in client.elements.values() if 'tw-branch-case' in e.classes]
+                    self.assertEqual(len(cards), 3)
+                    self.assertFalse(any(getattr(e, 'text', '') == '未保存修改' for e in panel.descendants()))
+                    field = next(e for e in cards[0].descendants()
+                                 if e.props.get('label') == '固定值（文本或 JSON）')
+                    field.set_value('2')
+                    original_call = wb.controller.call
+                    started, release = asyncio.Event(), asyncio.Event()
+                    async def delayed_call(operation, **params):
+                        if operation == 'task.flow.save':
+                            started.set()
+                            await release.wait()
+                        return await original_call(operation, **params)
+                    wb.controller.call = delayed_call
+                    pending = asyncio.create_task(button('保存配置').test_click())
+                    await started.wait()
+                    field.set_value('3')
+                    release.set()
+                    await pending
+                    self.assertEqual(field.value, '3')
+                    self.assertTrue(any(getattr(e, 'text', '') == '未保存修改' for e in panel.descendants()),
+                                    'An edit during save must remain marked unsaved')
             try:
                 asyncio.run(scenario())
             finally:
@@ -346,7 +743,7 @@ class StepEditorStateTests(unittest.TestCase):
             finally:
                 client.delete()
 
-    def test_debug_is_sibling_and_reopens_without_rebuilding_inputs_or_writing_draft(self):
+    def test_debug_hosts_reopen_without_rebuilding_inputs_or_writing_draft(self):
         from unittest.mock import patch
         from nicegui import ui
         from nicegui.client import Client
@@ -362,6 +759,11 @@ class StepEditorStateTests(unittest.TestCase):
             task = app.repo.create_task('debug lazy')
             step = app.repo.save_step(task['task_id'], {'name': 'original',
                 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)\n'})
+            from taskweave.presentation.flow_editor import insert_control
+            original_flow = app.dispatch('task.flow.describe', {'task_id': task['task_id']})
+            flow, _ = insert_control(original_flow['flow'], 'if')
+            app.dispatch('task.flow.save', {'task_id': task['task_id'], 'flow': flow,
+                                          'expected_hash': original_flow['definition_hash']})
             client = Client(page('/debug-lazy-sibling'))
             async def scenario():
                 with client, patch('nicegui.ui.button', side_effect=tracked_button):
@@ -369,7 +771,8 @@ class StepEditorStateTests(unittest.TestCase):
                     await wb.navigate('editor', task_id=task['task_id'], step_id=step['step_id'])
                     debug = next(e for e in client.elements.values() if 'tw-debug-column' in e.classes)
                     config = next(e for e in client.elements.values() if 'tw-editor-panel' in e.classes)
-                    self.assertIs(debug.parent_slot.parent, config.parent_slot.parent)
+                    code_workspace = next(e for e in client.elements.values() if 'tw-step-code' in e.classes)
+                    self.assertIs(debug.parent_slot.parent, code_workspace)
                     self.assertFalse(debug.visible)
                     toggle = next(e for e in client.elements.values() if getattr(e, 'text', None) == '调试')
                     wb.edit_controls['name'].value = 'unsaved draft'
@@ -377,10 +780,35 @@ class StepEditorStateTests(unittest.TestCase):
                     form = wb._editor_view('trial_form')
                     self.assertIsNotNone(form)
                     self.assertTrue(debug.visible)
+                    toolbar = next((e for e in client.elements.values() if 'tw-debug-session-toolbar' in e.classes), None)
+                    self.assertIsNotNone(toolbar, 'Debug actions need their own session toolbar')
+                    self.assertIs(toolbar.parent_slot.parent, config)
+                    self.assertIsNotNone(wb._editor_view('trial_ai_channel'), 'Repair channel belongs in the sidebar')
+                    self.assertIsNotNone(wb._editor_view('trial_ai_history'))
+                    self.assertIsNotNone(wb.step_debug_panel.repair_evidence_area)
+                    supplement = wb._editor_view('trial_ai_supplement')
+                    supplement.value = '保留当前输入与业务逻辑'
+                    original_code = wb.edit_controls['code']
+                    environment = wb._editor_view('trial_environment')
+                    parent = environment.parent_slot.parent
+                    while parent is not toolbar and parent.parent_slot:
+                        parent = parent.parent_slot.parent
+                    self.assertIs(parent, toolbar)
                     self.assertEqual(app.repo.step(step['step_id'])['name'], 'original')
                     await toggle.test_click()
                     self.assertFalse(debug.visible)
+                    self.assertFalse(toolbar.visible)
                     await toggle.test_click()
+                    self.assertIs(wb._editor_view('trial_form'), form)
+                    self.assertIs(wb.edit_controls['code'], original_code)
+                    self.assertEqual(wb._editor_view('trial_ai_supplement').value, '保留当前输入与业务逻辑')
+                    configure = next(e for e in client.elements.values() if e.props.get('aria-label') == '配置条件分支')
+                    await configure.test_click()
+                    self.assertFalse(toolbar.visible)
+                    self.assertFalse(debug.visible)
+                    return_step = next(e for e in client.elements.values() if getattr(e, 'text', '') == '返回步骤')
+                    await return_step.test_click()
+                    self.assertTrue(toolbar.visible)
                     self.assertIs(wb._editor_view('trial_form'), form)
                     self.assertEqual(wb.edit_controls['name'].value, 'unsaved draft')
                     with self.assertRaisesRegex(Exception, '先保存步骤'):

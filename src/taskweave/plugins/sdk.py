@@ -22,8 +22,13 @@ from taskweave.core.ports import (
     StepResult,
 )
 from taskweave.core.validation import TaskError as PluginError
+from taskweave.core.dataset_contracts import DatasetStore
+from taskweave.core.codegen_contracts import CodeGeneratorSpec, CodeGeneratorProvider, codegen_digest, MAX_RECORDING_BYTES, MAX_ACTIONS
 
 __all__ = [
+    "DatasetStore",
+    "CodeGeneratorSpec", "CodeGeneratorProvider", "codegen_digest",
+    "MAX_RECORDING_BYTES", "MAX_ACTIONS",
     "Action",
     "AuthoringContribution",
     "CapabilitySpec",

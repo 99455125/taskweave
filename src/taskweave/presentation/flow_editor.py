@@ -4,6 +4,7 @@ from copy import deepcopy
 from uuid import uuid4
 
 from taskweave.core.validation import TaskError
+from taskweave.core.task_flow import conditional_branches
 
 
 def _walk(node, parent=None):
@@ -12,8 +13,8 @@ def _walk(node, parent=None):
         for child in node["children"]:
             yield from _walk(child, node)
     elif node["kind"] == "if":
-        yield from _walk(node["then"], node)
-        yield from _walk(node["else"], node)
+        for _, body in conditional_branches(node):
+            yield from _walk(body, node)
     elif node["kind"] in {"foreach", "loop"}:
         yield from _walk(node["body"], node)
 
@@ -28,8 +29,7 @@ def sequence_targets(flow):
     for node, _ in _walk(flow["root"]):
         short = node["id"].replace("control-", "")[:6]
         if node["kind"] == "if":
-            result.extend([(node["then"]["id"], f"分支 {short} · 满足条件"),
-                           (node["else"]["id"], f"分支 {short} · 其他情况")])
+            result.extend((body["id"], f"分支 {short} · {identity}") for identity, body in conditional_branches(node))
         elif node["kind"] in {"foreach", "loop"}:
             label = "列表遍历" if node["kind"] == "foreach" else "条件循环"
             result.append((node["body"]["id"], f"{label} {short} · 循环体"))
@@ -44,10 +44,10 @@ def insert_control(flow, kind, parent_id="root", index=None):
     node_id = "control-" + uuid4().hex[:12]
     body = {"id": node_id + "-body", "kind": "sequence", "children": []}
     if kind == "if":
-        node = {"id": node_id, "kind": "if",
-                "condition": {"op": "eq", "left": {"literal": True}, "right": {"literal": True}},
-                "then": {"id": node_id + "-then", "kind": "sequence", "children": []},
-                "else": {"id": node_id + "-else", "kind": "sequence", "children": []}}
+        node = {"id": node_id, "kind": "if", "parallel": False,
+                "cases": [{"id": node_id + "-case", "condition": {"op": "eq", "left": {"literal": True}, "right": {"literal": True}},
+                           "body": {"id": node_id + "-then", "kind": "sequence", "children": []}}],
+                "default": {"id": node_id + "-default", "body": {"id": node_id + "-else", "kind": "sequence", "children": []}}}
     elif kind == "foreach":
         node = {"id": node_id, "kind": "foreach", "items": {"literal": []},
                 "max_items": 1000, "body": body}
@@ -91,7 +91,7 @@ def update_control(flow, node_id, changes):
     node, _ = find_node(result, node_id)
     if node is None or node["kind"] not in {"if", "foreach", "loop"}:
         raise TaskError("FLOW_EDITOR_TARGET_INVALID")
-    allowed = {"if": {"condition", "outputs"},
+    allowed = {"if": {"condition", "outputs", "cases", "default", "parallel"},
                "foreach": {"items", "max_items"},
                "loop": {"mode", "condition", "state_initial", "state_update", "max_iterations"}}[node["kind"]]
     if set(changes) - allowed:

@@ -6,6 +6,7 @@ from taskweave.presentation.run_creation import RunCreation
 
 STATUS = {
     "READY": "就绪", "RUNNING": "执行中", "PAUSED": "已暂停", "FAILED": "失败",
+    "WAITING_INPUT": "等待输入", "BLOCKED": "需要处理", "DELETING": "清理中",
     "INTERRUPTED": "中断 / 待核对", "SUCCEEDED": "成功", "CANCELLED": "已结束",
 }
 
@@ -17,24 +18,24 @@ class ExecutionsPage(Page):
 
     async def render(self):
         tasks = await self.controller.call("task.list")
-        if not tasks:
-            ui.label("执行").classes("text-xl font-medium")
-            return
-        valid_ids = {task["task_id"] for task in tasks}
+        sequences = await self.controller.call("sequence.list")
+        objects = {task["task_id"]: task["name"] for task in tasks}
+        objects.update({'sequence:' + item['sequence_id']: '任务组合 · ' + item['name'] for item in sequences})
+        valid_ids = set(objects)
         self.state.task_ids = [value for value in self.state.task_ids if value in valid_ids]
         with ui.row().classes("tw-executions-master w-full min-w-0"):
             with ui.column().classes("tw-panel tw-execution-filters gap-3"):
                 ui.label("执行").classes("text-lg font-semibold")
-                search = ui.input("搜索任务或运行", value=self.state.search_query, placeholder="名称或运行 ID").props("clearable debounce=250 prepend-icon=search").classes("w-full")
+                search = ui.input("搜索任务、组合或运行", value=self.state.search_query, placeholder="名称或运行 ID").props("clearable debounce=250 prepend-icon=search").classes("w-full")
                 task_filter = ui.select(
-                    {task["task_id"]: task["name"] for task in tasks},
+                    objects,
                     value=self.state.task_ids,
-                    label="任务筛选（可多选）",
+                    label="任务或任务组合（可多选）",
                     multiple=True,
                     clearable=True,
                 ).props("use-chips use-input input-debounce=0").classes("w-full")
                 status_filter = ui.select(
-                    {key: value for key, value in STATUS.items() if key in {"READY", "RUNNING", "PAUSED", "FAILED", "INTERRUPTED", "SUCCEEDED", "CANCELLED"}},
+                    STATUS,
                     value=self.state.statuses,
                     label="状态筛选",
                     multiple=True,
@@ -72,7 +73,7 @@ class ExecutionsPage(Page):
                 status_filter.on_value_change(statuses_changed)
                 with ui.row().classes("w-full justify-between items-center"):
                     self.button("清除筛选", clear_filters, flat=True)
-                    ui.label("任务与状态").classes("text-xs text-gray-500")
+                    ui.label("执行对象与状态").classes("text-xs text-gray-500")
                 ui.label("执行实例").classes("tw-execution-list-title text-sm font-medium text-gray-500")
                 self.state.execution_list_area = ui.column().classes("tw-run-list w-full gap-3")
             with ui.column().classes("tw-content tw-executions-main w-full min-w-0"):
@@ -83,11 +84,12 @@ class RunPage(Page):
     """Create executions and own the run-page render/timer boundary."""
 
     def __init__(self, controller, state, button, paint, environment_select,
-                 trial_variables, execution_details, page, page_generation):
+                 trial_variables, execution_details, page, page_generation, *, open_sequence=None):
         self.controller, self.state, self.button = controller, state, button
         self.paint, self.environment_select, self.trial_variables = paint, environment_select, trial_variables
         self.execution_details, self.page, self.page_generation = execution_details, page, page_generation
         self.creation = RunCreation(controller, state)
+        self.open_sequence = open_sequence
 
     @property
     def pending_task_id(self): return self.creation.pending_task_id
@@ -123,35 +125,74 @@ class RunPage(Page):
     async def open_create(self, initial_task_id=None, *, on_created=None):
         flow = self.creation
         await flow.load()
+        sequences = await self.controller.call('sequence.list') if self.open_sequence is not None else []
+        combinations = {'sequence:' + item['sequence_id']: item for item in sequences}
         warning = flow.open(initial_task_id)
-        if warning:
+        if warning and (not combinations or initial_task_id is not None):
             ui.notify(warning, type="warning")
             return
-        with ui.dialog() as dialog, ui.card().classes("w-full max-w-2xl"):
-            ui.label("新建执行").classes("text-lg")
+        with ui.dialog() as dialog, ui.card().classes("tw-confirm-dialog").style("width:640px; max-height:calc(100dvh - 32px); overflow:auto"):
+            ui.label("新建执行").classes("tw-confirm-title")
             task_select = ui.select(
-                {task["task_id"]: task["name"] for task in flow.eligible},
-                value=flow.task_id,
+                {**{task["task_id"]: task["name"] for task in flow.eligible},
+                 **{key: "任务组合 · " + item["name"] for key, item in combinations.items()}},
+                value=None if warning else flow.task_id,
                 label="选择任务",
             ).props("use-input input-debounce=0").classes("w-full")
+            async def select_combination(event):
+                if event.value not in combinations:
+                    return
+                dialog.close()
+                await self.open_sequence(combinations[event.value]['sequence_id'])
+
+            if warning:
+                task_select.on_value_change(select_combination)
+                ui.button('取消', on_click=dialog.close).props('outline').classes('tw-confirm-cancel')
+                dialog.open()
+                return
             environment = await self.environment_select()
             steps = flow.steps
             start = ui.select({step['step_id']: f"{i + 1}. {step['name']}" for i, step in enumerate(steps)}, value=flow.start_step_id, label='开始步骤').classes('w-full')
             input_area = ui.column().classes('w-full')
+            controlled = False
+            input_generation = 0
             async def render_inputs():
+                nonlocal controlled, input_generation
+                input_generation += 1
+                generation = input_generation
+                from taskweave.core.task_flow import is_linear_flow
+                selected_task_id = flow.task_id
+                task_flow = await self.controller.call('task.flow.get', task_id=selected_task_id)
+                if generation != input_generation or selected_task_id != flow.task_id or input_area.is_deleted:
+                    return
+                controlled = not is_linear_flow(task_flow)
                 input_area.clear()
-                start.options = {step['step_id']: f"{i + 1}. {step['name']}" for i, step in enumerate(flow.steps)}
+                start.options = ({flow.start_step_id: '完整流程'} if controlled else
+                    {step['step_id']: f"{i + 1}. {step['name']}" for i, step in enumerate(flow.steps)})
                 start.value = flow.start_step_id
+                start.set_label('启动范围' if controlled else '开始步骤')
+                start.set_enabled(not controlled)
                 start.update()
                 with input_area:
-                    form = await self.trial_variables(flow.selected_step, environment, task_id=flow.task_id)
-                    flow.input_draft = form.input_draft
+                    from taskweave.desktop.components.startup_inputs import StartupInputs
+                    view = await StartupInputs(self.controller).render(flow.steps, environment,
+                        task_id=flow.task_id, draft=flow.input_draft)
+                    if generation != input_generation or selected_task_id != flow.task_id or input_area.is_deleted:
+                        view.area.delete()
 
             async def select_start(event):
+                # Task selection already updates the start step. Its programmatic
+                # control update must not start a second asynchronous input render.
+                if event.value == flow.start_step_id:
+                    return
                 flow.select_start(event.value)
-                await render_inputs()
 
             async def select_task(event):
+                nonlocal input_generation
+                if event.value in combinations:
+                    input_generation += 1
+                    await select_combination(event)
+                    return
                 flow.select_task(event.value)
                 await render_inputs()
 
@@ -159,12 +200,12 @@ class RunPage(Page):
             task_select.on_value_change(select_task)
             await render_inputs()
             async def save():
-                await flow.submit()
+                await flow.submit(from_flow_start=controlled)
                 dialog.close()
                 await (on_created or self.paint)()
-            with ui.row().classes("w-full items-center gap-2 flex-wrap"):
+            with ui.row().classes("tw-confirm-actions"):
+                ui.button("取消", on_click=dialog.close).props("outline").classes("tw-confirm-cancel")
                 self.button("创建并执行", save, primary=True)
-                ui.button("取消", on_click=dialog.close).props("outline")
         dialog.open()
 
     async def render(self):

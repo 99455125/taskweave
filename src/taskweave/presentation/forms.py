@@ -2,6 +2,34 @@
 import json
 from taskweave.core.validation import TaskError
 
+
+def schema_from_editor(original, rows, mode='form', json_text=''):
+    """Compile the active editor while preserving raw invalid text in the caller's draft."""
+    from taskweave.core.validation import check_schema, dumps
+    if mode == 'json':
+        try:
+            schema = json.loads(json_text)
+        except (ValueError, TypeError) as exc:
+            raise TaskError('FORM_INVALID', 'Schema JSON 格式不正确，请修正后保存。') from exc
+    else:
+        schema = schema_from_rows(original, rows)
+    dumps(schema)
+    check_schema(schema)
+    return schema
+
+
+def schema_supports_fields(schema):
+    """The field form must not reinterpret unions, references or non-object root schemas."""
+    if not isinstance(schema, dict) or schema.get('type') not in (None, 'object'):
+        return False
+    if any(key in schema for key in ('$ref', '$dynamicRef', 'oneOf', 'anyOf', 'allOf', 'not', 'if')):
+        return False
+    properties = schema.get('properties', {})
+    return (isinstance(properties, dict) and set(schema.get('required', [])) <= set(properties)
+            and all(isinstance(spec, dict) and spec.get('type') in
+                    ('string', 'integer', 'number', 'boolean', 'object', 'array', 'null')
+                    for spec in properties.values()))
+
 def schema_from_rows(original: dict, rows: list) -> dict:
     properties, required = {}, []
     for name, kind, default, description, req, field_original in rows:
@@ -15,9 +43,13 @@ def schema_from_rows(original: dict, rows: list) -> dict:
         spec = {**field_original, "type": kind}
         spec.pop("default", None)
         spec.pop("description", None)
-        if description and description.strip():
+        if 'description' in field_original and description == field_original['description']:
+            spec['description'] = field_original['description']
+        elif description and description.strip():
             spec["description"] = description.strip()
-        if default != "":
+        if default == '' and field_original.get('default') == '' and kind == field_original.get('type'):
+            spec['default'] = ''
+        elif default != "":
             try:
                 spec["default"] = (
                     default

@@ -9,6 +9,55 @@ from taskweave.desktop.pages.environments import EnvironmentPage
 
 
 class EnvironmentPageTests(unittest.TestCase):
+    def test_delete_confirmation_cancels_then_deletes_only_selected_environment(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page as page_route
+        client = Client(page_route('/environment-delete-confirmation'))
+        controller = AsyncMock()
+        controller.call.return_value = [
+            {'environment_id': 'env-1', 'name': 'UAT', 'public_config_json': '{}',
+             'secret_refs_json': '{}', 'descriptions_json': '{}'},
+        ]
+        controller.default_environment.return_value = 'env-1'
+        callbacks = {}
+        repaint, deleted = AsyncMock(), AsyncMock()
+
+        def button(label, callback, **kwargs):
+            callbacks[label] = callback
+            return ui.button(label, on_click=callback)
+
+        async def decide(label):
+            async def open_dialog():
+                with client:
+                    await callbacks['删除环境']()
+            pending = asyncio.create_task(open_dialog())
+            await asyncio.sleep(0)
+            dialog = next(el for el in client.elements.values() if isinstance(el, ui.dialog) and el.value)
+            control = next(el for el in dialog.descendants() if isinstance(el, ui.button) and el.text == label)
+            next(event.handler for event in control._event_listeners.values() if event.type == 'click')(None)
+            await pending
+
+        async def scenario():
+            with client:
+                page = EnvironmentPage(controller, button, repaint, AsyncMock(), on_deleted=deleted)
+                await page.render()
+                await decide('取消')
+                controller.call.assert_awaited_once_with('environment.list')
+                controller.set_default_environment.assert_not_awaited()
+                repaint.assert_not_awaited()
+                self.assertEqual(page.selected_environment_id, 'env-1')
+                await decide('确认删除环境')
+                controller.call.assert_awaited_with('environment.delete', environment_id='env-1')
+                controller.set_default_environment.assert_awaited_once_with(None)
+                deleted.assert_awaited_once_with('env-1')
+                repaint.assert_awaited_once()
+                self.assertIsNone(page.selected_environment_id)
+        try:
+            asyncio.run(scenario())
+        finally:
+            client.delete()
+
     def test_empty_environment_page_can_be_left_without_a_dirty_dialog(self):
         import tempfile
         from nicegui import ui

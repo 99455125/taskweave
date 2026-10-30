@@ -72,6 +72,8 @@ class SequenceLifecycleTests(CoreFixture):
             with self.assertRaises(TaskError):
                 self.app.sequences.run_delete(started["sequence_run_id"])
         self.assertEqual(self.app.sequences.run_get(started["sequence_run_id"])["status"], "DELETING")
+        child = next(row for row in self.app.runs.list() if row['run_id'] == child_id)
+        self.assertEqual(child['sequence_run_id'], started['sequence_run_id'])
         with self.assertRaises(TaskError) as error:
             self.app.runs.delete(child_id)
         self.assertEqual(error.exception.code, "SEQUENCE_CHILD_MANAGED")

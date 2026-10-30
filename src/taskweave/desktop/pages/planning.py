@@ -152,7 +152,7 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
                             card.on("keydown.space", lambda _event, p=plan: self.open(p["plan_id"]))
                             with card:
                                 ui.label(plan["name"]).classes("tw-plan-list-name").tooltip(plan["name"])
-                                ui.label(f"{category_options.get(plan.get('category_id') or '', '未分类')} · {short_updated_at(plan.get('updated_at') or plan.get('created_at'))}").classes("tw-home-task-meta")
+                                ui.label(f"{category_options.get(plan.get('category_id') or '', '未分类')} · r{plan['revision']} · {short_updated_at(plan.get('updated_at') or plan.get('created_at'))}").classes("tw-home-task-meta")
 
                 def search_changed(event):
                     self.state.search = event.value or ""
@@ -192,11 +192,16 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
                     ui.label("选择或新建规划").classes("text-gray-500")
                 else:
                     selected_plan = await self.controller.call("plan.get", plan_id=self.state.plan_id)
+                    selected_identity = self._planning_identity()
                     with ui.row().classes("tw-detail-header w-full justify-between items-start gap-4 flex-wrap"):
                         with ui.column().classes("min-w-0 grow gap-1"):
-                            ui.label(selected_plan.get("name", "规划")).classes("tw-detail-title")
-                            if selected_plan.get("plan_description"):
-                                ui.label(selected_plan["plan_description"]).classes("tw-page-subtitle tw-plan-header-summary").tooltip(selected_plan["plan_description"])
+                            with ui.row().classes("items-center gap-2"):
+                                header_title = ui.label(selected_plan.get("name", "规划")).classes("tw-detail-title")
+                                header_revision = ui.label(f"r{selected_plan['revision']}").classes("tw-badge tw-plan-revision")
+                            header_summary = ui.label(selected_plan.get("plan_description", "")).classes("tw-page-subtitle tw-plan-header-summary")
+                            header_summary.set_visibility(bool(selected_plan.get("plan_description")))
+                            with header_summary:
+                                summary_tooltip = ui.tooltip(selected_plan.get("plan_description", ""))
                         with ui.row().classes("items-center gap-2 shrink-0"):
                             category_select = ui.select(category_options, value=selected_plan.get("category_id") or "", label="分类").props("outlined dense").classes("tw-plan-category-select").on_value_change(
                                 lambda event, p=selected_plan: self.set_organization(p, category_id=event.value or None)
@@ -208,13 +213,36 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
                             ).props("aria-label=切换规划收藏")
                             favorite_button.tooltip("切换收藏")
                             self._header_favorite_button = favorite_button
-                            self.button("复制", lambda: self.save_then(self.copy_plan, selected_plan), flat=True)
-                            self.button("删除", lambda: self.save_then(self.delete_plan, plans, selected_plan), flat=True).classes("tw-danger")
                             async def save_selected_plan():
                                 if self.state.save_callback:
                                     await self.state.save_callback()
-                            self.button("保存", save_selected_plan, primary=True)
-                    await self.editor(selected_plan)
+                            self.button("保存", save_selected_plan)
+                            self.button("生成任务", lambda: self.save_then(self.choose_generation_mode, selected_plan),
+                                        primary=True, icon="auto_awesome")
+                            with ui.button("更多", icon="more_horiz").props("flat aria-label=规划更多操作"):
+                                with ui.menu().props("auto-close"):
+                                    with ui.column().classes("gap-0 p-1 min-w-40"):
+                                        self.button("复制规划", lambda: self.save_then(self.copy_plan, selected_plan), flat=True).classes("w-full justify-start")
+                                        self.button("删除规划", lambda: self.save_then(self.delete_plan, plans, selected_plan), flat=True).classes("tw-danger w-full justify-start")
+
+                    def reflect_saved_plan(saved):
+                        if (not self._identity_is_current(selected_identity)
+                                or saved['plan_id'] != selected_plan['plan_id']
+                                or header_title.is_deleted or plan_list.is_deleted):
+                            return
+                        header_title.text = saved['name']
+                        header_revision.text = f"r{saved['revision']}"
+                        header_summary.text = saved.get('plan_description', '')
+                        header_summary.set_visibility(bool(header_summary.text))
+                        summary_tooltip.text = header_summary.text
+                        for listed_plan in plans:
+                            if listed_plan['plan_id'] == saved['plan_id']:
+                                listed_plan.update({field: saved[field] for field in
+                                                    ('name', 'plan_description', 'revision', 'updated_at') if field in saved})
+                                break
+                        render_plan_list()
+
+                    await self.editor(selected_plan, on_saved=reflect_saved_plan)
 
     async def _save_legacy_callback(self):
         """Retain the externally supplied save hook before an editor is mounted."""
@@ -224,7 +252,10 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
         return self._identity_is_current(identity)
 
     async def save_then(self, callback, *args, **kwargs):
-        if not await self._save_legacy_callback() or not await self.interaction.save_current():
+        identity = self._planning_identity()
+        if self.state.save_callback:
+            await self.state.save_callback()
+        if not self._identity_is_current(identity) or not await self.interaction.save_current():
             return None
         return await callback(*args, **kwargs)
 
@@ -301,32 +332,41 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
         await self.repaint()
         return True
 
-    async def editor(self, plan):
+    async def editor(self, plan, *, on_saved=None):
         identity = self._planning_identity()
         if plan["plan_id"] != identity[0]:
             return
         editor = self.interaction.edit(plan)
         view = self.interaction.view_session()
         mutation_lock = editor.lock
+        def reflect_current_plan():
+            if on_saved and self._identity_is_current(identity):
+                on_saved(plan)
+
         with ui.column().classes("tw-planning-workspace w-full min-w-0 gap-3"):
             with ui.tabs(value="基础配置").classes("w-full tw-task-tabs") as planning_tabs:
-                ui.tab("基础配置")
-                ui.tab("能力与素材")
+                ui.tab("基础配置", label="目标与要求")
+                ui.tab("能力与素材", label="上下文材料")
                 ui.tab("生成记录")
             with ui.row().classes("tw-planning-columns w-full min-w-0 items-start"):
                 with ui.column().classes("tw-planning-main min-w-0 grow"):
                     with ui.column().classes("tw-plan-layout w-full min-w-0") as basic_panel:
                         with ui.column().classes("tw-panel tw-plan-form min-w-0 gap-3") as basic_form:
-                            ui.label("基础信息").classes("tw-section-title")
+                            ui.label("规划内容").classes("tw-section-title")
                             name = ui.input("规划名称", value=plan["name"]).props("outlined dense").classes("w-full")
-                            description = ui.textarea("规划描述", value=plan["plan_description"], placeholder="说明采集材料用于完成什么任务、最终要达到什么效果").props("outlined autogrow").classes("w-full")
+                            description = ui.textarea("任务目标", value=plan["plan_description"], placeholder="说明采集材料用于完成什么任务、最终要达到什么效果").props("outlined autogrow").classes("w-full")
                             notes = ui.textarea("操作说明（可选）", value=plan.get("plan_notes", ""), placeholder="说明全局操作顺序、变量抽取和特殊规则").props("outlined autogrow").classes("w-full")
+                            capability_area = ui.element('div').classes('tw-plan-capabilities w-full')
+                            with capability_area:
+                                capability_error = ui.column().classes('w-full gap-2 col-span-full')
+                                capability_error.set_visibility(False)
                             save_state = ui.label("已保存").classes("text-sm text-gray-500")
                     materials_panel = ui.column().classes("tw-plan-materials tw-panel w-full min-w-0")
                     materials_panel.set_visibility(False)
                     history_panel = ui.column().classes("tw-plan-history w-full min-w-0")
                     history_panel.set_visibility(False)
-                assistant_panel = ui.column().classes("tw-panel tw-plan-assist gap-3 shrink-0")
+                assistant_panel = ui.column().classes("tw-panel tw-plan-assist gap-3")
+                assistant_panel.set_visibility(False)
         environment = plugins = cards = None
         materials_loaded = False
         materials_lock = asyncio.Lock()
@@ -340,24 +380,30 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
             bind_draft(control, field)
 
         async def save_if_changed():
+            def current():
+                return self._identity_is_current(identity) and not save_state.is_deleted
+
             if not editor.dirty:
+                if current() and on_saved:
+                    on_saved(plan)
                 return plan
-            save_state.text = "正在保存…"
+            if current():
+                save_state.text = "正在保存…"
             try:
                 result = await editor.save()
             except Exception:
-                save_state.text = "未保存"
+                if current():
+                    save_state.text = "未保存"
                 raise
-            save_state.text = "已保存" if not editor.dirty else "未保存"
+            if current():
+                save_state.text = "已保存" if not editor.dirty else "未保存"
+                if on_saved:
+                    on_saved(result)
             return result
 
         self.state.save_callback = save_if_changed
 
         with assistant_panel:
-            ui.label("AI 生成任务").classes("tw-section-title")
-            self.button("大模型api调用", lambda: generate_after_save("api"), primary=True, icon="auto_awesome").classes("w-full")
-            self.button("大模型网页chat调用", lambda: generate_after_save("web_chat"), icon="forum").classes("w-full")
-            ui.separator()
             candidate_area = ui.column().classes("tw-plan-current-candidate w-full gap-2")
 
             async def refresh_candidate_summary(expected_identity=identity):
@@ -373,8 +419,9 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
                 latest = generation
                 candidate_area.clear()
                 with candidate_area:
-                    ui.label("候选预览").classes("font-medium")
+                    ui.label("最新候选").classes("font-medium")
                     if generation is None:
+                        ui.label('暂无候选').classes('text-sm text-gray-500')
                         return True
                     summary = generation_summary(generation)
                     ui.label(f'{summary["created_at"]} · {summary["channel"]} · {summary["status"]}').classes("text-sm text-gray-500")
@@ -399,18 +446,13 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
                 return current()
 
             self._refresh_candidate_summary = refresh_candidate_summary
-            async def end_candidate_collection(expected_identity=identity, owner_id=plan["plan_id"]):
-                await self.end_collection_instance(owner_id, expected_identity)
-            self.button("结束采集实例", end_candidate_collection, flat=True)
 
         async def collect_after_save():
             await self.save_then(self.collect_dialog, plan, on_saved=sync_group)
 
-        async def generate_after_save(channel):
-            await self.save_then(self.generate, plan, channel)
-
         async def sync_group(group):
             editor.sync_group(group)
+            reflect_current_plan()
             if cards is not None:
                 cards.sync_group(group)
 
@@ -421,31 +463,62 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
                 if materials_loaded or not self._identity_is_current(identity) or materials_panel.is_deleted:
                     return
                 self._planning_identity()
-                materials = await view.load_materials()
+                try:
+                    materials = await view.load_materials()
+                except Exception:
+                    logger.warning("Could not load planning capabilities and environments", exc_info=True)
+                    if self._identity_is_current(identity) and not capability_error.is_deleted:
+                        capability_error.set_visibility(True)
+                    return
                 if materials is None or not self._identity_is_current(identity) or materials_panel.is_deleted:
                     return
                 catalog, environments = materials
-                with materials_panel:
-                    ui.label("所用插件能力与上下文素材").classes("tw-section-title")
+                capability_error.set_visibility(False)
+                with capability_area:
                     environment = ui.select(
                         {item["environment_id"]: item["name"] for item in environments},
                         value=plan.get("environment_id"), label="采集环境（可选）", clearable=True,
                     ).props("outlined dense").classes("w-full")
-                    plugins = ui.select(list(catalog["manifests"]), value=plan.get("plugin_ids", []), label="所用插件", multiple=True).props("outlined dense use-chips").classes("w-full")
-
+                    with ui.column().classes('tw-plan-plugin-options w-full gap-2').props('role=group aria-label=可用插件') as plugins:
+                        ui.label('可用插件').classes('text-xs text-gray-500')
+                        selected = set(editor.values()['plugin_ids'])
+                        installed = set(catalog['manifests'])
+                        def select_plugin(event, plugin_id):
+                            if not self._identity_is_current(identity):
+                                return
+                            if event.value:
+                                selected.add(plugin_id)
+                            else:
+                                selected.discard(plugin_id)
+                            editor.change('plugin_ids', sorted(selected))
+                            save_state.text = '未保存'
+                        with ui.row().classes('w-full gap-x-4 gap-y-1'):
+                            for plugin_id in sorted(installed | selected):
+                                title = plugin_id if plugin_id in installed else plugin_id + '（未安装）'
+                                ui.checkbox(title, value=plugin_id in selected,
+                                    on_change=lambda event, pid=plugin_id: select_plugin(event, pid)).props('dense')
+                            if not installed and not selected:
+                                ui.label('暂无可用插件').classes('text-xs text-gray-500')
                     bind_draft(environment, "environment_id")
-                    bind_draft(plugins, "plugin_ids")
-                    ui.separator()
+                with materials_panel:
+                    with ui.row().classes('w-full items-center justify-between'):
+                        ui.label("上下文材料").classes("tw-section-title")
+                        async def end_candidate_collection(expected_identity=identity, owner_id=plan["plan_id"]):
+                            await self.end_collection_instance(owner_id, expected_identity)
+                        self.button("结束采集实例", end_candidate_collection, flat=True)
                     contexts = plan.get("contexts", [])
 
                     async def save_context(context, name, notes):
                         await editor.mutate_context("plan.context.update", context["context_id"], name=name, context_notes=notes)
+                        reflect_current_plan()
 
                     async def delete_context(context):
                         await editor.mutate_context("plan.context.delete", context["context_id"])
+                        reflect_current_plan()
 
                     async def move_context(context, direction):
                         await editor.mutate_context("plan.context.reorder", context["context_id"], direction=direction)
+                        reflect_current_plan()
 
                     async def recollect_context(context):
                         await save_if_changed()
@@ -455,10 +528,12 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
                         await self.context_preview(context)
 
                     async def mutate_capture(operation, context, capture, **params):
-                        await mutate_planning_capture(
+                        changed = await mutate_planning_capture(
                             self.controller, plan, context, capture, operation, mutation_lock,
                             lambda: self._identity_is_current(identity), cards, editor=editor, **params,
                         )
+                        if changed:
+                            reflect_current_plan()
 
                     async def delete_capture(context, capture):
                         await mutate_capture('plan.context.capture.delete', context, capture)
@@ -486,12 +561,18 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
 
                 materials_loaded = True
 
+        with capability_error:
+            ui.label('环境与插件加载失败，请重试。').classes('text-sm text-red-700')
+            self.button('重新加载', load_materials, flat=True, icon='refresh')
+
         async def refresh_generation_history(expected_identity=identity):
             if not self._identity_is_current(expected_identity):
                 return False
             if not view.invalidate_history():
                 return view.current
             return await load_history(expected_identity)
+
+        import_counts = {}
 
         async def load_history(expected_identity):
             if not self._identity_is_current(expected_identity):
@@ -501,23 +582,45 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
                 return False
             if generations is None:
                 return True
+            counts = {}
+            try:
+                for generation in generations:
+                    generation_id = generation['generation_id']
+                    if generation.get('status') == 'IMPORTED' or generation.get('imported_task_id'):
+                        key = (generation_id, generation.get('updated_at'))
+                        if key not in import_counts:
+                            receipts = await self.interaction.imports(generation_id)
+                            if not self._identity_is_current(expected_identity) or history_panel.is_deleted:
+                                return False
+                            import_counts[key] = len(receipts)
+                        counts[generation_id] = import_counts[key]
+                    else:
+                        counts[generation_id] = 0
+            except Exception:
+                view.invalidate_history()
+                raise
             history_panel.clear()
             with history_panel:
                 with ui.column().classes("tw-plan-history-content w-full gap-1"):
                     ui.label("生成记录").classes("text-lg font-semibold")
                     with ui.row().classes("tw-plan-history-table-head w-full"):
-                        ui.label("生成时间")
+                        ui.label("生成时间 / 材料版本")
                         ui.label("调用渠道")
-                        ui.label("状态")
+                        ui.label("状态 / 导入次数")
                     if not generations:
                         ui.label("暂无生成记录").classes("text-sm text-gray-500 px-2 py-3")
                     for item in generations:
                         summary = generation_summary(item)
                         with ui.row().classes("tw-plan-history-row w-full"):
-                            ui.label(summary["created_at"])
+                            with ui.column().classes("gap-0 min-w-0"):
+                                ui.label(summary["created_at"])
+                                if summary["plan_revision"] is not None:
+                                    ui.label(f'基于 r{summary["plan_revision"]}').classes("text-xs text-gray-500")
                             ui.label(summary["channel"])
                             with ui.row().classes("items-center justify-between gap-2"):
-                                ui.label(summary["status"])
+                                with ui.column().classes('gap-0 min-w-0'):
+                                    ui.label(summary["status"])
+                                    ui.label(f"导入 {counts[item['generation_id']]} 次").classes('text-xs text-gray-500')
                                 self.button("查看", lambda record=item: self.open_generation(record["generation_id"], identity), flat=True)
             return True
 
@@ -531,6 +634,7 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
             basic_panel.set_visibility(view.selected_tab == "基础配置")
             materials_panel.set_visibility(view.selected_tab == "能力与素材")
             history_panel.set_visibility(view.selected_tab == "生成记录")
+            assistant_panel.set_visibility(view.selected_tab == "生成记录")
             try:
                 if view.selected_tab == "能力与素材":
                     await load_materials()
@@ -542,4 +646,5 @@ class PlanningPage(PlanningCollectionView, PlanningGenerationView, Page):
                 logger.warning("Could not load planning tab", exc_info=True)
 
         planning_tabs.on_value_change(select_planning_tab)
+        await load_materials()
         await refresh_candidate_summary(identity)

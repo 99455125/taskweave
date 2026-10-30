@@ -335,7 +335,8 @@ class RunRepository:
             validate(values, partial_schema)
         return step_inputs
 
-    def create_run(self, task_id, inputs, versions, environment_id=None, trial_step_id=None, flow_trial=False, defer_inputs=False, step_inputs=None):
+    def create_run(self, task_id, inputs, versions, environment_id=None, trial_step_id=None, flow_trial=False, defer_inputs=False, step_inputs=None, *, trial=False):
+        flow_trial = flow_trial or trial
         original_inputs = dict(inputs)
         task = self.task(task_id)
         if task['lifecycle'] != 'ACTIVE':
@@ -360,6 +361,9 @@ class RunRepository:
             input_schema = json.loads(task['input_schema_json']) if flow_trial else step['input_schema']
             validation_inputs = inputs if flow_trial else automatic_inputs(input_schema, environment, inputs, inputs)
             validate({key: value for key, value in validation_inputs.items() if key not in input_schema.get('required', []) or (value is not None and value != '')} if defer_inputs else validation_inputs, {**input_schema, 'required': []} if defer_inputs else input_schema)
+        elif trial:
+            task_schema = json.loads(task['input_schema_json'])
+            validate(inputs, {**task_schema, 'required': []} if defer_inputs else task_schema)
         else:
             if not self.tasks.flow_is_confirmed(task_id):
                 raise TaskError('FLOW_NOT_CONFIRMED', '请先确认当前任务流程')
@@ -370,7 +374,7 @@ class RunRepository:
                     raise TaskError('STEP_NOT_VALIDATED', step['step_id'])
         step_inputs = self.normalize_step_inputs(task_id, step_inputs)
         run_id = uid()
-        self.execute('INSERT INTO task_runs(run_id,task_id,environment_id,mode,status,definition_hash,plugin_versions_json,input_summary_json,inputs_json,trial_step_id,request_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (run_id, task_id, environment_id, 'TRIAL' if trial_step_id else 'EXECUTION', 'READY', self.definition_hash(task_id), dumps(versions), dumps(redact(inputs)), dumps(inputs), trial_step_id, dumps({'environment_hash': fingerprint(self.environment(environment_id)), 'flow_trial': flow_trial, 'step_inputs': step_inputs or {}, 'initial_step_inputs': step_inputs or {}, 'initial_inputs': original_inputs})))
+        self.execute('INSERT INTO task_runs(run_id,task_id,environment_id,mode,status,definition_hash,plugin_versions_json,input_summary_json,inputs_json,trial_step_id,request_json) VALUES(?,?,?,?,?,?,?,?,?,?,?)', (run_id, task_id, environment_id, 'TRIAL' if trial_step_id or trial else 'EXECUTION', 'READY', self.definition_hash(task_id), dumps(versions), dumps(redact(inputs)), dumps(inputs), trial_step_id, dumps({'environment_hash': fingerprint(self.environment(environment_id)), 'flow_trial': flow_trial, 'full_flow_trial': trial, 'step_inputs': step_inputs or {}, 'initial_step_inputs': step_inputs or {}, 'initial_inputs': original_inputs})))
         self.execute('UPDATE task_runs SET definition_json=? WHERE run_id=?', (dumps({'task': task, 'steps': steps, 'flow': self.tasks.flow(task_id)}), run_id))
         return self.run(run_id)
 
@@ -386,12 +390,20 @@ class RunRepository:
     def list_runs(self, task_id=None):
         # Additive read-model markers: old clients keep their fields; desktop can
         # discover changes without reading every frozen definition and output.
-        return self.query('SELECT r.run_id,r.task_id,r.mode,r.trial_step_id,r.status,r.started_at,r.finished_at,'
-            'COALESCE(e.revision,0) AS event_revision,COALESCE(f.total,0) AS result_count '
+        rows = self.query('SELECT r.run_id,r.task_id,r.mode,r.trial_step_id,r.status,r.started_at,r.finished_at,'
+            's.sequence_run_id,s.execution_path AS sequence_execution_path,COALESCE(e.revision,0) AS event_revision,COALESCE(f.total,0) AS result_count '
             'FROM task_runs r '
+            'LEFT JOIN sequence_instances s ON s.run_id=r.run_id '
             'LEFT JOIN (SELECT run_id,MAX(rowid) AS revision FROM run_events GROUP BY run_id) e USING(run_id) '
             'LEFT JOIN (SELECT run_id,COUNT(*) AS total FROM result_refs GROUP BY run_id) f USING(run_id)'
             + (' WHERE r.task_id=?' if task_id else '') + ' ORDER BY r.started_at', (task_id,) if task_id else ())
+        cleanup_owners = {child: run['sequence_run_id'] for run in self.query(
+            "SELECT sequence_run_id,cleanup_json FROM sequence_runs WHERE status='DELETING'")
+            for child in json.loads(run['cleanup_json'] or '[]')}
+        for row in rows:
+            if not row['sequence_run_id']:
+                row['sequence_run_id'] = cleanup_owners.get(row['run_id'])
+        return rows
 
     def event_page(self, run_id, after=0, limit=100):
         """Additive cursor API; existing full-history events() stays unchanged."""

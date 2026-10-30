@@ -98,7 +98,7 @@ class StepContext:
 
     def result(self, data=None, outputs=(), views=()):
         from taskweave.core.result_views import validate_views
-        validate_views(data, views, self.registry.views)
+        validate_views(data, views, self.registry.views, outputs)
         return StepResult(data, outputs, views)
 
     def output(self, handler_id, name, payload):
@@ -169,6 +169,7 @@ def worker_main(connection, cancellation, home, factory, parent_pid):
                 emit,
             )
             pc.task_parameters = message.get('task_parameters', {})
+            pc.datasets.authorize_inputs(message.get('inputs', {}))
             resources.context = pc
             ctx = StepContext(message["step"], pc, registry)
 
@@ -231,6 +232,14 @@ def worker_main(connection, cancellation, home, factory, parent_pid):
                     ctx.phase = "verify"
                     validate(result.data, message["step"]["output_schema"])
                     ctx.effect = "SUCCEEDED"
+                    for plugin in registry.selected_plugins(message["step"]["capabilities"]):
+                        hook = getattr(plugin, 'result_artifacts', None)
+                        if hook:
+                            artifacts = await hook(pc, result)
+                            if not isinstance(artifacts, StepResult) or artifacts.data is not None:
+                                raise TaskError('RESULT_INVALID', 'Artifact hooks may only append outputs and views')
+                            result = StepResult(result.data, [*result.outputs, *artifacts.outputs],
+                                                [*result.views, *artifacts.views])
                     ctx.phase = "persist"
                     refs = results.persist(result)
                     emit("AttemptCompleted", {"refs": refs})

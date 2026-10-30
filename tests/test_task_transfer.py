@@ -16,20 +16,20 @@ class TaskTransfer(unittest.TestCase):
             first = app.repo.save_step(task, {'name': '第一支', 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data={"v": 1})'})
             second = app.repo.save_step(task, {'name': '第二支', 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data={"v": 2})'})
             flow = {'version': 2, 'root': {'id': 'root', 'kind': 'sequence', 'children': [{
-                'id': 'choose', 'kind': 'if', 'condition': {'op': 'eq', 'left': {'literal': True}, 'right': {'literal': True}},
-                'then': {'id': 'yes', 'kind': 'sequence', 'children': [
-                    {'id': first['step_id'], 'kind': 'action', 'step_id': first['step_id']}]},
-                'else': {'id': 'no', 'kind': 'sequence', 'children': [
-                    {'id': second['step_id'], 'kind': 'action', 'step_id': second['step_id']}]},
-                'outputs': {'chosen': {'then': {'ref': {'source': 'step', 'step_id': first['step_id'], 'pointer': '/v'}},
-                                       'else': {'ref': {'source': 'step', 'step_id': second['step_id'], 'pointer': '/v'}}}},
+                'id': 'choose', 'kind': 'if', 'cases': [{'id': 'match', 'condition': {'op': 'eq', 'left': {'literal': True}, 'right': {'literal': True}},
+                'body': {'id': 'yes', 'kind': 'sequence', 'children': [
+                    {'id': first['step_id'], 'kind': 'action', 'step_id': first['step_id']}]}}],
+                'default': {'id': 'fallback', 'body': {'id': 'no', 'kind': 'sequence', 'children': [
+                    {'id': second['step_id'], 'kind': 'action', 'step_id': second['step_id']}]}},
+                'outputs': {'chosen': {'match': {'ref': {'source': 'step', 'step_id': first['step_id'], 'pointer': '/v'}},
+                                       'fallback': {'ref': {'source': 'step', 'step_id': second['step_id'], 'pointer': '/v'}}}},
             }]}}
             tasks = app.repo.repositories.tasks
             tasks.save_flow(task, flow, tasks.definition_hash(task))
             tasks.confirm_flow(task, tasks.definition_hash(task))
             package = app.export_task(task)
             self.assertEqual(package['format'], 'taskweave-task-3')
-            self.assertEqual(package['flow']['root']['children'][0]['then']['children'][0]['step_id'], 'step-1')
+            self.assertEqual(package['flow']['root']['children'][0]['cases'][0]['body']['children'][0]['step_id'], 'step-1')
             imported = app.import_task(package)
             self.assertEqual(app.export_task(imported['task_id']), package)
             self.assertTrue(tasks.flow_is_confirmed(imported['task_id']))
@@ -68,7 +68,7 @@ class TaskTransfer(unittest.TestCase):
     def test_invalid_import_leaves_existing_tasks_unchanged(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
             app.repo.create_task('已有')
-            package = {'format': 'taskweave-task-2', 'origin': 'ai_generated', 'task': {'name': '坏任务'}, 'steps': [{'key': 'one', 'validation_state': 'DRAFT', 'document': {'step_content': 'import os'}}]}
+            package = {'format': 'taskweave-task-3', 'origin': 'ai_generated', 'task': {'name': '坏任务'}, 'steps': [{'key': 'one', 'validation_state': 'DRAFT', 'document': {'step_content': 'import os'}}]}
             with self.assertRaises(TaskError): app.import_task(package)
             self.assertEqual([t['name'] for t in app.repo.list_tasks()], ['已有'])
 
@@ -110,7 +110,8 @@ class TaskTransfer(unittest.TestCase):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
             document = normalize_step({'name': 'AI步骤', 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data={"ok": True})'})
             document = {key: value for key, value in document.items() if key not in {'step_id', 'task_id', 'position', 'content_hash', 'validation_state', 'verified_hash', 'validation_source', 'validated_environment_id'}}
-            package = {'format': 'taskweave-task-2', 'origin': 'ai_generated', 'task': {'name': 'AI任务', 'description': '', 'input_schema': {'type': 'object'}}, 'steps': [{'key': 'one', 'validation_state': 'DRAFT', 'document': document}]}
+            package = {'format': 'taskweave-task-3', 'origin': 'ai_generated', 'task': {'name': 'AI任务', 'description': '', 'input_schema': {'type': 'object'}}, 'steps': [{'key': 'one', 'validation_state': 'DRAFT', 'document': document}]}
+            package.update(flow={'version': 2, 'root': {'id': 'root', 'kind': 'sequence', 'children': [{'id': 'one', 'kind': 'action', 'step_id': 'one'}]}}, flow_validation_state='DRAFT')
             imported = app.import_task(package)
             self.assertEqual(app.repo.steps(imported['task_id'])[0]['validation_state'], 'DRAFT')
             package['steps'][0]['validation_state'] = 'VALIDATED'
@@ -127,16 +128,17 @@ class TaskTransfer(unittest.TestCase):
             self.assertEqual(step['step_content'], '')
             self.assertEqual(step['validation_state'], 'DRAFT')
             package['origin'] = 'ai_generated'
+            package['flow_validation_state'] = 'DRAFT'
             ai_imported = app.import_task(package)
             ai_step = app.repo.steps(ai_imported['task_id'])[0]
             self.assertEqual(ai_step['step_content'], '')
             self.assertEqual(ai_step['validation_state'], 'DRAFT')
 
-    def test_v1_requires_reexport(self):
+    def test_old_package_is_rejected(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
             with self.assertRaises(TaskError) as error:
                 app.import_task({'format': 'taskweave-task-1'})
-            self.assertIn('重新导出', str(error.exception))
+            self.assertEqual(error.exception.code, 'TASK_PACKAGE_INVALID')
 
     def test_delete_environment_keeps_history_and_rejects_live_run(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:

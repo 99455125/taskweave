@@ -76,7 +76,7 @@ class TasksPageTests(unittest.TestCase):
             page = TasksPage(controller, button, AsyncMock(), AsyncMock())
             await page.import_task_dialog()
             upload = next(e for e in ui.context.client.elements.values() if isinstance(e, ui.upload))
-            package = {'format': 'taskweave-task-2', 'origin': 'task_export',
+            package = {'format': 'taskweave-task-3', 'origin': 'task_export',
                        'contexts': [{'captures': [{'views': [{'data': 'a' * (23 * 1024 * 1024)}]}]}]}
             content = json.dumps(package).encode()
             event = SimpleNamespace(file=SimpleNamespace(name='task.json', size=lambda: len(content), read=AsyncMock(return_value=content)))
@@ -101,10 +101,10 @@ class TasksPageTests(unittest.TestCase):
             mode = next(e for e in ui.context.client.elements.values() if isinstance(e, ui.toggle))
             source = next(e for e in ui.context.client.elements.values() if isinstance(e, ui.textarea))
             mode.value = 'text'
-            source.value = '{"format": "taskweave-task-2"}'
+            source.value = '{"format": "taskweave-task-3"}'
             with patch('taskweave.desktop.pages.tasks.ui.notify'):
                 await callbacks['导入为新任务']()
-            controller.call.assert_awaited_once_with('task.import', package={'format': 'taskweave-task-2'})
+            controller.call.assert_awaited_once_with('task.import', package={'format': 'taskweave-task-3'})
 
         client = Client(nice_page('/large-task-import'))
         try:
@@ -259,6 +259,21 @@ class TasksPageTests(unittest.TestCase):
                         self.assertTrue(workbench._step_editor_is_dirty())
                         self.assertEqual(controls["name"].value, "未保存的新步骤名")
                         self.assertEqual(app.repo.step(step["step_id"])["name"], "原步骤")
+                        category_choice = next((element for element in client.elements.values()
+                            if isinstance(element, ui.select) and element._props.get('label') == '分类'
+                            and not element.is_deleted), None)
+                        self.assertIsNotNone(category_choice, 'Current task must retain its category selector')
+                        category = app.dispatch('organization.category.list', {})[0]
+                        for handler in category_choice._change_handlers:
+                            result = handler(SimpleNamespace(value=category['category_id']))
+                            if hasattr(result, '__await__'):
+                                await result
+                        saved_task = next(row for row in app.dispatch('task.list', {})
+                                          if row['task_id'] == task['task_id'])
+                        self.assertEqual(saved_task['category_id'], category['category_id'])
+                        self.assertEqual(category_choice.value, category['category_id'])
+                        self.assertIs(workbench.edit_controls, controls)
+                        self.assertTrue(workbench._step_editor_is_dirty())
                         workbench._dispose_page(workbench.page)
 
                 asyncio.run(scenario())

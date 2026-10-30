@@ -43,7 +43,8 @@ class ResultViewer:
                         with ui.tab_panel(tab):
                             try:
                                 from taskweave.core.validation import pointer
-                                payload = pointer(data, view.get('pointer', ''))
+                                payload = ({'output': view['output']} if 'output' in view
+                                           else pointer(data, view.get('pointer', '')))
                                 kind = renderers.get(view['renderer'], {}).get('type', 'json')
                                 await self.render_result_view(kind, payload, stored)
                             except (TaskError, ValueError, TypeError, KeyError) as exc:

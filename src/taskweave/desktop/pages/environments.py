@@ -141,11 +141,12 @@ class EnvironmentPage(Page):
                 async def delete_selected():
                     if selected is None:
                         return
-                    with ui.dialog() as confirmation, ui.card():
-                        ui.label("删除环境“" + selected["name"] + "”？历史执行结果保留。")
-                        with ui.row():
-                            ui.button("取消", on_click=lambda: confirmation.submit(False)).props("outline")
-                            ui.button("确认删除环境", on_click=lambda: confirmation.submit(True)).props("outline text-color=red-7")
+                    with ui.dialog() as confirmation, ui.card().classes("tw-confirm-dialog"):
+                        ui.label("删除环境“" + selected["name"] + "”？").classes("tw-confirm-title")
+                        ui.label("历史执行结果保留。").classes("tw-confirm-description")
+                        with ui.row().classes("tw-confirm-actions"):
+                            ui.button("取消", on_click=lambda: confirmation.submit(False)).props("outline").classes("tw-confirm-cancel")
+                            ui.button("确认删除环境", on_click=lambda: confirmation.submit(True)).props("outline color=negative").classes("tw-confirm-danger")
                     if not await confirmation:
                         return
                     environment_id = selected["environment_id"]

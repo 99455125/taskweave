@@ -187,7 +187,8 @@ class DesktopController:
         defaults = {key: spec['default'] for key, spec in json.loads(task['input_schema_json']).get('properties', {}).items() if 'default' in spec}
         return {**environment, **defaults}
 
-    async def trial(self, step, inputs, environment_id=None, continue_session=False):
+    async def trial(self, step, inputs, environment_id=None, continue_session=False, *, scene=None,
+                    source_run_id=None, source_paths=None, explicit_sources=False):
         from taskweave.core.validation import pointer
         inputs = dict(inputs)
         configured = await self.configured_inputs(step['task_id'], environment_id) if step.get('bindings') else {}
@@ -200,7 +201,23 @@ class DesktopController:
             else:
                 ref = binding['ref']
                 if ref['source'] == 'step':
-                    value = await self.previous_result(step['task_id'], ref['step_id'], environment_id, output=ref.get('output', 'data'))
+                    if source_run_id is not None:
+                        source = await self.call('run.get', run_id=source_run_id)
+                        if source['task_id'] != step['task_id'] or source['environment_id'] != environment_id:
+                            raise TaskError('VALIDATION_EVIDENCE_INVALID', '结果来源的任务或环境不匹配')
+                        paths = {a['execution_path'] for a in source.get('attempts', [])
+                                 if a['step_id'] == ref['step_id'] and a['valid'] and a['status'] == 'SUCCEEDED'
+                                 and a.get('execution_path')}
+                        if len(paths) > 1 and not (source_paths or {}).get(ref['step_id']):
+                            raise TaskError('FLOW_INSTANCE_REQUIRED', '请选择前序结果的具体执行实例')
+                        value = await self.call('run.output', run_id=source_run_id, step_id=ref['step_id'],
+                                                output=ref.get('output', 'data'),
+                                                **({'execution_path': source_paths[ref['step_id']]}
+                                                   if source_paths and ref['step_id'] in source_paths else {}))
+                    else:
+                        if explicit_sources:
+                            raise TaskError('INPUT_MISSING', '请填写依赖值或选择前序结果来源')
+                        value = await self.previous_result(step['task_id'], ref['step_id'], environment_id, output=ref.get('output', 'data'))
                 else:
                     value = {**configured, **inputs} if ref['source'] == 'task' else environment
                 inputs[key] = pointer(value, ref['pointer'])
@@ -212,6 +229,8 @@ class DesktopController:
             inputs=inputs,
             command_id=command_id(),
             environment_id=environment_id,
+            **({'new_session': True} if scene == {} else
+               {'session_run_id': scene['run_id'], 'expected_session_id': scene['session_id']} if scene else {}),
         )
 
     async def repeat_trial(self, step, run_id, overrides=None):
@@ -312,6 +331,9 @@ class DesktopController:
 
     async def save_plan_prompt(self, text):
         return await self._save_export(text, 'save_plan_prompt')
+
+    async def save_chat_bundle(self, content):
+        return await self._save_export(content, 'save_chat_bundle')
 
     async def _save_export(self, text, operation):
         from taskweave.application.settings import WorkspaceExports

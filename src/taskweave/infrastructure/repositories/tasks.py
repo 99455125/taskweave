@@ -19,7 +19,7 @@ class TaskRepository:
         stamp = now()
         self.store.execute(
             "INSERT INTO tasks(task_id,name,description,input_schema_json,graph_json,created_at,updated_at) VALUES(?,?,?,?,?,?,?)",
-            (task_id, name, description, dumps(schema), dumps({"nodes": [], "entry_node_id": None}), stamp, stamp),
+            (task_id, name, description, dumps(schema), dumps({"version": 2, "root": {"id": "root", "kind": "sequence", "children": []}}), stamp, stamp),
         )
         return self.task(task_id)
 
@@ -48,6 +48,20 @@ class TaskRepository:
             if self.definition_hash(task_id) != expected_hash:
                 raise TaskError("EDIT_CONFLICT")
             normalized = normalize_flow(flow, self.steps.steps(task_id))
+            def action_order(node):
+                if node['kind'] == 'action':
+                    yield node['step_id']
+                elif node['kind'] == 'sequence':
+                    for child in node['children']:
+                        yield from action_order(child)
+                elif node['kind'] == 'if':
+                    from taskweave.core.task_flow import conditional_branches
+                    for _, body in conditional_branches(node):
+                        yield from action_order(body)
+                else:
+                    yield from action_order(node['body'])
+            for position, step_id in enumerate(action_order(normalized['root'])):
+                db.execute("UPDATE steps SET position=? WHERE step_id=? AND task_id=?", (position, step_id, task_id))
             linear = is_linear_flow(normalized)
             db.execute(
                 "UPDATE tasks SET graph_json=?,flow_validation_state=?,flow_verified_hash=?,updated_at=? WHERE task_id=?",

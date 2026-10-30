@@ -188,6 +188,9 @@ class ApplicationSettings:
     def save_plan_prompt(self, text):
         return WorkspaceExports(self.home).save_plan_prompt(text)
 
+    def save_chat_bundle(self, content):
+        return WorkspaceExports(self.home).save_chat_bundle(content)
+
 
 class WorkspaceExports:
     """File-only use case also available to minimal local export clients."""
@@ -207,3 +210,11 @@ class WorkspaceExports:
 
     def save_plan_prompt(self, text):
         return self._save(text, 'taskweave-plan-', '.txt')
+
+    def save_chat_bundle(self, content):
+        directory = self.home / 'exports'
+        directory.mkdir(parents=True, exist_ok=True)
+        path = directory / ('taskweave-chat-' + uuid4().hex[:12] + '.zip')
+        with path.open('xb') as output:
+            output.write(content)
+        return path

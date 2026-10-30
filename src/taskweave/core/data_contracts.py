@@ -54,6 +54,8 @@ class ExecutionRequest(TypedDict, total=False):
 
 
 class _RunSummaryOptional(TypedDict, total=False):
+    sequence_run_id: str | None
+    sequence_execution_path: str | None
     can_end: bool
     attempts: list[dict[str, JSON]]
     inputs_json: str

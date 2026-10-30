@@ -195,7 +195,7 @@ class InputUi(unittest.TestCase):
                         page.get_by_role('button',name='导出',exact=True).click()
                         export_dialog=page.get_by_role('dialog')
                         package=export_dialog.get_by_label('任务 JSON',exact=True).input_value()
-                        self.assertEqual(json.loads(package)['format'],'taskweave-task-2')
+                        self.assertEqual(json.loads(package)['format'],'taskweave-task-3')
                         expect(export_dialog.get_by_role('button',name='复制 JSON',exact=True)).to_be_visible()
                         export_dialog.get_by_role('button',name='关闭',exact=True).click()
                         page.get_by_role('button',name='导入任务',exact=True).click()
@@ -220,3 +220,50 @@ class InputUi(unittest.TestCase):
                         try:process.wait(timeout=10)
                         except subprocess.TimeoutExpired:
                             process.kill();process.wait()
+
+
+class SchemaJsonUi(unittest.TestCase):
+    def test_hidden_json_editors_are_readable_and_editable(self):
+        from playwright.sync_api import sync_playwright, expect
+        server = '''
+import json, sys
+from nicegui import ui
+from taskweave.desktop.forms import StepSchemaEditor
+from taskweave.desktop.theme import STYLE
+@ui.page('/')
+def index():
+ ui.add_css(STYLE)
+ for title in ('输入 Schema', '输出 Schema'):
+  with ui.column().classes('tw-panel w-full'):
+   editor=StepSchemaEditor(title, {'type':'object','properties':{'count':{'type':'integer'}}})
+   ui.button('读取 '+title, on_click=lambda e=editor: ui.label(json.dumps(e.schema(),ensure_ascii=False)).classes('saved'))
+ui.run(host='127.0.0.1',port=int(sys.argv[1]),show=False,reload=False)
+'''
+        with tempfile.TemporaryDirectory() as tmp:
+         with socket.socket() as sock:
+          sock.bind(('127.0.0.1',0)); port=sock.getsockname()[1]
+         with open(Path(tmp)/'server.log','w') as log:
+          proc=subprocess.Popen([sys.executable,'-c',server,str(port)],stdout=log,stderr=log)
+          try:
+           for _ in range(150):
+            try: urlopen(f'http://127.0.0.1:{port}',timeout=1).close(); break
+            except OSError: time.sleep(.1)
+           with sync_playwright() as p:
+            browser=p.chromium.launch(headless=True)
+            page=browser.new_page(viewport={'width':1280,'height':900})
+            page.goto(f'http://127.0.0.1:{port}')
+            for panel in page.locator('.tw-panel').all():
+             panel.get_by_role('button',name='高级 JSON',exact=True).click()
+             field=panel.locator('textarea')
+             expect(field).to_be_visible()
+             height=field.bounding_box()['height']
+             self.assertGreaterEqual(height, 200, f'JSON textarea height={height}')
+             value='{"type":"object","properties":{"edited":{"type":"integer"}}}'
+             field.fill(value)
+             panel.get_by_role('button',name='读取 ').click()
+             expect(panel.locator('.saved')).to_contain_text('edited')
+             panel.get_by_role('button',name='字段表单',exact=True).click()
+             expect(panel.get_by_label('名称',exact=True)).to_have_value('edited')
+            browser.close()
+          finally:
+           proc.terminate();proc.wait(timeout=10)

@@ -4,6 +4,7 @@ import json
 from html import escape
 from nicegui import ui
 from taskweave.core.validation import TaskError
+from taskweave.presentation.array_inputs import supports_row_input, raw_json, row_values
 
 
 def compact_field(control, *, description="", label_container=None):
@@ -42,7 +43,11 @@ class ValueForm:
         description = spec.get("description", "").strip()
         if description and not self.compact:
             ui.label(description).classes("text-xs text-gray-500 mb-0")
-        if "enum" in spec:
+        row_input = supports_row_input(spec)
+        if row_input:
+            from taskweave.desktop.components.array_input import ArrayInput
+            control = ArrayInput(label, spec, value)
+        elif "enum" in spec:
             control = ui.select(spec["enum"], label=label, value=value)
         elif kind == "boolean":
             control = ui.checkbox(label, value=bool(value))
@@ -57,11 +62,11 @@ class ValueForm:
         elif kind in {"object", "array"}:
             control = ui.textarea(
                 label,
-                value="" if value is None else json.dumps(value, ensure_ascii=False),
+                value=raw_json(value),
             )
         else:
             control = ui.input(label, value="" if value is None else str(value))
-        if self.compact:
+        if self.compact and not row_input:
             if kind == "boolean":
                 control.props("dense")
                 if description:
@@ -70,7 +75,7 @@ class ValueForm:
                 compact_field(control, description=description)
                 if kind in {"object", "array"}:
                     control.props("autogrow")
-        if kind != "boolean":
+        if kind != "boolean" and not row_input:
             control.props('placeholder="未配置默认值，请录入"')
         control.classes("w-full")
         self.controls[name] = (kind, control)
@@ -85,7 +90,7 @@ class ValueForm:
         for name, (kind, control) in self.controls.items():
             value = values.get(name, self.schema.get('properties', {}).get(name, {}).get('default'))
             if kind in {'object', 'array'}:
-                value = '' if value is None else json.dumps(value, ensure_ascii=False)
+                value = raw_json(value)
             elif kind == 'string':
                 value = '' if value is None else str(value)
             elif kind == 'boolean':
@@ -105,7 +110,10 @@ class ValueForm:
                 value is None or value == ""
             ):
                 raise TaskError("FORM_INVALID", f"{name} 为必录项")
-            if kind in {"object", "array"}:
+            spec = self.schema.get("properties", {}).get(name, {})
+            if supports_row_input(spec) and value not in (None, ""):
+                value = row_values(value, spec, name)
+            elif kind in {"object", "array"}:
                 if value is None or value == "":
                     continue
                 try:
@@ -195,6 +203,85 @@ class SchemaEditor:
                     control.value = value
         finally:
             self.on_change = changed
+
+
+class StepSchemaEditor(SchemaEditor):
+    """A complete step Schema with lossless field/JSON editing and reload state."""
+    def __init__(self, title, schema, *, on_change=None, on_mode_change=None):
+        from copy import deepcopy
+        from taskweave.presentation.forms import schema_supports_fields
+        self._changing = True
+        self.title = title
+        self.on_mode_change = on_mode_change
+        self._active_mode = 'form' if schema_supports_fields(schema) else 'json'
+        ui.label(title).classes('font-semibold')
+        self.edit_mode = ui.toggle({'form': '字段表单', 'json': '高级 JSON'}, value=self._active_mode)
+        self.edit_mode.props['aria-label'] = title + ' 编辑方式'
+        with ui.column().classes('w-full') as self.form_area:
+            super().__init__(schema if self._active_mode == 'form' else {}, on_change=None)
+        self.original = deepcopy(schema)
+        with ui.column().classes('w-full') as self.json_area:
+            self.json_editor = ui.textarea(title + ' JSON', value=json.dumps(schema, ensure_ascii=False, indent=2)).props(
+                'outlined rows=14').classes('tw-schema-json w-full font-mono')
+        self.on_change = on_change
+        self.json_editor.on_value_change(self._json_changed)
+        self.edit_mode.on_value_change(self._change_mode)
+        self._show_mode()
+        self._changing = False
+
+    def _show_mode(self):
+        self.form_area.set_visibility(self._active_mode == 'form')
+        self.json_area.set_visibility(self._active_mode == 'json')
+
+    def _json_changed(self, _):
+        if not self._changing and self.on_change:
+            self.on_change()
+
+    def _change_mode(self, event):
+        from copy import deepcopy
+        from taskweave.presentation.forms import schema_from_editor, schema_supports_fields
+        if self._changing or event.value == self._active_mode:
+            return
+        callback, self.on_change = self.on_change, None
+        self._changing = True
+        try:
+            schema = schema_from_editor(self.original, self.raw_rows(), self._active_mode, self.json_editor.value)
+            if event.value == 'form':
+                if not schema_supports_fields(schema):
+                    raise TaskError('FORM_INVALID', '此 Schema 含复杂结构，请继续使用高级 JSON 编辑。')
+                self.original = deepcopy(schema)
+                self.container.clear()
+                self.rows.clear()
+                for name, spec in schema.get('properties', {}).items():
+                    self.add(name, spec, name in schema.get('required', []))
+            else:
+                self.json_editor.set_value(json.dumps(schema, ensure_ascii=False, indent=2))
+            self._active_mode = event.value
+            self._show_mode()
+        except TaskError as exc:
+            self.edit_mode.set_value(self._active_mode)
+            ui.notify(self.title + '：' + str(exc), type='negative')
+        finally:
+            self.on_change, self._changing = callback, False
+        if self.on_mode_change:
+            self.on_mode_change()
+
+    def schema(self):
+        from taskweave.presentation.forms import schema_from_editor
+        return schema_from_editor(self.original, self.raw_rows(), self._active_mode, self.json_editor.value)
+
+    def restore_editor(self, *, rows, mode=None, json_text=None):
+        self._changing = True
+        try:
+            self.restore_rows(rows)
+            if json_text is not None:
+                self.json_editor.set_value(json_text)
+            if mode is not None:
+                self._active_mode = mode
+                self.edit_mode.set_value(mode)
+            self._show_mode()
+        finally:
+            self._changing = False
 
 
 def arrange_context_fields(schema, group, form, host_fields, hidden=()):

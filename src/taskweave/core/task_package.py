@@ -1,7 +1,6 @@
-"""Portable task package v2 structural contract."""
+"""Current portable task package structural contract."""
 
-FORMAT = "taskweave-task-2"
-FORMAT_V3 = "taskweave-task-3"
+FORMAT = "taskweave-task-3"
 ORIGINS = {"ai_generated", "task_export"}
 VALIDATION_STATES = {"DRAFT", "VALIDATED"}
 
@@ -38,19 +37,10 @@ TASK_PACKAGE_SCHEMA = {
                 "document": STEP_DOCUMENT_SCHEMA,
             }, "required": ["key", "validation_state", "document"], "additionalProperties": False,
         }},
-        "contexts": {"type": "array", "items": {"type": "object"}},
-    },
-    "required": ["format", "origin", "task", "steps"],
-    "additionalProperties": False,
-}
-
-TASK_PACKAGE_SCHEMA_V3 = {
-    **TASK_PACKAGE_SCHEMA,
-    "properties": {
-        **TASK_PACKAGE_SCHEMA["properties"],
-        "format": {"const": FORMAT_V3},
         "flow": {"type": "object"},
         "flow_validation_state": {"enum": sorted(VALIDATION_STATES)},
+        "contexts": {"type": "array", "items": {"type": "object"}},
     },
-    "required": [*TASK_PACKAGE_SCHEMA["required"], "flow", "flow_validation_state"],
+    "required": ["format", "origin", "task", "steps", "flow", "flow_validation_state"],
+    "additionalProperties": False,
 }

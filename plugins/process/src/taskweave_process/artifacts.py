@@ -104,7 +104,7 @@ async def _stage_bytes(ctx, name, data):
 
 class FileResultHandler:
     def schema(self):
-        return {'version': 1, 'tables': {}, 'migrations': {}, 'indexes': {}}
+        return {'tables': {}, 'indexes': {}}
 
     def prepare(self, request):
         from jsonschema import Draft202012Validator
@@ -122,7 +122,7 @@ class FileResultHandler:
 class CommandFailureResultHandler:
     """JSON diagnostic declaration reusable under any owning plugin namespace."""
     def schema(self):
-        return {'version': 1, 'tables': {}, 'migrations': {}, 'indexes': {}}
+        return {'tables': {}, 'indexes': {}}
 
     def prepare(self, request):
         from jsonschema import Draft202012Validator

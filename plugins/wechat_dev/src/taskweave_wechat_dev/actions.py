@@ -77,7 +77,7 @@ def cleanup_receipt(value):
 
 
 class JsonHandler:
- def schema(self):return {'version':1,'tables':{},'migrations':{},'indexes':{}}
+ def schema(self):return {'tables':{},'indexes':{}}
  def prepare(self,request):require(isinstance(request.payload,dict),'WECHAT_RESULT_INVALID');return PreparedResult('json',payload=request.payload)
  def parse(self,stored):return stored
  def preview(self,parsed):return {'renderer':'json','data':parsed}

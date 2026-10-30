@@ -5,17 +5,25 @@ from pathlib import Path
 import sqlite3
 from taskweave.core.ports import Scope, StepResult, ResultRequest
 from taskweave.core.validation import TaskError
-from taskweave.infrastructure.storage import uid, Results, migrate
+from taskweave.infrastructure.storage import uid, Results
+from taskweave.infrastructure.sqlite_storage import initialize
 from tests._core_fixture import CoreFixture
 
 class StorageIntegrityTests(CoreFixture):
-    def test_state_only_does_not_create_task_db(self):
+    def test_state_only_run_does_not_write_business_results(self):
         task = self.task()
-        self.confirm(
-            self.step(task, "async def run(ctx, inputs):\n    return ctx.result()\n")
-        )
+        self.confirm(self.step(task, "async def run(ctx, inputs):\n    return ctx.result()\n"))
         self.assertEqual(self.run_task(task)["status"], "SUCCEEDED")
-        self.assertFalse(self.app.repo.task_path(task).exists())
+        # The coordinator prepares the shared database before workers start.
+        with closing(sqlite3.connect(self.app.repo.task_path(task))) as db:
+            self.assertEqual(db.execute("SELECT * FROM step_outputs").fetchall(), [])
+            self.assertEqual(db.execute("SELECT * FROM result_receipts").fetchall(), [])
+
+    def test_empty_result_persistence_does_not_initialize_database(self):
+        task = self.task()
+        results = Results(self.home, Scope(task, uid(), uid(), uid()), self.app.registry)
+        self.assertEqual(results.persist(StepResult()), [])
+        self.assertFalse(results.path.exists())
 
     def test_custom_table_isolation_parsing_cleanup(self):
         source = 'async def run(ctx, inputs):\n    return ctx.result(outputs=[ctx.output("demo.table", "items", [{"value": inputs["v"]}])])\n'
@@ -45,27 +53,15 @@ class StorageIntegrityTests(CoreFixture):
         self.assertFalse(self.app.repo.task_path(tasks[0]).exists())
         self.assertTrue(self.app.repo.task_path(tasks[1]).exists())
 
-    def test_migration_failure_rolls_back_and_unknown_version_rejected(self):
-        path = self.home / "migration-test.db"
+    def test_existing_unknown_schema_is_preserved(self):
+        path = self.home / "unknown.db"
         with closing(sqlite3.connect(path)) as db:
-            db.executescript(
-                'CREATE TABLE original(value TEXT); INSERT INTO original VALUES("kept"); PRAGMA user_version=1;'
-            )
-            with self.assertRaises(sqlite3.Error):
-                migrate(
-                    db,
-                    path,
-                    2,
-                    {2: "ALTER TABLE original ADD COLUMN added TEXT; BAD SQL;"},
-                )
-            self.assertEqual(db.execute("PRAGMA user_version").fetchone()[0], 1)
-            self.assertEqual(
-                [r[1] for r in db.execute("PRAGMA table_info(original)")], ["value"]
-            )
-            self.assertTrue(Path(str(path) + ".v1.bak").exists())
-            db.execute("PRAGMA user_version=99")
-            with self.assertRaises(TaskError):
-                migrate(db, path, 2, {2: ""})
+            db.executescript('CREATE TABLE original(value TEXT); INSERT INTO original VALUES("kept");')
+        before = path.read_bytes()
+        with self.assertRaises(TaskError) as error:
+            initialize(path, "task-data")
+        self.assertEqual(error.exception.code, "SCHEMA_MAINTENANCE_REQUIRED")
+        self.assertEqual(path.read_bytes(), before)
 
     def test_result_save_failure_does_not_retry_business(self):
         task = self.task()

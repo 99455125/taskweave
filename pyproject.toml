@@ -27,9 +27,13 @@ ocr = ["taskweave-ocr"]
 database = ["taskweave-tidb"]
 utility = ["taskweave-utility"]
 files = ["taskweave-file"]
+pdf = ["taskweave-pdf"]
+dataset = ["taskweave-dataset"]
+excel = ["taskweave-excel"]
 process = ["taskweave-process"]
 ssh = ["taskweave-ssh"]
 baota_dashboard = ["taskweave-baota-dashboard"]
+nacos = ["taskweave-nacos"]
 wordpress = ["taskweave-wordpress"]
 uniapp = ["taskweave-uniapp"]
 wechat_dev = ["taskweave-wechat-dev"]
@@ -39,6 +43,7 @@ mcp = [
 ]
 
 [dependency-groups]
+test-pdf = ["pypdf>=6,<7"]
 build = ["pyinstaller>=6.11,<7"]
 
 [tool.uv.sources]
@@ -48,9 +53,13 @@ taskweave-ocr = { path = "plugins/ocr", editable = true }
 taskweave-tidb = { path = "plugins/tidb", editable = true }
 taskweave-utility = { path = "plugins/utility", editable = true }
 taskweave-file = { path = "plugins/file", editable = true }
+taskweave-pdf = { path = "plugins/pdf", editable = true }
+taskweave-dataset = { path = "plugins/dataset", editable = true }
+taskweave-excel = { path = "plugins/excel", editable = true }
 taskweave-process = { path = "plugins/process", editable = true }
 taskweave-ssh = { path = "plugins/ssh", editable = true }
 taskweave-baota-dashboard = { path = "plugins/baota_dashboard", editable = true }
+taskweave-nacos = { path = "plugins/nacos", editable = true }
 taskweave-wordpress = { path = "plugins/wordpress", editable = true }
 taskweave-uniapp = { path = "plugins/uniapp", editable = true }
 taskweave-wechat-dev = { path = "plugins/wechat_dev", editable = true }

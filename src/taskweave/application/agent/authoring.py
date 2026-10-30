@@ -5,7 +5,7 @@ from dataclasses import asdict
 
 from taskweave.application.agent.projection import contract_projection, snapshot_view
 from taskweave.application.prompts import DOMAIN_RULES, EXECUTABLE_STEP_RULES
-from taskweave.core.task_package import STEP_DOCUMENT_SCHEMA, TASK_PACKAGE_SCHEMA, TASK_PACKAGE_SCHEMA_V3
+from taskweave.core.task_package import STEP_DOCUMENT_SCHEMA, TASK_PACKAGE_SCHEMA
 from taskweave.core.task_flow import FLOW_VERSION, MAX_DEPTH, MAX_ITERATIONS
 from taskweave.core.validation import SAFE_BUILTINS, TaskError, fingerprint, normalize_step
 
@@ -15,9 +15,10 @@ FLOW_GUIDE = {
     "nodes": {
         "sequence": {"id": "root", "kind": "sequence", "children": []},
         "action": {"id": "action-node", "kind": "action", "step_id": "existing-step-id-or-package-key"},
-        "if": {"id": "branch", "kind": "if", "condition": {"op": "eq", "left": {"literal": 1}, "right": {"literal": 1}},
-               "then": {"id": "yes", "kind": "sequence", "children": []},
-               "else": {"id": "no", "kind": "sequence", "children": []}},
+        "if": {"id": "branch", "kind": "if", "parallel": False,
+               "cases": [{"id": "match", "condition": {"op": "eq", "left": {"literal": 1}, "right": {"literal": 1}},
+                          "body": {"id": "yes", "kind": "sequence", "children": []}}],
+               "default": {"id": "fallback", "body": {"id": "no", "kind": "sequence", "children": []}}},
         "foreach": {"id": "items", "kind": "foreach", "items": {"ref": {"source": "task", "pointer": "/items"}},
                     "max_items": 1000, "body": {"id": "body", "kind": "sequence", "children": []}},
         "loop": {"id": "repeat", "kind": "loop", "mode": "while", "max_iterations": 100,
@@ -27,7 +28,7 @@ FLOW_GUIDE = {
     },
     "rules": [
         "flow 顶层为 version/root；root 为 sequence；节点 id 唯一，每个动作步骤只放置一次。",
-        "if 使用 then/else 分支；loop.mode 为 while 或 until，循环上限显式配置。",
+        "if 使用 cases/default 分支；parallel=false 取首个匹配分支，parallel=true 执行全部匹配分支，没有匹配时执行 default；loop.mode 为 while 或 until，循环上限显式配置。",
         "操作数为 literal 或 ref；ref.source 为 task/environment/step/loop/branch，pointer 为 JSON Pointer。",
         "loop ref 必须给所属 node_id 与 field=item/index/state；只能引用当前作用域已完成的动作。",
         "条件 op 为 eq/ne/gt/gte/lt/lte/contains、exists/empty、all/any/not；缺失不是 null，true 不是数字。",
@@ -51,7 +52,7 @@ FLOW_GUIDE = {
         'loop': {'ref': {'source': 'loop', 'node_id': 'enclosing-loop', 'field': 'item', 'pointer': ''}},
         'branch': {'ref': {'source': 'branch', 'node_id': 'preceding-branch', 'output': 'value', 'pointer': ''}},
     },
-    'branch_outputs': {'outputs': {'value': {'then': {'literal': 1}, 'else': {'literal': 2}}}},
+    'branch_outputs': {'outputs': {'value': {'match': {'literal': 1}, 'fallback': {'literal': 2}}}},
     'notes': ['all/any 的 conditions 必须为非空列表；not 使用 condition；exists/empty 使用 value；二元比较使用 left/right。',
               '条件循环 state_initial/state_update 为变量名到操作数的映射；while 在循环体前判断，until 在体后判断。',
               'step ref 的 item_pointer 与 loop_node_id 可选择嵌套循环项；采用执行器现行作用域校验。'],
@@ -113,7 +114,7 @@ class ExternalAuthoring:
                                 "ctx.output(handler_id, name, payload)", "ctx.log(message)", "ctx.cancelled()"],
                         "builtins": sorted(SAFE_BUILTINS)},
             "step_schema": STEP_DOCUMENT_SCHEMA,
-            "task_package_schemas": {"taskweave-task-2": TASK_PACKAGE_SCHEMA, "taskweave-task-3": TASK_PACKAGE_SCHEMA_V3},
+            "task_package_schema": TASK_PACKAGE_SCHEMA,
             "flow": FLOW_GUIDE,
             "capabilities": [self.discovery.describe("capability", key, sections=["schemas"]) for key in selected],
             "plugins": [{"id": plugin.manifest()["id"], **asdict(contribution),

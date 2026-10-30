@@ -63,14 +63,17 @@ class SettingsPage(Page):
                     ui.label('在运行桥接命令的 Python 环境安装 taskweave[mcp]；源码开发可用 uv run --extra mcp。')
                     config = json.dumps(connection_config(self.controller.workspace_home), ensure_ascii=False, indent=2)
                     ui.code(config, language='json').classes('w-full')
-                    self.button('复制 MCP 配置', lambda: ui.clipboard.write(config))
+                    async def copy_config():
+                        ui.clipboard.write(config)
+                        ui.notify('MCP 配置已复制')
+                    self.button('复制 MCP 配置', copy_config)
                     ui.label('将配置添加到所用 AI 客户端的 MCP 设置；配置中不含工作空间访问令牌。')
                     import sys
                     if getattr(sys, 'frozen', False):
                         ui.label('桌面打包版需另安装 taskweave[mcp] 命令行桥接；配置使用 PATH 中的 taskweave。')
-                    destination = ui.input('Skill 安装目录', value=str(Path.home() / '.agents' / 'skills' / 'taskweave')).props('outlined dense').classes('w-full')
+                    skill_destination = ui.input('Skill 安装目录', value=str(Path.home() / '.agents' / 'skills' / 'taskweave')).props('outlined dense').classes('w-full')
                     async def export_skill():
-                        result = install_skill(destination.value)
+                        result = install_skill(skill_destination.value)
                         ui.notify('Skill 已安装' if result['status'] == 'installed' else 'Skill 已是当前版本')
                     self.button('安装 / 导出 TaskWeave Skill', export_skill)
                 panels['external_ai'] = external_panel
@@ -168,12 +171,12 @@ class SettingsPage(Page):
                     bind(destination, 'destination')
 
                     async def migrate_workspace():
-                        with ui.dialog() as confirmation, ui.card().classes("w-full max-w-xl"):
-                            ui.label("迁移工作空间？").classes("text-lg")
-                            ui.label("迁移前必须结束全部执行实例。复制并校验完成后，下次启动使用新目录并删除旧目录。")
-                            with ui.row().classes("gap-2"):
-                                ui.button("取消", on_click=lambda: confirmation.submit(False)).props("outline")
-                                ui.button("确认迁移", on_click=lambda: confirmation.submit(True)).props("outline text-color=red-7")
+                        with ui.dialog() as confirmation, ui.card().classes("tw-confirm-dialog"):
+                            ui.label("迁移工作空间？").classes("tw-confirm-title")
+                            ui.label("迁移前必须结束全部执行实例。复制并校验完成后，下次启动使用新目录并删除旧目录。").classes("tw-confirm-description")
+                            with ui.row().classes("tw-confirm-actions"):
+                                ui.button("取消", on_click=lambda: confirmation.submit(False)).props("outline").classes("tw-confirm-cancel")
+                                ui.button("确认迁移", on_click=lambda: confirmation.submit(True)).props("outline color=negative").classes("tw-confirm-danger")
                         result = await session.migrate(bool(await confirmation))
                         if result is None:
                             return

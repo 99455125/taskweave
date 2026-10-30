@@ -263,7 +263,7 @@ class WorkbenchAcceptance(unittest.TestCase):
                         expect(page.get_by_text('调试状态：失败', exact=True)).to_be_visible(timeout=15000)
                         self.assertEqual(len(provider.requests), 1)
                         page.screenshot(path=str(evidence / 'failed-debug.png'), full_page=True)
-                        repair_note = page.get_by_label("AI 补充说明（可选）", exact=True)
+                        repair_note = page.get_by_label("本轮修复要求", exact=True)
                         if not repair_note.is_visible():
                             page.get_by_role("button", name="展开调试", exact=True).click()
                         repair_note.fill("网页保留页面")
@@ -272,7 +272,7 @@ class WorkbenchAcceptance(unittest.TestCase):
                         expect(page.get_by_label("复制到网页 AI 的内容", exact=True)).to_be_visible()
                         self.assertIn('网页保留页面', page.get_by_label("复制到网页 AI 的内容", exact=True).input_value())
                         page.get_by_role("dialog").filter(has=page.get_by_label("复制到网页 AI 的内容", exact=True)).get_by_role("button", name="关闭", exact=True).click()
-                        supplement = page.get_by_label("AI 补充说明（可选）", exact=True)
+                        supplement = page.get_by_label("本轮修复要求", exact=True)
                         supplement.click()
                         supplement.press("ControlOrMeta+A")
                         supplement.press_sequentially("继续当前页面，不重新打开")

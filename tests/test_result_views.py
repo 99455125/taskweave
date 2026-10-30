@@ -8,6 +8,19 @@ from taskweave.core.result_views import validate_views, BUILTIN_VIEWS
 
 
 class ResultViews(unittest.TestCase):
+    def test_image_view_can_reference_saved_output_without_wrapping_scalar_data(self):
+        from taskweave.core.ports import ResultRequest
+        output = ResultRequest('image.handler', 'page', {})
+        validate_views(7, [{'title': '截图', 'renderer': 'core.image', 'output': 'page'}],
+                       BUILTIN_VIEWS, [output])
+        for view in [
+            {'title': '截图', 'renderer': 'core.image', 'output': 'missing'},
+            {'title': '截图', 'renderer': 'core.image', 'output': 'page', 'pointer': ''},
+            {'title': '截图', 'renderer': 'core.json', 'output': 'page'},
+        ]:
+            with self.assertRaises(TaskError):
+                validate_views(7, [view], BUILTIN_VIEWS, [output])
+
     def test_saved_views_and_dependency_output_survive_reopen(self):
         with tempfile.TemporaryDirectory() as home:
             with Application(home) as app:

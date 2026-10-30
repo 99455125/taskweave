@@ -19,6 +19,13 @@ class Application:
             key = params['task_id']
             return [] if key == 'empty' else [{'step_id': key + str(i), 'name': str(i),
                 'validation_state': 'DRAFT' if key == 'draft' else 'VALIDATED'} for i in (1, 2)]
+        if operation == 'task.get':
+            return {'input_schema_json': '{"type":"object","properties":{"count":{"type":"integer"}}}'}
+        if operation == 'environment.list': return []
+        if operation == 'task.flow.get':
+            key = params['task_id']
+            return {'version': 2, 'root': {'id': 'root', 'kind': 'sequence', 'children': [
+                {'id': key + str(i), 'kind': 'action', 'step_id': key + str(i)} for i in (1, 2)]}}
         return {'run_id': 'created'}
 
 
@@ -45,15 +52,15 @@ class RunCreationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(flow.consume_pending(), (False, None))
 
     async def test_create_start_consumes_plain_input_draft_and_updates_selection(self):
-        from taskweave.presentation.debug import TrialInputDraft
+        from taskweave.presentation.startup_inputs import StartupInputDraft
         flow = self.creation
         flow.open('b')
         flow.select_start('b2')
-        draft = TrialInputDraft()
-        draft.task.configure({'type': 'object', 'properties': {'x': {'type': 'integer'}}, 'required': ['x']}, {})
-        draft.step.configure({'type': 'object', 'properties': {'flag': {'type': 'boolean'}}}, {})
-        draft.step.change('flag', False)
-        draft.set_environment('env')
+        draft = StartupInputDraft()
+        draft.configure({'type': 'object', 'properties': {'x': {'type': 'integer'}}, 'required': ['x']},
+            [{'step_id': 'b2', 'input_schema': {'type': 'object', 'properties': {'flag': {'type': 'boolean'}}}}], {})
+        draft.steps['b2'].change('flag', False)
+        draft.environment_id = 'env'
         flow.input_draft = draft
         self.state.task_ids = ['a']
         await flow.submit()
@@ -64,6 +71,24 @@ class RunCreationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(start[1]['start_step_id'], 'b2')
         self.assertEqual(start[1]['mode'], 'ALL')
         self.assertTrue(start[1]['command_id'])
+
+    async def test_all_step_manual_inputs_submit_by_step_and_task_switch_retains_drafts(self):
+        flow = self.creation
+        flow.open('a')
+        self.assertTrue(hasattr(flow.input_draft, 'steps'), 'creation needs drafts for every step')
+        steps = [{'step_id': 'a1', 'input_schema': {'properties': {'value': {'type': 'integer'}}}},
+                 {'step_id': 'a2', 'input_schema': {'properties': {'value': {'type': 'integer'}}}}]
+        flow.input_draft.configure({'properties': {}}, steps, {})
+        flow.input_draft.steps['a1'].change('value', 7)
+        flow.input_draft.steps['a2'].change('value', 9)
+        flow.select_task('b')
+        flow.select_task('a')
+        self.assertEqual(flow.input_draft.step_values(), {'a1': {'value': 7}, 'a2': {'value': 9}})
+        flow.select_start('a2')
+        await flow.submit()
+        self.assertEqual(self.application.calls[-2][1]['step_inputs'], {'a2': {'value': 9}})
+        await flow.submit(from_flow_start=True)
+        self.assertEqual(self.application.calls[-2][1]['step_inputs'], {'a1': {'value': 7}, 'a2': {'value': 9}})
 
     async def test_create_failure_keeps_selection_and_start_failure_keeps_created_run(self):
         flow = self.creation

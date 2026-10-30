@@ -67,7 +67,7 @@ class ContextMetadataTests(unittest.TestCase):
         self.assertNotIn('views_json',columns)
         stored=self.repo.get_step_context_capture(context['context_id'],context['captures'][0]['capture_id'])
         self.assertEqual(stored['items'],[ITEM])
-        self.assertEqual(self.repo.query('PRAGMA user_version')[0]['user_version'],17)
+        self.assertEqual(self.repo.query('PRAGMA user_version')[0]['user_version'], 0)
 
     def test_plan_name_and_notes_edit_preserves_capture_and_survives_reopen(self):
         plans = PlanRepository(self.repo)

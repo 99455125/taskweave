@@ -42,13 +42,13 @@ class BundleTests(unittest.TestCase):
                  patch('sys._MEIPASS', str(contents / 'Frameworks'), create=True):
                 self.assertEqual(bundled_browser_path(), browsers.resolve())
 
-    def test_new_workspace_enables_all_eleven(self):
+    def test_new_workspace_enables_all_bundled_plugins(self):
         with tempfile.TemporaryDirectory() as home:
             self.assertTrue(initialize_bundled_plugins(Path(home), BUNDLED_PLUGINS))
             p = Path(home) / 'plugins.json'
             self.assertEqual(set(json.loads(p.read_text())['enabled']), {
                 'playwright', 'ocr', 'tidb', 'utility', 'file', 'process', 'ssh',
-                'baota_dashboard', 'wordpress', 'uniapp', 'wechat_dev',
+                'baota_dashboard', 'wordpress', 'uniapp', 'wechat_dev', 'pdf', 'dataset', 'excel', 'nacos',
             })
             self.assertEqual(p.stat().st_mode & 0o777, 0o600)
 

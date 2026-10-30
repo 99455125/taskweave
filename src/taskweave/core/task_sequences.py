@@ -20,13 +20,18 @@ def _source(source, preceding):
         _pointer(source["pointer"])
     elif kind == "output" and set(source) in ({"kind", "node_id", "step_id", "output", "pointer"},
                                               {"kind", "node_id", "step_id", "output", "pointer",
-                                               "item_pointer", "loop_node_id"}):
-        if source["node_id"] not in preceding or not isinstance(source["step_id"], str) or not source["step_id"]:
+                                               "item_pointer", "loop_node_id"},
+                                              {"kind", "node_id", "step_id", "output", "pointer",
+                                               "item_pointer", "loop_node_id", "projection_scope"}):
+        if not isinstance(source['node_id'], str) or source["node_id"] not in preceding or not isinstance(source["step_id"], str) or not source["step_id"]:
             raise TaskError("SEQUENCE_FORWARD_REFERENCE")
         if not isinstance(source["output"], str) or not source["output"]:
             raise TaskError("SEQUENCE_SOURCE_INVALID")
         _pointer(source["pointer"])
         if "item_pointer" in source:
+            scope = source.get('projection_scope', 'task')
+            if not isinstance(scope, str) or scope not in {'task', 'combination'}:
+                raise TaskError('SEQUENCE_SOURCE_INVALID')
             _pointer(source["item_pointer"])
             if (source["pointer"] or not isinstance(source["loop_node_id"], str)
                     or not source["loop_node_id"]):
@@ -35,13 +40,15 @@ def _source(source, preceding):
         raise TaskError("SEQUENCE_SOURCE_INVALID")
 
 
-def validate_definition(name, nodes, input_schema):
+def validate_definition(name, nodes, input_schema, flow=None):
     if not isinstance(name, str) or not name.strip():
         raise TaskError("SEQUENCE_NAME_INVALID")
     check_schema(input_schema)
     if not isinstance(nodes, list) or not nodes:
         raise TaskError("SEQUENCE_EMPTY")
     preceding = set()
+    all_ids = {node.get("node_id") for node in nodes if isinstance(node, dict)
+               and isinstance(node.get("node_id"), str)}
     for node in nodes:
         if not isinstance(node, dict) or set(node) != {"node_id", "task_id", "environment_id", "inputs", "step_inputs"}:
             raise TaskError("SEQUENCE_NODE_INVALID")
@@ -55,14 +62,25 @@ def validate_definition(name, nodes, input_schema):
         for target, source in node["inputs"].items():
             if not isinstance(target, str) or not target:
                 raise TaskError("SEQUENCE_SOURCE_INVALID")
-            _source(source, preceding)
+            _sequence_source(source, all_ids if flow is not None else preceding)
         for step_id, values in node["step_inputs"].items():
             if not isinstance(step_id, str) or not step_id or not isinstance(values, dict):
                 raise TaskError("SEQUENCE_SOURCE_INVALID")
             for target, source in values.items():
                 if not isinstance(target, str) or not target:
                     raise TaskError("SEQUENCE_SOURCE_INVALID")
-                _source(source, preceding)
+                _sequence_source(source, all_ids if flow is not None else preceding)
         preceding.add(node_id)
     dumps(nodes)
+    if flow is not None:
+        from taskweave.core.sequence_flow import validate_sequence_flow
+        validate_sequence_flow(flow, nodes)
     return nodes
+
+
+def _sequence_source(source, preceding):
+    if isinstance(source, dict) and source.get("kind") in {"loop", "branch"}:
+        from taskweave.core.sequence_flow import source_operand
+        source_operand(source)
+        return
+    _source(source, preceding)

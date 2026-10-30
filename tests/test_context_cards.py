@@ -1,11 +1,13 @@
 """Context edits are flushed before actions; stale target refreshes cannot win."""
 
 import asyncio
+import json
 import unittest
 from unittest.mock import AsyncMock
 
 from nicegui import ui
 from nicegui.client import Client
+from nicegui.events import ValueChangeEventArguments
 from nicegui.page import page
 
 from taskweave.desktop.contexts import (
@@ -127,6 +129,53 @@ class ContextCardTests(unittest.TestCase):
             self.assertFalse(stale.value)
         self.run_scenario(scenario)
 
+    def test_context_reader_exposes_elements_recorded_actions_and_field_details(self):
+        from copy import deepcopy
+        from types import SimpleNamespace
+        from taskweave.desktop.contexts import show_context_preview
+
+        async def scenario():
+            element={'tag':'button','name':'提交通用示例','role':'button','visible':True,
+                     'enabled':False,'selector':{'kind':'role','value':'button','name':'提交通用示例'},
+                     'attributes':{'data-testid':'submit-order'}}
+            capture={'items':[
+                {'source':'playwright.page','content':json.dumps({'title':'通用示例页','elements':[element],
+                    'frames':[{'url':'https://example.com/frame','elements':[dict(element,name='框架按钮')]}]})},
+                {'source':'playwright.recording','content':json.dumps({'events':[{'sequence':1,'kind':'click','target':element}]})},
+                {'source':'plugin_b.schema','content':json.dumps({'table':'orders','columns':[{'name':'order_no','type':'string'}]})}],
+                'views':[]}
+            original=deepcopy(capture)
+            dialog=await show_context_preview('开发材料',capture,{},AsyncMock(),redact_on_display=False)
+            labels=[getattr(e,'label','') for e in dialog.descendants()]
+            self.assertIn('采集数据',labels)
+            self.assertIn('原文',labels)
+            tables=[e for e in dialog.descendants() if 'tw-context-data-table' in e.classes]
+            self.assertTrue(any(row['name']=='提交通用示例' for table in tables for row in table.rows))
+            self.assertTrue(any(row['name']=='框架按钮' for table in tables for row in table.rows))
+            self.assertTrue(any(row.get('action')=='click' for table in tables for row in table.rows))
+            table=next(t for t in tables if t.rows[0]['name']=='提交通用示例')
+            next(v.handler for v in table._event_listeners.values() if v.type=='rowClick')(
+                SimpleNamespace(args=[None,table.rows[0],0]))
+            trees=[e for e in self.client.elements.values() if 'tw-context-field-tree' in e.classes]
+            self.assertTrue(any('data-testid' in json.dumps(t._props['nodes'],ensure_ascii=False) for t in trees))
+            self.assertTrue(any('order_no' in json.dumps(t._props['nodes'],ensure_ascii=False) for t in trees))
+            self.assertEqual(capture,original)
+        self.run_scenario(scenario)
+
+    def test_structured_context_reader_keeps_display_redaction_and_plain_text(self):
+        from taskweave.desktop.contexts import show_context_preview
+        async def scenario():
+            capture={'items':[
+                {'source':'plugin_b.schema','content':json.dumps({'password':'fixture-sensitive-value','columns':['order_no']})},
+                {'source':'plugin_b.notes','content':'手动核对通用示例状态'}],'views':[]}
+            dialog=await show_context_preview('材料',capture,{},AsyncMock())
+            rendered=' '.join(str(getattr(e,'content',''))+json.dumps(e._props,ensure_ascii=False) for e in dialog.descendants())
+            self.assertNotIn('fixture-sensitive-value',rendered)
+            self.assertIn('[REDACTED]',rendered)
+            self.assertIn('手动核对通用示例状态',rendered)
+            self.assertIn('order_no',rendered)
+        self.run_scenario(scenario)
+
     def test_group_card_shows_summary_and_has_no_stacked_editors(self):
         async def scenario():
             entry = dict(context_id='one', provider_id='test.page', name='名称', context_notes='说明', captures=[{'capture_id':'capture-one','label': '项一'}])
@@ -137,6 +186,114 @@ class ContextCardTests(unittest.TestCase):
             self.assertIn('项一', [item.text for item in cards.cards['one'].descendants() if getattr(item, 'text', None)])
             self.assertEqual(len(entry['captures']), 1)
             self.assertNotIn('editors', cards.__dict__)
+            cards.panel.delete()
+        self.run_scenario(scenario)
+
+    def test_saved_capture_keeps_preview_choice_in_header_and_empty_notes_out_of_body(self):
+        async def scenario():
+            capture = dict(capture_id='capture-one', label='项一', has_preview=True,
+                           source_page='planning', items=[{'content': '原始证据'}])
+            group = dict(context_id='one', name='名称', captures=[capture])
+            cards = ContextCards([group], AsyncMock(), AsyncMock(), recollect=AsyncMock(),
+                                 update_capture=AsyncMock(), preview_capture=AsyncMock())
+            elements = list(cards.cards['one'].descendants())
+            carry = next(e for e in elements if getattr(e, 'text', '') == '携带预览')
+            preview = next(e for e in elements if e._props.get('icon') == 'visibility')
+            self.assertIs(carry.parent_slot.parent, preview.parent_slot.parent)
+            actions = carry.parent_slot.parent.parent_slot.parent
+            self.assertIn('tw-context-capture-actions', actions.classes)
+            self.assertIn('tw-context-capture-header', actions.parent_slot.parent.classes)
+            edit = next(e for e in elements if getattr(e, 'text', '') == '编辑说明')
+            metadata = next(e for e in elements if getattr(e, 'text', '') == '规划采集')
+            self.assertIs(metadata.parent_slot.parent, edit.parent_slot.parent.parent_slot.parent)
+            self.assertFalse(any('tw-context-staged-note-text' in e.classes for e in elements))
+            self.assertFalse(any('tw-context-capture-preview' in e.classes for e in elements))
+            self.assertNotIn('暂无组说明', [getattr(e, 'text', '') for e in elements])
+            group_edit = next(e for e in elements if getattr(e, 'text', '') == '编辑组说明')
+            recollect = next(e for e in elements if getattr(e, 'text', '') == '继续采集')
+            self.assertIs(group_edit.parent_slot.parent, recollect.parent_slot.parent)
+            self.assertIn('justify-end', group_edit.parent_slot.parent.classes)
+            cards.panel.delete()
+        self.run_scenario(scenario)
+
+    def test_saved_capture_shows_read_only_notes_and_summary_without_preview_action(self):
+        async def scenario():
+            group = dict(context_id='one', name='名称', context_notes='组说明', captures=[
+                dict(capture_id='capture-one', label='项一', operation_notes='打开通用示例查询',
+                     items=[{'content': '原始证据'}]),
+            ])
+            cards = ContextCards([group], AsyncMock(), AsyncMock())
+            texts = [getattr(e, 'text', '') for e in cards.cards['one'].descendants()]
+            self.assertIn('打开通用示例查询', texts)
+            self.assertIn('原始证据', texts)
+            self.assertIn('组说明', texts)
+            self.assertNotIn('已采集', texts)
+            self.assertNotIn('编辑说明', texts)
+            cards.panel.delete()
+        self.run_scenario(scenario)
+
+    def test_saved_capture_actions_keep_the_selected_capture_identity(self):
+        async def scenario():
+            first = dict(capture_id='first', label='第一项', has_preview=True, send_preview=False)
+            second = dict(capture_id='second', label='第二项', has_preview=True, send_preview=False)
+            group = dict(context_id='group', name='名称', captures=[first, second])
+            updated, previewed, moved = [], [], []
+
+            async def update(selected_group, selected_capture, label, **metadata):
+                updated.append((selected_group, selected_capture, label, metadata))
+
+            def preview(selected_group, selected_capture):
+                previewed.append((selected_group, selected_capture))
+
+            def move(selected_group, selected_capture, direction):
+                moved.append((selected_group, selected_capture, direction))
+
+            cards = ContextCards([group], AsyncMock(), AsyncMock(), update_capture=update,
+                                 preview_capture=preview, move_capture=move, delete_capture=AsyncMock())
+            rows = [e for e in cards.cards['group'].descendants() if 'tw-context-capture-row' in e.classes]
+            elements = list(rows[0].descendants())
+            carry = next(e for e in elements if getattr(e, 'text', '') == '携带预览')
+            await carry._change_handlers[-1](ValueChangeEventArguments(
+                sender=carry, client=self.client, value=True, previous_value=False))
+            self.assertEqual(updated, [(group, first, '第一项', {'send_preview': True})])
+            self.assertTrue(first['send_preview'])
+            self.assertFalse(second['send_preview'])
+            self.assertTrue(carry.enabled)
+            preview_button = next(e for e in elements if e._props.get('icon') == 'visibility')
+            next(e.handler for e in preview_button._event_listeners.values() if e.type == 'click')(None)
+            move_down = next(e for e in elements if getattr(e, 'text', '') == '下移')
+            next(e.handler for e in move_down.parent_slot.parent._event_listeners.values() if e.type == 'click')(None)
+            self.assertEqual(previewed, [(group, first)])
+            self.assertEqual(moved, [(group, first, 'down')])
+            self.assertIn('改名', [getattr(e, 'text', '') for e in elements])
+            self.assertIn('删除采集项', [getattr(e, 'text', '') for e in elements])
+            cards.panel.delete()
+        self.run_scenario(scenario)
+
+    def test_saved_preview_choice_ignores_success_after_owner_changes(self):
+        async def scenario():
+            started, finish = asyncio.Event(), asyncio.Event()
+            active = True
+            capture = dict(capture_id='one', label='项一', has_preview=True, send_preview=False)
+            group = dict(context_id='group', name='名称', captures=[capture])
+
+            async def update(*args, **kwargs):
+                started.set()
+                await finish.wait()
+
+            cards = ContextCards([group], AsyncMock(), AsyncMock(), update_capture=update,
+                                 is_active=lambda: active)
+            carry = next(e for e in cards.cards['group'].descendants()
+                         if getattr(e, 'text', '') == '携带预览')
+            saving = asyncio.create_task(carry._change_handlers[-1](ValueChangeEventArguments(
+                sender=carry, client=self.client, value=True, previous_value=False)))
+            await started.wait()
+            self.assertFalse(carry.enabled)
+            active = False
+            finish.set()
+            await saving
+            self.assertFalse(capture['send_preview'])
+            self.assertFalse(carry.enabled)
             cards.panel.delete()
         self.run_scenario(scenario)
 

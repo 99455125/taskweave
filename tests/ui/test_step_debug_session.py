@@ -193,6 +193,147 @@ class StepDebugSessionTests(unittest.TestCase):
 
         asyncio.run(scenario())
 
+    def test_history_choices_filter_step_and_show_frozen_code_without_overwrite(self):
+        import json
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        client = Client(page('/debug-history-choices'))
+        async def scenario():
+            with client:
+                identity = ('task', 'step', 0, 0)
+                rows = [
+                    {'run_id': 'older', 'trial_step_id': 'step', 'status': 'FAILED', 'started_at': '2026-10-23T01:00:00Z'},
+                    {'run_id': 'other-step', 'trial_step_id': 'other', 'status': 'FAILED', 'started_at': ''},
+                    {'run_id': 'formal', 'trial_step_id': None, 'status': 'SUCCEEDED', 'started_at': ''},
+                    {'run_id': 'latest', 'trial_step_id': 'step', 'status': 'SUCCEEDED', 'started_at': '2026-10-24T01:00:00Z'}]
+                controller = SimpleNamespace(call=AsyncMock(return_value=rows))
+                code = ui.textarea(value='unsaved draft')
+                panel = StepDebugPanel(MagicMock(), controller, lambda: identity, lambda _: 'latest', lambda: None,
+                    page=lambda: 'editor', edit_controls=lambda: {'code': code}, state=DebugState())
+                panel.history_control = ui.select({})
+                run = {'run_id': 'latest', 'status': 'SUCCEEDED', 'definition_hash': 'actual-hash',
+                       'definition_json': json.dumps({'steps': [{'step_id': 'step', 'step_content': 'frozen source'}]})}
+                await panel.refresh_history_options(identity, run)
+                self.assertEqual(list(panel.history_control.options), ['latest', 'older'])
+                self.assertEqual(panel.history_control.value, 'latest')
+                await panel.refresh_history_options(identity, run)
+                controller.call.assert_awaited_once_with('run.list', task_id='task')
+                panel.render_execution_baseline(run, 'step')
+                self.assertTrue(any(isinstance(e, ui.code) and e.content == 'frozen source' for e in client.elements.values()))
+                self.assertEqual(code.value, 'unsaved draft')
+        try:
+            asyncio.run(scenario())
+        finally:
+            client.delete()
+
+    def test_history_selection_preserves_draft_and_uses_existing_run_only(self):
+        async def scenario():
+            identity = ('task', 'step', 0, 0)
+            trials = {'step': 'latest'}
+            code = SimpleNamespace(value='unsaved draft')
+            controller = SimpleNamespace(call=AsyncMock(return_value={'task_id': 'task', 'trial_step_id': 'step', 'run_id': 'older'}))
+            state = DebugState(feedback={'attempt_id': 'latest-attempt'}, feedback_run_id='latest', removed_feedback={'failed_action'})
+            panel = StepDebugPanel(MagicMock(), controller, lambda: identity, lambda key: trials.get(key), lambda: None,
+                page=lambda: 'editor', edit_controls=lambda: {'code': code}, trials=trials, state=state)
+            panel.refresh_trial = AsyncMock()
+            await panel.select_history_run('older')
+            self.assertEqual(trials['step'], 'older')
+            self.assertEqual(code.value, 'unsaved draft')
+            self.assertIsNone(state.feedback)
+            self.assertEqual(state.removed_feedback, set())
+            controller.call.assert_awaited_once_with('run.get', run_id='older')
+            panel.refresh_trial.assert_awaited_once()
+            controller.call.return_value = {'task_id': 'other', 'trial_step_id': 'step', 'run_id': 'foreign'}
+            from taskweave.core.validation import TaskError
+            with self.assertRaises(TaskError):
+                await panel.select_history_run('foreign')
+            self.assertEqual(trials['step'], 'older')
+        asyncio.run(scenario())
+
+    def test_selecting_current_history_record_cancels_an_older_pending_choice(self):
+        async def scenario():
+            release, entered = asyncio.Event(), asyncio.Event()
+            trials = {'step': 'current'}
+            async def lookup(operation, run_id):
+                entered.set()
+                await release.wait()
+                return {'task_id': 'task', 'trial_step_id': 'step', 'run_id': run_id}
+            panel = StepDebugPanel(MagicMock(), SimpleNamespace(call=lookup), lambda: ('task','step',0,0),
+                lambda key: trials.get(key), lambda: None, page=lambda: 'editor',
+                edit_controls=lambda: {'code': object()}, trials=trials, state=DebugState())
+            panel.refresh_trial = AsyncMock()
+            pending = asyncio.create_task(panel.select_history_run('older'))
+            await entered.wait()
+            await panel.select_history_run('current')
+            release.set()
+            await pending
+            self.assertEqual(trials['step'], 'current')
+            panel.refresh_trial.assert_not_awaited()
+        asyncio.run(scenario())
+
+    def test_late_history_selection_cannot_replace_newer_selection(self):
+        async def scenario():
+            release, entered = asyncio.Event(), asyncio.Event()
+            trials = {'step': 'latest'}
+            async def lookup(operation, run_id):
+                if run_id == 'slow':
+                    entered.set()
+                    await release.wait()
+                return {'task_id': 'task', 'trial_step_id': 'step', 'run_id': run_id}
+            panel = StepDebugPanel(MagicMock(), SimpleNamespace(call=lookup), lambda: ('task','step',0,0),
+                lambda key: trials.get(key), lambda: None, page=lambda: 'editor',
+                edit_controls=lambda: {'code': object()}, trials=trials, state=DebugState())
+            panel.refresh_trial = AsyncMock()
+            pending = asyncio.create_task(panel.select_history_run('slow'))
+            await entered.wait()
+            await panel.select_history_run('chosen')
+            release.set()
+            await pending
+            self.assertEqual(trials['step'], 'chosen')
+            panel.refresh_trial.assert_awaited_once()
+        asyncio.run(scenario())
+
+    def test_inline_evidence_can_exclude_and_restore_parts_without_touching_code(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page
+        identity = ('task', 'step', 0, 0)
+        state = DebugState()
+        client = Client(page('/inline-repair-evidence'))
+        try:
+            with client:
+                code = ui.textarea(value='current code')
+                panel = StepDebugPanel(MagicMock(), SimpleNamespace(), lambda: identity, lambda _: 'run', lambda: None,
+                    page=lambda: 'editor', edit_controls=lambda: {'code': code}, state=state)
+                panel.repair_evidence_area = ui.column()
+                panel.repair_button = ui.button('生成修复建议')
+                panel.render_repair_evidence(identity, 'run')
+                self.assertTrue(panel.repair_button.enabled)
+                feedback = {'attempt_id': 'attempt', 'executed_step_content': 'old code',
+                            'failed_action': {'id': 'demo.echo'}, 'failure_snapshots': [{'path': 'local.png'}]}
+                panel.render_repair_evidence(identity, 'run', feedback)
+                self.assertTrue(panel.repair_button.enabled)
+                checkbox = next(e for e in panel.repair_evidence_area.descendants()
+                                if isinstance(e, ui.checkbox) and e.text == '失败快照')
+                checkbox.set_value(False)
+                self.assertEqual(state.removed_feedback, {'failure_snapshots'})
+                checkbox.set_value(True)
+                self.assertEqual(state.removed_feedback, set())
+                self.assertEqual(code.value, 'current code')
+                baseline = next(e for e in panel.repair_evidence_area.descendants()
+                                if getattr(e, 'text', '') == '失败代码与当前代码不同')
+                self.assertTrue(baseline.visible)
+                code.set_value('old code')
+                self.assertFalse(baseline.visible)
+                code.set_value('new draft')
+                self.assertTrue(baseline.visible)
+                panel.render_repair_evidence(identity, 'run')
+                self.assertTrue(panel.repair_button.enabled)
+                self.assertFalse(any(isinstance(e, ui.checkbox) for e in panel.repair_evidence_area.descendants()))
+        finally:
+            client.delete()
+
     def test_poll_stops_after_terminal_run_and_explicit_refresh_still_works(self):
         async def scenario():
             run = dict(run_id="run", status="SUCCEEDED", attempts=[], results=[])
@@ -229,6 +370,34 @@ class StepDebugSessionTests(unittest.TestCase):
                 self.assertEqual(controller.call.await_count, 1)
                 release.set()
                 await pending
+        asyncio.run(scenario())
+
+    def test_success_output_uses_each_attempt_execution_path(self):
+        from taskweave.core.validation import TaskError
+        async def scenario():
+            attempts = [dict(step_id='step', attempt_id=f'a{i}', attempt_no=1, valid=True,
+                             execution_path=f'/root/each/{i}/body/step', status='SUCCEEDED',
+                             error_code=None, error_summary=None) for i in (0, 1)]
+            run = dict(run_id='run', status='SUCCEEDED', attempts=attempts, results=[])
+            async def call(command, **params):
+                if command == 'run.get': return run
+                if command == 'step.list': return [dict(step_id='step', name='逐项处理')]
+                if command == 'run.output':
+                    if params.get('execution_path') is None:
+                        raise TaskError('RESULT_NOT_FOUND')
+                    return {'path': params['execution_path']}
+                raise AssertionError(command)
+            controller = SimpleNamespace(call=AsyncMock(side_effect=call))
+            panel = StepDebugPanel(MagicMock(), controller, lambda: ('task', 'step', 1, 1),
+                lambda _: 'run', lambda: None, page=lambda: 'editor', edit_controls=lambda: True,
+                state=DebugState(), pending_inputs=AsyncMock())
+            panel.trial_area = MagicMock(is_deleted=False)
+            with patch('taskweave.desktop.components.step_debug.ui', MagicMock()) as ui:
+                await panel.refresh_trial()
+                outputs = [item.kwargs['value'] for item in ui.textarea.call_args_list]
+                self.assertEqual(len(outputs), 2)
+                self.assertIn('/root/each/0/body/step', outputs[0])
+                self.assertIn('/root/each/1/body/step', outputs[1])
         asyncio.run(scenario())
 
     def test_success_without_data_does_not_hide_later_failure(self):

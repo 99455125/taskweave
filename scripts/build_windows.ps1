@@ -63,7 +63,7 @@ if (-not $SkipWebView2) {
 
 Push-Location $Root
 try {
-    & uv sync --locked --group build --extra gui --extra browser --extra ocr --extra database --extra utility --extra files
+    & uv sync --locked --group build --extra gui --extra browser --extra ocr --extra database --extra utility --extra nacos --extra files --extra pdf --extra dataset --extra excel
     if ($LASTEXITCODE -ne 0) {
         throw "uv sync 失败，退出码：$LASTEXITCODE"
     }

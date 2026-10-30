@@ -1,6 +1,7 @@
 """Assemble action results using the control tree's iteration boundaries."""
 
 from taskweave.core.validation import TaskError, pointer
+from taskweave.core.task_flow import conditional_branches
 
 
 def _segment(value):
@@ -14,7 +15,7 @@ def _contains(node, step_id):
     if kind == "sequence":
         return any(_contains(child, step_id) for child in node["children"])
     if kind == "if":
-        return _contains(node["then"], step_id) or _contains(node["else"], step_id)
+        return any(_contains(body, step_id) for _, body in conditional_branches(node))
     return _contains(node["body"], step_id)
 
 
@@ -24,7 +25,7 @@ def _contains_node(node, node_id):
     if node["kind"] == "sequence":
         return any(_contains_node(child, node_id) for child in node["children"])
     if node["kind"] == "if":
-        return _contains_node(node["then"], node_id) or _contains_node(node["else"], node_id)
+        return any(_contains_node(body, node_id) for _, body in conditional_branches(node))
     if node["kind"] in {"foreach", "loop"}:
         return _contains_node(node["body"], node_id)
     return False
@@ -60,11 +61,11 @@ def aggregate_output(flow, visits, step_id, output, read_attempt, *, item_pointe
         if record is None or record["status"] not in {"SUCCEEDED", "RUNNING"}:
             raise TaskError("RESULT_NOT_FOUND")
         if kind == "if":
-            branch = record["payload"]["selected"]
-            selected = node[branch]
-            if not _contains(selected, step_id):
-                return None
-            return descend(selected, path + "/" + branch + "/" + _segment(selected["id"]))
+            selected = record["payload"]["selected"]
+            for identity, body in conditional_branches(node):
+                if identity in selected and _contains(body, step_id):
+                    return descend(body, path + "/" + _segment(identity) + "/" + _segment(body["id"]))
+            return None
         if path in active:
             frame = active[path]
             body = node["body"]
@@ -112,15 +113,23 @@ def aggregate_branch_output(flow, visits, node_id, output, read_mapping, *, acti
         if kind == "if":
             selected = record["payload"]["selected"]
             if node["id"] == node_id:
+                if record["status"] != "SUCCEEDED":
+                    raise TaskError("RESULT_NOT_FOUND")
+                if "outputs" in record["payload"]:
+                    if output not in record["payload"]["outputs"]:
+                        raise TaskError("FLOW_REFERENCE_INVALID")
+                    value = record["payload"]["outputs"][output]
+                    return {identity: value[identity] for identity in selected} if node.get("parallel", False) else value
                 try:
-                    mapping = node["outputs"][output][selected]
+                    values = {identity: read_mapping(node["outputs"][output][identity], path, identity)
+                              for identity in selected}
                 except KeyError as exc:
                     raise TaskError("FLOW_REFERENCE_INVALID") from exc
-                return read_mapping(mapping, path, selected)
-            branch = node[selected]
-            if not _contains_node(branch, node_id):
-                return None
-            return descend(branch, path + "/" + selected + "/" + _segment(branch["id"]))
+                return values if node.get("parallel", False) else values[selected[0]]
+            for identity, body in conditional_branches(node):
+                if identity in selected and _contains_node(body, node_id):
+                    return descend(body, path + "/" + _segment(identity) + "/" + _segment(body["id"]))
+            return None
         body = node["body"]
         if path in active:
             index = active[path]["index"]

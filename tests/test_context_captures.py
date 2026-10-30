@@ -80,29 +80,3 @@ class ContextCaptureTests(unittest.TestCase):
             self.assertEqual([item['capture_id'] for item in repo.list_step_contexts(step['step_id'])[0]['captures']], [second['capture_id'],third['capture_id']])
             self.assertEqual(repo.get_step_context_capture(group['context_id'], second['capture_id'])['views'], [{'title': '2'}])
             self.assertEqual(len(repo.list_step_contexts(step['step_id'])), 1)
-
-    def test_legacy_context_rows_migrate_to_single_capture(self):
-        import sqlite3
-        from pathlib import Path
-        from taskweave.infrastructure.storage import CONTROL_V14, migrate
-        with tempfile.TemporaryDirectory() as home:
-            path=Path(home)/'old.db'
-            db=sqlite3.connect(path); db.row_factory=sqlite3.Row; db.execute('PRAGMA foreign_keys=ON')
-            db.executescript("""
-            CREATE TABLE steps(step_id TEXT PRIMARY KEY);
-            CREATE TABLE plans(plan_id TEXT PRIMARY KEY);
-            CREATE TABLE step_contexts(context_id TEXT PRIMARY KEY,step_id TEXT REFERENCES steps(step_id),provider_id TEXT,name TEXT,source_page TEXT,item_json TEXT,created_at TEXT,updated_at TEXT,context_notes TEXT,order_index INTEGER,request_json TEXT,views_json TEXT,include_view INTEGER,captured_at TEXT);
-            CREATE TABLE plan_contexts(context_id TEXT PRIMARY KEY,plan_id TEXT REFERENCES plans(plan_id),provider_id TEXT,name TEXT,context_notes TEXT,order_index INTEGER,captured_at TEXT,source_session_id TEXT,item_json TEXT,created_at TEXT,updated_at TEXT,request_json TEXT,views_json TEXT,include_view INTEGER);
-            INSERT INTO steps VALUES('s'); INSERT INTO plans VALUES('p');
-            INSERT INTO step_contexts VALUES('c','s','fake.page','old group','draft','[{"content":"legacy"}]','created','updated','keep',0,'{"q":1}','[{"title":"legacy preview"}]',1,'captured');
-            INSERT INTO plan_contexts VALUES('pc','p','fake.page','plan group','notes',0,'captured','session','[]','created','updated','{}','[]',1);
-            PRAGMA user_version=13;
-            """)
-            migrate(db,path,14,{14:CONTROL_V14})
-            capture=db.execute('SELECT * FROM step_context_captures WHERE context_id="c"').fetchone()
-            self.assertEqual(json.loads(capture['items_json']),[{'content':'legacy'}])
-            self.assertEqual(json.loads(capture['views_json']),[{'title':'legacy preview'}])
-            self.assertEqual(capture['captured_at'],'captured')
-            self.assertNotIn('item_json',{row['name'] for row in db.execute('PRAGMA table_info(step_contexts)')})
-            self.assertEqual(db.execute('SELECT count(*) FROM plan_context_captures WHERE context_id="pc"').fetchone()[0],1)
-            db.close()

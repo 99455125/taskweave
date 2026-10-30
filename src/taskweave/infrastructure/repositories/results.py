@@ -1,6 +1,7 @@
 """Result reference reads and deletion recovery state."""
 
 import json
+from pathlib import PurePosixPath
 from taskweave.core.validation import TaskError
 from taskweave.infrastructure.sqlite_storage import SQLiteStorage, connect
 from taskweave.infrastructure.repositories.collaboration import TaskLockGuard
@@ -88,7 +89,11 @@ class ResultRepository:
         path = self.task_path(ref['task_id'])
         with connect(path) as db:
             receipt = db.execute('SELECT refs_json FROM result_receipts WHERE attempt_id=?', (ref['attempt_id'],)).fetchone()
-        output_name = next((item.get('name', 'data' if item['locator'] == 'data' else item['locator']) for item in json.loads(receipt[0]) if item['result_id'] == result_id), ref['locator']) if receipt else ref['locator']
+        # Diagnostic artifacts have no success receipt. File locators are saved
+        # under artifacts/run/attempt/<output name>, so recover that scoped name.
+        fallback_name = PurePosixPath(ref['locator']).name if ref['kind'] == 'file' else ref['locator']
+        output_name = next((item.get('name', fallback_name) for item in json.loads(receipt[0])
+                            if item['result_id'] == result_id), fallback_name) if receipt else fallback_name
         if ref['kind'] == 'file':
             p = (path.parent / ref['locator']).resolve()
             if not p.is_relative_to(path.parent.resolve()) or not p.is_file():
@@ -105,6 +110,9 @@ class ResultRepository:
                 if row is None:
                     raise TaskError('RESULT_UNAVAILABLE')
                 value = json.loads(row[0])
+            elif ref['handler_id'] == 'dataset.table':
+                from taskweave.infrastructure.datasets import stored_snapshot, table_view
+                value = table_view(stored_snapshot(db, ref['locator'], ref['run_id'], ref['step_id'], ref['attempt_id']))
             else:
                 import re
                 if not re.fullmatch('p_[a-z0-9_]+', ref['locator']):
@@ -139,6 +147,13 @@ class ResultRepository:
             with connect(path) as db:
                 if ref['kind'] == 'json':
                     db.execute('DELETE FROM step_outputs WHERE attempt_id=? AND name=?', (ref['attempt_id'], ref['locator']))
+                elif ref['handler_id'] == 'dataset.table':
+                    import re
+                    if not re.fullmatch('p_dataset_[0-9a-f]{32}', ref['locator']):
+                        raise TaskError('DATASET_REFERENCE_INVALID')
+                    db.execute('DROP TABLE IF EXISTS "' + ref['locator'] + '"')
+                    db.execute('DELETE FROM plugin_table_schemas WHERE table_name=?', (ref['locator'],))
+                    db.execute('DELETE FROM step_outputs WHERE attempt_id=? AND name=?', (ref['attempt_id'], '__dataset_' + ref['locator'][10:]))
                 else:
                     import re
                     if not re.fullmatch('p_[a-z0-9_]+', ref['locator']):

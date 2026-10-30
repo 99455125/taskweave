@@ -36,7 +36,7 @@ class AgentWorkflowTests(CoreFixture):
         material = api.author("materials", {"step_id": step["step_id"], "capability_ids": ["demo.echo"]})
         self.assertIn("bundle_id", material)
         self.assertEqual(material["runtime"]["entrypoint"], "async def run(ctx, inputs)")
-        self.assertIn("taskweave-task-3", material["task_package_schemas"])
+        self.assertEqual("taskweave-task-3", material["task_package_schema"]["properties"]["format"]["const"])
         self.assertEqual(material["capabilities"][0]["id"], "demo.echo")
         saved = api.author("step.save", {"task_id": task, "step_id": step["step_id"],
                     "expected_hash": step["content_hash"], "document": {
@@ -92,8 +92,8 @@ class AgentWorkflowTests(CoreFixture):
         api.execute("instance.end", {"instance_type": "run", "owner_id": trial["run_id"]}, "end-branches")
         body = lambda name, step: {"id": name, "kind": "sequence", "children": [{"id": step["step_id"], "kind": "action", "step_id": step["step_id"]}]}
         flow = {"version": 2, "root": {"id": "root", "kind": "sequence", "children": [{
-            "id": "choice", "kind": "if", "condition": {"op": "eq", "left": {"ref": {"source": "task", "pointer": "/left"}}, "right": {"literal": True}},
-            "then": body("yes", steps[0]), "else": body("no", steps[1])}]}}
+            "id": "choice", "kind": "if", "cases": [{"id": "match", "condition": {"op": "eq", "left": {"ref": {"source": "task", "pointer": "/left"}}, "right": {"literal": True}},
+            "body": body("yes", steps[0])}], "default": {"id": "fallback", "body": body("no", steps[1])}}]}}
         current = api.describe("task", task)["definition_hash"]
         api.author("task.flow.save", {"task_id": task, "flow": flow, "expected_hash": current}, "save-branches")
         current = api.describe("task", task)["definition_hash"]
@@ -127,6 +127,7 @@ class AgentWorkflowTests(CoreFixture):
         package = api.inspect("package", task)
         self.assertEqual(package["format"], "taskweave-task-3")
         package["origin"] = "ai_generated"
+        package["flow_validation_state"] = "DRAFT"
         package["flow_validation_state"] = "DRAFT"
         for entry in package["steps"]:
             entry["validation_state"] = "DRAFT"
@@ -224,7 +225,7 @@ class AgentWorkflowTests(CoreFixture):
         from taskweave.core.task_flow import validate_flow
         for shape in FLOW_GUIDE['conditions'].values():
             node = deepcopy(FLOW_GUIDE['nodes']['if'])
-            node['condition'] = shape
+            node['cases'][0]['condition'] = shape
             node.update(FLOW_GUIDE['branch_outputs'])
             validate_flow({'version': 2, 'root': {'id': 'root', 'kind': 'sequence', 'children': [node]}}, [])
 
@@ -318,6 +319,7 @@ class AgentWorkflowTests(CoreFixture):
         self.step(task, name="lint-error", capabilities=["demo.echo"])
         package = self.app.tasks.export(task)
         package["origin"] = "ai_generated"
+        package["flow_validation_state"] = "DRAFT"
         result = api.author("candidate.validate", {"package": package})
         self.assertFalse(result["valid"])
         self.assertEqual(result["diagnostics"][0]["code"], "REQUIRED_ACTION_ARGUMENT")

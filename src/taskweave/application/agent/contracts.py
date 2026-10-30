@@ -14,7 +14,7 @@ PURPOSE_OPERATIONS = {
         plan.generation.get plan.generation.list plan.generation.imports
         run.get run.list run.output run.events.page result.read
         sequence.get sequence.list sequence.run.get sequence.run.list
-        instance.list run.instances run.context.sessions""".split()),
+        instance.list run.instances run.context.sessions step.trial.sessions""".split()),
     "author": frozenset("""task.create task.update task.copy task.import
         task.flow.save step.save step.reorder step.validate step.delete
         draft.import plan.create plan.copy plan.update plan.generation.parse
@@ -37,7 +37,7 @@ PURPOSE_OPERATIONS = {
         sequence.continue""".split()),
 }
 
-_OBJECTS = frozenset("document package flow input_schema output_schema inputs step_inputs request capture item public_config secret_refs descriptions".split())
+_OBJECTS = frozenset("document package flow input_schema output_schema inputs step_inputs node_inputs node_step_inputs request capture item public_config secret_refs descriptions".split())
 _ARRAYS = frozenset("nodes step_ids plugin_ids captures views contexts selected_ids".split())
 _BOOLEANS = frozenset("continue_session defer_inputs include_view replace_capture append send_preview enabled is_favorite".split())
 _NUMBERS = frozenset("expected_revision revision timeout limit after".split())

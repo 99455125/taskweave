@@ -14,8 +14,9 @@ ROOT = Path(__file__).resolve().parents[1]
 PLUGINS = {
     'playwright': 'taskweave_playwright', 'ocr': 'taskweave_ocr',
     'tidb': 'taskweave_tidb', 'utility': 'taskweave_utility',
-    'file': 'taskweave_file', 'process': 'taskweave_process', 'ssh': 'taskweave_ssh',
-    'baota_dashboard': 'taskweave_baota_dashboard', 'wordpress': 'taskweave_wordpress',
+    'file': 'taskweave_file', 'pdf': 'taskweave_pdf', 'process': 'taskweave_process', 'ssh': 'taskweave_ssh',
+    'dataset': 'taskweave_dataset', 'excel': 'taskweave_excel',
+    'baota_dashboard': 'taskweave_baota_dashboard', 'nacos': 'taskweave_nacos', 'wordpress': 'taskweave_wordpress',
     'uniapp': 'taskweave_uniapp', 'wechat_dev': 'taskweave_wechat_dev',
 }
 
@@ -33,7 +34,9 @@ def require_resources(root):
         'taskweave/infrastructure/sql', 'nicegui/static',
         'ddddocr/common.onnx', 'taskweave_wechat_dev/node/bridge.cjs',
         'taskweave_wechat_dev/node/release.cjs', 'taskweave_wechat_dev/node/ci/package-lock.json',
-        'browsers',
+        'browsers', 'taskweave_pdf/fonts/TaskWeavePDFSans-Regular.ttf',
+        'taskweave_pdf/fonts/OFL.txt', 'taskweave_pdf/fonts/TaskWeavePDFSans-Regular.metrics.zlib',
+        'pypdfium2_raw/libpdfium.dylib',
     ]
     for relative in required:
         if not (root / relative).exists():

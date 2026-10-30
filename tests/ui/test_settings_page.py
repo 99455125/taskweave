@@ -2,6 +2,8 @@
 
 import asyncio
 import inspect
+from pathlib import Path
+import tempfile
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -9,6 +11,116 @@ from taskweave.desktop.pages.settings import SettingsPage
 
 
 class SettingsPageTests(unittest.TestCase):
+    def test_skill_export_uses_its_directory_independently_of_workspace_destination(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page as page_route
+        from taskweave.integration.skill import skill_files
+        client = Client(page_route('/skill-export-directory'))
+        controller = AsyncMock()
+        controller.workspace_home = '/tmp/taskweave'
+        controller.call.return_value = {'ai_request_limit_kib': 1024}
+        controller.workbench_settings.return_value = {'redact_on_display': True, 'redact_for_ai': True}
+        controller.model_settings.return_value = {'url': '', 'model': '', 'key_env': 'KEY'}
+        callbacks = {}
+
+        def button(label, callback, **kwargs):
+            callbacks[label] = callback
+            return ui.button(label, on_click=callback)
+
+        async def scenario(root):
+            with client, patch.object(ui, 'notify'):
+                await SettingsPage(controller, button).render()
+                fields = {el._props.get('label'): el for el in client.elements.values()}
+                skill_destination = root / 'exported-skill'
+                workspace_destination = root / 'future-workspace'
+                fields['Skill 安装目录'].value = str(skill_destination)
+                fields['新的工作空间目录'].value = str(workspace_destination)
+                await callbacks['安装 / 导出 TaskWeave Skill']()
+                self.assertTrue(skill_destination.is_dir(), 'Skill must be exported to its own directory')
+                self.assertFalse(workspace_destination.exists())
+                for name, data in skill_files().items():
+                    self.assertEqual((skill_destination / name).read_bytes(), data)
+                await callbacks['安装 / 导出 TaskWeave Skill']()
+                controller.migrate_workspace.assert_not_awaited()
+        try:
+            with tempfile.TemporaryDirectory() as directory:
+                asyncio.run(scenario(Path(directory)))
+        finally:
+            client.delete()
+
+    def test_copy_mcp_configuration_is_awaitable_and_reports_completion(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page as page_route
+        client = Client(page_route('/copy-mcp-settings'))
+        controller = AsyncMock()
+        controller.workspace_home = '/tmp/taskweave'
+        controller.call.return_value = {'ai_request_limit_kib': 1024}
+        controller.workbench_settings.return_value = {'redact_on_display': True, 'redact_for_ai': True}
+        controller.model_settings.return_value = {'url': '', 'model': '', 'key_env': 'KEY'}
+        callbacks = {}
+        def button(label, callback, **kwargs):
+            callbacks[label] = callback
+            return ui.button(label, on_click=callback)
+        async def scenario():
+            with client, patch.object(ui.clipboard, 'write', return_value=None) as write, patch.object(ui, 'notify') as notify:
+                await SettingsPage(controller, button).render()
+                await callbacks['复制 MCP 配置']()
+                self.assertIn('mcpServers', write.call_args.args[0])
+                self.assertIn('/tmp/taskweave', write.call_args.args[0])
+                notify.assert_called_once_with('MCP 配置已复制')
+        try:
+            asyncio.run(scenario())
+        finally:
+            client.delete()
+
+    def test_workspace_migration_waits_for_confirmation_and_keeps_destination(self):
+        from nicegui import ui
+        from nicegui.client import Client
+        from nicegui.page import page as page_route
+        client = Client(page_route('/workspace-migration-confirmation'))
+        controller = AsyncMock()
+        controller.workspace_home = '/tmp/taskweave'
+        controller.call.return_value = {'ai_request_limit_kib': 1024}
+        controller.workbench_settings.return_value = {'redact_on_display': True, 'redact_for_ai': True}
+        controller.model_settings.return_value = {'url': '', 'model': '', 'key_env': 'KEY'}
+        controller.migrate_workspace.return_value = {'workspace_home': '/tmp/new-taskweave', 'restart_required': True}
+        callbacks = {}
+
+        def button(label, callback, **kwargs):
+            callbacks[label] = callback
+            return ui.button(label, on_click=callback)
+
+        async def decide(label):
+            async def open_dialog():
+                with client:
+                    await callbacks['迁移工作空间']()
+            pending = asyncio.create_task(open_dialog())
+            await asyncio.sleep(0)
+            controller.migrate_workspace.assert_not_awaited()
+            dialog = next(el for el in client.elements.values() if isinstance(el, ui.dialog) and el.value)
+            control = next(el for el in dialog.descendants() if isinstance(el, ui.button) and el.text == label)
+            next(event.handler for event in control._event_listeners.values() if event.type == 'click')(None)
+            await pending
+
+        async def scenario():
+            with client:
+                settings = SettingsPage(controller, button)
+                await settings.render()
+                await settings.select_section('workspace')
+                destination = next(el for el in client.elements.values() if el._props.get('label') == '新的工作空间目录')
+                destination.value = '/tmp/new-taskweave'
+                await decide('取消')
+                controller.migrate_workspace.assert_not_awaited()
+                self.assertEqual(destination.value, '/tmp/new-taskweave')
+                await decide('确认迁移')
+                controller.migrate_workspace.assert_awaited_once_with('/tmp/new-taskweave')
+        try:
+            asyncio.run(scenario())
+        finally:
+            client.delete()
+
     def test_actual_controls_update_plain_settings_draft_before_commands(self):
         from nicegui import ui
         from nicegui.client import Client

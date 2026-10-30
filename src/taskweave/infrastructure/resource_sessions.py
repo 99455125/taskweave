@@ -37,6 +37,8 @@ class PluginContext:
         self, scope, results, resources, environment, secret_refs, cancel, emit
     ):
         self.scope, self.results, self.resources = scope, results, resources
+        self.datasets = results.datasets
+        self.datasets.cancelled = cancel.is_set
         self.task_parameters = {}
         self.environment, self.secret_refs, self.cancel, self.emit = (
             environment,

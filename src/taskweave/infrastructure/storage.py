@@ -1,24 +1,19 @@
 """Compatibility Store facade and worker-side result persistence.
 
 New repository compositions use SQLiteStorage from sqlite_storage directly.
-The Store methods and original migration/helper imports remain available here.
+The Store methods and shared connection helpers remain available here.
 """
 
-from contextlib import closing
 import json
 import os
 from pathlib import Path
 import re
 import shutil
-import sqlite3
 
 from taskweave.core.validation import TaskError, dumps, valid_id
 from taskweave.infrastructure.sqlite_storage import (
     SQLiteStorage, SQLiteUnitOfWork,
-    connect, initialize, migrate, default_home, workspace_location_file, uid, now,
-    CONTROL_V2, CONTROL_V3, CONTROL_V4, CONTROL_V5, CONTROL_V6, CONTROL_V7,
-    CONTROL_V8, CONTROL_V9, CONTROL_V10, CONTROL_V11, CONTROL_V12, CONTROL_V13,
-    CONTROL_V14, CONTROL_V15, CONTROL_V16, CONTROL_V17, TASK_V2,
+    connect, initialize, default_home, workspace_location_file, uid, now,
 )
 
 
@@ -112,6 +107,8 @@ class Results:
         self.path = self.root / "data.db"
         self.staging = self.root / "staging" / valid_id(scope.attempt_id)
         self.tokens = {}
+        from taskweave.infrastructure.datasets import Datasets
+        self.datasets = Datasets(home, scope)
 
     async def allocate_file(self, name):
         from taskweave.core.ports import StagedFile
@@ -126,14 +123,13 @@ class Results:
         # Diagnostic receipts must never imply successful business execution.
         from taskweave.core.ports import StepResult
 
-        return self.persist(StepResult(outputs=requests), diagnostic=True)
+        return self.persist(requests if isinstance(requests, StepResult) else StepResult(outputs=requests), diagnostic=True)
 
     def persist(self, result, diagnostic=False):
-        if result.data is None and not result.outputs and not result.views:
+        if result.data is None and not result.outputs and not result.views and (diagnostic or not self.datasets.pending):
             return []
         initialize(self.path, "task-data")
         refs = []
-        self._backup_plugin_migrations(result.outputs)
         with connect(self.path) as db:
             db.execute("BEGIN IMMEDIATE")
             existing = (
@@ -150,7 +146,7 @@ class Results:
                 self._json(db, "data", result.data)
                 refs.append(self._ref("core.json", "json", "data"))
             from taskweave.core.result_views import validate_views
-            validate_views(result.data, result.views, self.registry.views)
+            validate_views(result.data, result.views, self.registry.views, result.outputs)
             if result.views:
                 self._json(db, "__views", {"version": 1, "items": result.views})
             names = {"data", "__views"}
@@ -206,7 +202,13 @@ class Results:
                 ref["name"] = request.name
                 ref["media_type"] = prepared.media_type
                 refs.append(ref)
+            for view in result.views:
+                if 'output' in view:
+                    source = next(ref for ref in refs if ref.get('name') == view['output'])
+                    if source['kind'] != 'file' or not source['media_type'].startswith('image/'):
+                        raise TaskError('RESULT_VIEW_INVALID', '图片展示引用必须是本次保存的图片文件')
             if not diagnostic:
+                refs.extend(self.datasets.persist(db, self))
                 db.execute(
                     "INSERT INTO result_receipts VALUES(?,?,?,?,?,?)",
                     (
@@ -220,43 +222,11 @@ class Results:
                 )
         return refs
 
-    def _backup_plugin_migrations(self, requests):
-        with connect(self.path) as db:
-            known = db.execute(
-                "SELECT 1 FROM sqlite_master WHERE name='plugin_table_schemas'"
-            ).fetchone()
-            versions = (
-                dict(db.execute("SELECT table_name,version FROM plugin_table_schemas"))
-                if known
-                else {}
-            )
-            for request in requests:
-                handler = self.registry.handlers.get(request.handler_id)
-                if handler is None:
-                    continue
-                if not hasattr(handler, "schema"):
-                    continue
-                schema = handler.schema()
-                if any(
-                    schema.get("version", 1) > versions.get(table, 1)
-                    for table in schema.get("tables", {})
-                ):
-                    backup_dir = self.root / "backups"
-                    backup_dir.mkdir(exist_ok=True)
-                    with closing(
-                        sqlite3.connect(
-                            backup_dir
-                            / (
-                                "before-plugin-migration-"
-                                + self.scope.attempt_id
-                                + ".db"
-                            )
-                        )
-                    ) as backup:
-                        db.backup(backup)
-                    return
-
     def _json(self, db, name, value):
+        try:
+            encoded = json.dumps(value, ensure_ascii=False, allow_nan=False)
+        except (ValueError, TypeError) as exc:
+            raise TaskError("NOT_JSON", "Result must contain JSON values") from exc
         db.execute(
             "INSERT INTO step_outputs VALUES(?,?,?,?,?,?)",
             (
@@ -264,7 +234,7 @@ class Results:
                 self.scope.step_id,
                 self.scope.attempt_id,
                 name,
-                dumps(value),
+                encoded,
                 now(),
             ),
         )
@@ -312,41 +282,13 @@ class Results:
             + ")"
         )
         actual = {row[1]: row[2] for row in db.execute(f'PRAGMA table_info("{table}")')}
-        db.execute(
-            "CREATE TABLE IF NOT EXISTS plugin_table_schemas(table_name TEXT PRIMARY KEY,version INTEGER NOT NULL)"
-        )
-        version = schema.get("version", 1)
-        if type(version) is not int or version < 1:
-            raise TaskError("TABLE_SCHEMA_INVALID")
-        tracked = db.execute(
-            "SELECT version FROM plugin_table_schemas WHERE table_name=?", (table,)
-        ).fetchone()
-        current = tracked[0] if tracked else 1
-        if current > version:
-            raise TaskError("TABLE_SCHEMA_TOO_NEW")
-        if actual != expected and version > current:
-            for target in range(current + 1, version + 1):
-                migration = schema.get("migrations", {}).get(str(target))
-                if not migration:
-                    raise TaskError("TABLE_MIGRATION_REQUIRED")
-                additions = migration.get("add_columns", {}).get(table, {})
-                for column, kind in additions.items():
-                    if (
-                        column not in columns
-                        or kind != columns[column]
-                        or column in actual
-                    ):
-                        raise TaskError("TABLE_MIGRATION_INVALID")
-                    db.execute(f'ALTER TABLE "{table}" ADD COLUMN "{column}" {kind}')
-                    actual[column] = kind
         if actual != expected:
             raise TaskError(
-                "TABLE_MIGRATION_REQUIRED",
-                "Custom table schema changed; explicit migration required",
+                "TABLE_SCHEMA_MISMATCH",
+                "Custom table schema differs; explicit data maintenance required",
             )
         db.execute(
-            "INSERT INTO plugin_table_schemas VALUES(?,?) ON CONFLICT(table_name) DO UPDATE SET version=excluded.version",
-            (table, version),
+            "INSERT OR IGNORE INTO plugin_table_schemas(table_name) VALUES(?)", (table,)
         )
         for index in schema.get("indexes", {}).get(table, []):
             if not index or any(c not in expected for c in index):

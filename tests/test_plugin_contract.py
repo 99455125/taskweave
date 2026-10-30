@@ -112,88 +112,41 @@ class ContractTests(unittest.TestCase):
         with self.assertRaisesRegex(TaskError, "content_format"):
             Registry([demo]).contributions(["demo.echo"])
 
-    def test_declarative_table_migration_and_rollback(self):
+    def test_table_schema_changes_require_explicit_maintenance(self):
         class Handler:
-            version = 1
+            columns = {"value": "TEXT"}
 
             def schema(self):
-                cols = (
-                    {"value": "TEXT"}
-                    if self.version == 1
-                    else {"value": "TEXT", "extra": "TEXT"}
-                )
-                return {
-                    "version": self.version,
-                    "tables": {"p_demo_migrated": cols},
-                    "migrations": {
-                        "2": {"add_columns": {"p_demo_migrated": {"extra": "TEXT"}}}
-                    },
-                    "indexes": {"p_demo_migrated": [["run_id", "step_id"]]},
-                }
+                return {"tables": {"p_demo_items": self.columns},
+                        "indexes": {"p_demo_items": [["run_id", "step_id"]]}}
 
             def prepare(self, request):
-                return PreparedResult(
-                    "table", table_name="p_demo_migrated", rows=request.payload
-                )
+                return PreparedResult("table", table_name="p_demo_items", rows=request.payload)
 
         registry = Registry([DemoPlugin()])
         handler = Handler()
-        registry.handlers["demo.migrated"] = handler
+        registry.handlers["demo.items"] = handler
         with tempfile.TemporaryDirectory() as home:
             task = uid()
 
             def persist(row):
                 scoped = Results(home, Scope(task, uid(), uid(), uid()), registry)
-                scoped.persist(
-                    StepResult(outputs=[ResultRequest("demo.migrated", "items", [row])])
-                )
+                scoped.persist(StepResult(outputs=[ResultRequest("demo.items", "items", [row])]))
                 return scoped.path
 
             path = persist({"value": "before"})
-            handler.version = 2
-            persist({"value": "after", "extra": "new"})
+            handler.columns = {"value": "TEXT", "extra": "TEXT"}
+            with self.assertRaises(TaskError) as error:
+                persist({"value": "after", "extra": "new"})
+            self.assertEqual(error.exception.code, "TABLE_SCHEMA_MISMATCH")
             with connect(path) as db:
-                self.assertEqual(
-                    [
-                        tuple(x)
-                        for x in db.execute("SELECT value,extra FROM p_demo_migrated")
-                    ],
-                    [("before", None), ("after", "new")],
-                )
-                self.assertEqual(
-                    db.execute("SELECT version FROM plugin_table_schemas").fetchone()[
-                        0
-                    ],
-                    2,
-                )
-            handler.version = 3
-            original = handler.schema
-            handler.schema = lambda: {
-                **original(),
-                "tables": {
-                    "p_demo_migrated": {
-                        "value": "TEXT",
-                        "extra": "TEXT",
-                        "later": "TEXT",
-                    }
-                },
-                "migrations": {
-                    "3": {"add_columns": {"p_demo_migrated": {"later": "TEXT"}}}
-                },
-            }
-            with self.assertRaises(TaskError):
-                persist({"value": "invalid"})
+                self.assertEqual([tuple(r) for r in db.execute("SELECT value FROM p_demo_items")], [("before",)])
+                self.assertNotIn("extra", [r[1] for r in db.execute("PRAGMA table_info(p_demo_items)")])
+                self.assertEqual(db.execute("SELECT table_name FROM plugin_table_schemas").fetchone()[0], "p_demo_items")
+            handler.columns = {"value": "TEXT"}
+            persist({"value": "after"})
             with connect(path) as db:
-                self.assertNotIn(
-                    "later",
-                    [r[1] for r in db.execute("PRAGMA table_info(p_demo_migrated)")],
-                )
-                self.assertEqual(
-                    db.execute("SELECT version FROM plugin_table_schemas").fetchone()[
-                        0
-                    ],
-                    2,
-                )
+                self.assertEqual(db.execute("SELECT count(*) FROM p_demo_items").fetchone()[0], 2)
 
     def test_missing_enabled_package_does_not_block_unrelated_plugins(self):
         with tempfile.TemporaryDirectory() as home:

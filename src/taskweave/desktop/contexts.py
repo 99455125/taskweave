@@ -13,51 +13,158 @@ from taskweave.infrastructure.privacy import redact, redact_collected_context
 from taskweave.desktop.forms import compact_field
 
 
+_CONTEXT_FIELDS = {
+    'title':'页面标题', 'url':'页面地址', 'role':'角色', 'captured_at':'采集时间',
+    'elements':'页面元素', 'frames':'页面框架', 'events':'录制动作', 'tag':'元素标签',
+    'name':'名称', 'label':'标签', 'type':'类型', 'text':'文本', 'value':'值',
+    'visible':'可见', 'enabled':'可用', 'editable':'可编辑', 'selector':'定位器',
+    'preferred_selector':'首选定位器', 'candidate_selectors':'候选定位器',
+    'attributes':'属性', 'placeholder':'占位提示', 'match_count':'匹配数量',
+    'target':'目标元素', 'kind':'动作 / 类型', 'sequence':'顺序', 'truncated':'内容已截断',
+}
+
+
+def _context_scalar(value):
+    if value is True:return '是'
+    if value is False:return '否'
+    if value is None:return '未提供'
+    return str(value)
+
+
+def _context_field_nodes(value, path='data'):
+    """Preserve all fields while presenting nested data as expandable nodes."""
+    pairs=value.items() if isinstance(value,dict) else enumerate(value) if isinstance(value,list) else [('内容',value)]
+    nodes=[]
+    for key,item in pairs:
+        label=f'{_CONTEXT_FIELDS[key]} ({key})' if key in _CONTEXT_FIELDS else str(key)
+        node={'id':f'{path}/{key}','label':label}
+        if isinstance(item,(dict,list)):
+            node['label']+=f' · {len(item)} 项'
+            node['children']=_context_field_nodes(item,node['id'])
+        else:
+            node['label']+='：'+_context_scalar(item)
+        nodes.append(node)
+    return nodes
+
+
+def _render_context_fields(value):
+    search=ui.input('查找字段或内容',placeholder='例如 selector、字段名、控件名称').props('outlined dense clearable').classes('w-full')
+    tree=ui.tree(_context_field_nodes(value)).props('dense').classes('tw-context-field-tree w-full break-words')
+    search.bind_value_to(tree,'filter',forward=lambda value:value or '')
+
+
+def _context_locator_summary(selector):
+    if isinstance(selector,str):return selector
+    if not isinstance(selector,dict):return '未提供'
+    return ' · '.join(f'{key}={selector[key]}' for key in ('kind','value','name','nth') if key in selector)
+
+
+def _render_context_records(records, title, *, actions=False, is_active, register_dialog=None):
+    rows=[]
+    for index,record in enumerate(records):
+        if not isinstance(record,dict):
+            record={'value':record}
+        target=record.get('target') if actions else record
+        target=target if isinstance(target,dict) else {}
+        rows.append({'_row':index,'order':record.get('sequence',index+1),
+            'name':target.get('name') or target.get('label') or target.get('text') or target.get('placeholder') or target.get('id') or '未命名',
+            'type':target.get('tag') or target.get('type') or target.get('role') or '未提供',
+            'action':record.get('kind') or record.get('type') or record.get('action') or '未提供',
+            'visible':_context_scalar(target.get('visible')),'enabled':_context_scalar(target.get('enabled')),
+            'locator':_context_locator_summary(target.get('preferred_selector') or target.get('selector'))})
+    ui.label(f'{title} · {len(records)} 项').classes('font-medium')
+    ui.label('点击一行查看完整属性、定位器和参数。').classes('text-xs text-gray-500')
+    search=ui.input('筛选'+title).props('outlined dense clearable').classes('w-full')
+    names=[('order','顺序'),('action','动作'),('name','目标名称'),('locator','定位器')] if actions else [
+        ('order','序号'),('name','名称 / 文本'),('type','类型'),('visible','可见'),('enabled','可用'),('locator','定位器')]
+    table=ui.table(columns=[{'name':key,'label':label,'field':key,'align':'left','sortable':True} for key,label in names],
+                   rows=rows,row_key='_row',pagination=10).classes('tw-context-data-table w-full').props('wrap-cells')
+    search.bind_value_to(table,'filter',forward=lambda value:value or '')
+    def details(event):
+        if not is_active():return
+        record=records[event.args[1]['_row']]
+        with ui.dialog() as dialog,ui.card().classes('w-full max-w-4xl'):
+            if register_dialog:register_dialog(dialog)
+            ui.label(title+' · 完整字段').classes('text-lg font-semibold')
+            _render_context_fields(record)
+            target=record.get('target',{}) if actions and isinstance(record,dict) else record
+            selector=(target.get('preferred_selector') or target.get('selector')) if isinstance(target,dict) else None
+            if selector is not None:
+                with ui.expansion('复制定位器',icon='content_copy').classes('w-full'):
+                    ui.code(json.dumps(selector,ensure_ascii=False,indent=2),language='json').classes('w-full')
+            ui.button('关闭',on_click=dialog.close).props('outline')
+        dialog.open()
+    table.on('rowClick',details)
+
+
+def _render_context_data(data, *, is_active, register_dialog=None):
+    if not isinstance(data,dict):
+        _render_context_fields(data)
+        return
+    metadata={key:value for key,value in data.items() if key not in {'elements','frames','events'}}
+    if metadata:_render_context_fields(metadata)
+    for key,title in [('elements','页面元素'),('events','录制动作')]:
+        if isinstance(data.get(key),list):
+            _render_context_records(data[key],title,actions=key=='events',is_active=is_active,register_dialog=register_dialog)
+    frames=data.get('frames')
+    if isinstance(frames,list):
+        for index,frame in enumerate(frames):
+            with ui.expansion(f'页面框架 {index+1}',icon='web').classes('w-full'):
+                _render_context_data(frame,is_active=is_active,register_dialog=register_dialog)
+
+
 async def show_context_preview(title, capture, renderers, render_result, *,
                                redact_on_display=True, is_active=lambda: True,
                                register_dialog=None):
-    """Read-only evidence preview for saved and staged captures."""
+    """One read-only reader for screenshots, structured data and original items."""
     visible = redact_collected_context(capture, renderers) if redact_on_display else capture
-    views, items = visible.get("views", []), visible.get("items", [])
-    with ui.dialog() as dialog, ui.card().classes("tw-context-preview-dialog"):
-        if register_dialog:
-            register_dialog(dialog)
-        with ui.row().classes("tw-context-preview-header w-full items-center justify-between"):
-            with ui.column().classes("gap-1 min-w-0 flex-1"):
-                ui.label(title or "采集项").classes("text-lg font-semibold break-words")
-                ui.label("采集内容预览").classes("text-xs text-gray-500")
-            ui.button(icon="close", on_click=dialog.close).props("flat round dense aria-label=关闭预览")
-        with ui.column().classes("tw-context-preview-body w-full"):
-            for view in views:
-                with ui.column().classes("tw-context-preview-media w-full gap-2"):
-                    ui.label(view.get("title") or "预览").classes("text-sm font-medium")
-                    kind = renderers.get(view["renderer"], {}).get("type", "json")
-                    try:
-                        await render_result(kind, view["data"], {})
-                    except ValueError as exc:
-                        ui.label(str(exc)).classes("text-red-700")
-                    if not is_active():
-                        dialog.close()
-                        return dialog
-            if items:
-                with ui.expansion("原始采集数据", icon="data_object", value=not bool(views)).classes("tw-context-raw w-full"):
-                    ui.code(json.dumps(items, ensure_ascii=False, indent=2), language="json").classes("w-full tw-code")
-            if not views and not items:
-                ui.label("暂无可预览的内容").classes("text-gray-500")
-        with ui.row().classes("tw-context-preview-footer w-full items-center justify-end gap-3"):
-            ui.button("关闭", on_click=dialog.close).props("outline")
-    if is_active():
-        dialog.open()
+    views, items = visible.get('views', []), visible.get('items', [])
+    detail_dialogs=[]
+    def register_detail(child):
+        detail_dialogs.append(child)
+        if register_dialog:register_dialog(child)
+    with ui.dialog() as dialog, ui.card().classes('tw-context-preview-dialog'):
+        if register_dialog:register_dialog(dialog)
+        dialog.on('hide',lambda:[child.close() for child in detail_dialogs if not child.is_deleted])
+        with ui.row().classes('tw-context-preview-header w-full items-center justify-between'):
+            with ui.column().classes('gap-1 min-w-0 flex-1'):
+                ui.label(title or '采集项').classes('text-lg font-semibold break-words')
+                ui.label('上下文查看 · 可据此手动编写步骤代码').classes('text-xs text-gray-500')
+            ui.button(icon='close',on_click=dialog.close).props('flat round dense aria-label=关闭预览')
+        with ui.column().classes('tw-context-preview-body w-full'):
+            with ui.tabs().classes('w-full') as tabs:
+                ui.tab('采集数据',icon='account_tree')
+                ui.tab('截图与预览',icon='image')
+                ui.tab('原文',icon='data_object')
+            with ui.tab_panels(tabs,value='采集数据' if items else '截图与预览').classes('w-full'):
+                with ui.tab_panel('采集数据').classes('w-full p-0'):
+                    for index,item in enumerate(items):
+                        with ui.expansion(f"{index+1}. {item.get('source') or '采集内容'}",value=index==0).classes('w-full'):
+                            if item.get('truncated'):ui.label('此项采集内容已截断，未包含完整数据。').classes('text-amber-700')
+                            data=item.get('content','')
+                            if isinstance(data,str):
+                                try:data=json.loads(data)
+                                except (ValueError,TypeError):pass
+                            _render_context_data(data,is_active=is_active,register_dialog=register_detail)
+                    if not items:ui.label('暂无采集数据').classes('text-gray-500')
+                with ui.tab_panel('原文').classes('w-full p-0'):
+                    ui.label('原始采集数据 · 沿用当前显示脱敏设置').classes('text-xs text-gray-500')
+                    ui.code(json.dumps(items,ensure_ascii=False,indent=2),language='json').classes('tw-context-raw w-full tw-code')
+                with ui.tab_panel('截图与预览').classes('w-full p-0'):
+                    for view in views:
+                        with ui.column().classes('tw-context-preview-media w-full gap-2'):
+                            ui.label(view.get('title') or '预览').classes('text-sm font-medium')
+                            kind=renderers.get(view['renderer'],{}).get('type','json')
+                            try:await render_result(kind,view['data'],{})
+                            except ValueError as exc:ui.label(str(exc)).classes('text-red-700')
+                            if not is_active():
+                                dialog.close()
+                                return dialog
+                    if not views:ui.label('本次未采集截图或其他预览，仍可查看采集数据。').classes('text-gray-500')
+        with ui.row().classes('tw-context-preview-footer w-full items-center justify-end gap-3'):
+            ui.button('关闭',on_click=dialog.close).props('outline')
+    if is_active():dialog.open()
     return dialog
-
-
-def render_preview_attachments(exported):
-    import base64
-    for item in exported.get("attachments", []):
-        ui.button("下载图片 · " + item["title"], icon="download",
-                  on_click=lambda _e=None, value=item: ui.download.content(
-                      base64.b64decode(value["data"]), filename=value["name"],
-                      media_type=value["mime_type"])).props("flat dense")
 
 
 def context_capture_summary(entry, *, redact_on_display=True):
@@ -130,7 +237,7 @@ def _render_context_draft_row(draft, entry, index, preview, refresh, *, redact_o
                 status = "本次采集" if entry.get("is_new") else (f"已保存 · {saved_time}" if saved_time else "已保存")
                 ui.label(status).classes("tw-context-staged-status")
                 with ui.row().classes("tw-context-preview-choice items-center gap-1"):
-                    ui.button("预览", icon="visibility", on_click=lambda: preview(entry)).props("flat dense")
+                    ui.button("查看上下文", icon="visibility", on_click=lambda: preview(entry)).props("flat dense")
                     ui.checkbox("携带预览").props("dense").bind_value(entry, "send_preview").set_enabled(
                         bool(entry.get("has_preview") or entry.get("capture", {}).get("views")))
                 with ui.button(icon="more_horiz").props("flat round dense aria-label=暂存采集项更多"):
@@ -209,8 +316,9 @@ class ContextCards:
 
     def __init__(self, entries, save, delete, move=None, recollect=None, preview=None,
                  append=None, delete_capture=None, move_capture=None, update_capture=None,
-                 preview_capture=None, redact_on_display=True, is_active=None, expanded=None):
+                 preview_capture=None, redact_on_display=True, is_active=None, expanded=None, transfer=None):
         self.entries, self.save, self.delete = entries, save, delete
+        self.transfer = transfer
         self.move, self.recollect, self.append = move, recollect, append
         self.preview_capture, self.delete_capture = preview_capture, delete_capture
         self.move_capture, self.update_capture = move_capture, update_capture
@@ -253,7 +361,7 @@ class ContextCards:
             caption=entry.get("provider_id", ""), value=key in self.expanded,
             on_value_change=remember,
         ).classes("tw-context-group w-full min-w-0 border rounded") as card:
-            with ui.row().classes("w-full items-center justify-between"):
+            with ui.row().classes("tw-context-group-actions w-full items-center justify-end gap-1"):
                 ui.button("编辑组说明", on_click=lambda: self.edit_group(entry)).props("flat dense")
                 if self.recollect:
                     ui.button("继续采集", on_click=lambda: self.recollect(entry)).props("flat dense")
@@ -262,8 +370,12 @@ class ContextCards:
                         if self.move:
                             ui.menu_item("上移上下文", on_click=lambda: self.move_entry(entry, "up")).set_enabled(index > 1)
                             ui.menu_item("下移上下文", on_click=lambda: self.move_entry(entry, "down")).set_enabled(index < len(self.entries))
+                        if self.transfer:
+                            ui.menu_item("移动整组材料…", on_click=lambda: self.transfer(entry, None, "move"))
+                            ui.menu_item("复制整组材料…", on_click=lambda: self.transfer(entry, None, "copy"))
                         ui.menu_item("删除上下文", on_click=lambda: self.remove(entry)).props("class=text-red-7")
-            ui.label(entry.get("context_notes") or "暂无组说明").classes("tw-context-notes w-full text-sm text-gray-600")
+            if entry.get("context_notes"):
+                ui.label(entry["context_notes"]).classes("tw-context-notes w-full text-sm text-gray-600")
             if not captures:
                 ui.label("暂无采集项").classes("text-xs text-gray-500")
             for capture_index, capture in enumerate(captures, 1):
@@ -290,50 +402,69 @@ class ContextCards:
         dialog.open()
 
     def add_capture(self, group, capture, index, count):
-        with ui.row().classes("tw-context-capture-row w-full items-center gap-2 flex-wrap"):
-            title = capture.get("label") or f"采集 {index}"
-            ui.label(f"{index}.").classes("tw-context-capture-index shrink-0")
-            ui.label(title).classes("tw-context-capture-name min-w-0 grow").tooltip(title)
-            captured_at = capture.get("captured_at")
-            readable_time = context_capture_time(captured_at)
-            source_name = {"draft":"步骤采集", "planning":"规划采集", "planning_import":"规划导入"}.get(capture.get("source_page"), "")
-            metadata = " · ".join(value for value in (readable_time, source_name) if value) or "已采集"
-            ui.label(metadata).classes("tw-context-capture-meta shrink-0").tooltip(str(captured_at) if captured_at else metadata)
-            with ui.row().classes("tw-context-capture-actions gap-1 flex-wrap"):
-                if self.preview_capture:
-                    ui.button("内容 / 预览", on_click=lambda _event=None, g=group, c=capture: self.preview_capture(g, c)).props("flat dense icon=visibility")
-                with ui.button(icon="more_horiz").props("flat dense aria-label=采集项更多"):
-                    with ui.menu():
-                        if self.update_capture:
-                            ui.menu_item("改名", on_click=lambda _event=None, g=group, c=capture: self.edit_capture_label(g, c))
-                        if self.move_capture:
-                            ui.menu_item("上移", on_click=lambda _event=None, g=group, c=capture: self.move_capture(g, c, "up")).set_enabled(index > 1)
-                            ui.menu_item("下移", on_click=lambda _event=None, g=group, c=capture: self.move_capture(g, c, "down")).set_enabled(index < count)
-                        if self.delete_capture:
-                            ui.menu_item("删除采集项", on_click=lambda _event=None, g=group, c=capture: self.remove_capture(g, c)).props("class=text-red-7")
-            if self.update_capture:
-                with ui.row().classes("w-full items-start gap-2 flex-nowrap"):
-                    ui.label(capture.get("operation_notes") or "").classes("tw-context-staged-note-text")
-                    ui.button("编辑说明", on_click=lambda: self.edit_capture_label(group, capture)).props("flat dense")
-                async def toggle_preview(event):
-                    if event.value == bool(capture.get("send_preview")):
-                        return
-                    event.sender.disable()
-                    try:
-                        await self.update_capture(group, capture, title, send_preview=event.value)
-                        capture["send_preview"] = event.value
-                    except Exception as exc:
-                        if self.is_active():
-                            event.sender.set_value(bool(capture.get("send_preview")))
-                            ui.notify(str(exc), type="negative")
-                    finally:
-                        if not event.sender.is_deleted:
-                            event.sender.enable()
-                ui.checkbox("携带预览", value=bool(capture.get("send_preview")),
-                            on_change=toggle_preview).set_enabled(bool(capture.get("has_preview") or capture.get("views")))
-            preview = self.capture_preview(capture)
-            if preview:
-                ui.label(preview).classes("tw-context-capture-preview w-full text-xs text-gray-500")
+        title = capture.get("label") or f"采集 {index}"
+        captured_at = capture.get("captured_at")
+        readable_time = context_capture_time(captured_at)
+        source_name = {"draft":"步骤采集", "planning":"规划采集", "planning_import":"规划导入"}.get(capture.get("source_page"), "")
+        metadata = " · ".join(value for value in (readable_time, source_name) if value)
+        notes = capture.get("operation_notes") or ""
+        preview = self.capture_preview(capture) if not self.preview_capture else ""
+        with ui.column().classes("tw-context-capture-row w-full gap-0"):
+            with ui.row().classes("tw-context-capture-header w-full items-center gap-2 flex-nowrap"):
+                ui.label(f"{index}.").classes("tw-context-capture-index shrink-0")
+                ui.label(title).classes("tw-context-capture-name min-w-0 grow").tooltip(title)
+                with ui.row().classes("tw-context-capture-actions items-center gap-1 flex-nowrap"):
+                    if self.preview_capture or self.update_capture:
+                        with ui.row().classes("tw-context-preview-choice items-center gap-1"):
+                            if self.preview_capture:
+                                ui.button("查看上下文", on_click=lambda _event=None, g=group, c=capture: self.preview_capture(g, c)).props("flat dense icon=visibility")
+                            if self.update_capture:
+                                async def toggle_preview(event):
+                                    if not self.is_active() or event.sender.is_deleted or event.value == bool(capture.get("send_preview")):
+                                        return
+                                    event.sender.disable()
+                                    try:
+                                        await self.update_capture(group, capture, title, send_preview=event.value)
+                                        if self.is_active():
+                                            capture["send_preview"] = event.value
+                                    except Exception as exc:
+                                        if self.is_active():
+                                            if not event.sender.is_deleted:
+                                                event.sender.set_value(bool(capture.get("send_preview")))
+                                            ui.notify(str(exc), type="negative")
+                                    finally:
+                                        if self.is_active() and not event.sender.is_deleted:
+                                            event.sender.enable()
+                                ui.checkbox("携带预览", value=bool(capture.get("send_preview")),
+                                            on_change=toggle_preview).props("dense").set_enabled(
+                                                bool(capture.get("has_preview") or capture.get("views")))
+                    with ui.button(icon="more_horiz").props("flat dense aria-label=采集项更多"):
+                        with ui.menu():
+                            if self.update_capture:
+                                ui.menu_item("改名", on_click=lambda _event=None, g=group, c=capture: self.edit_capture_label(g, c))
+                            if self.move_capture:
+                                ui.menu_item("上移", on_click=lambda _event=None, g=group, c=capture: self.move_capture(g, c, "up")).set_enabled(index > 1)
+                                ui.menu_item("下移", on_click=lambda _event=None, g=group, c=capture: self.move_capture(g, c, "down")).set_enabled(index < count)
+                            if self.transfer:
+                                ui.menu_item("移动采集项…", on_click=lambda _event=None, g=group, c=capture: self.transfer(g, c, "move"))
+                                ui.menu_item("复制采集项…", on_click=lambda _event=None, g=group, c=capture: self.transfer(g, c, "copy"))
+                            if self.delete_capture:
+                                ui.menu_item("删除采集项", on_click=lambda _event=None, g=group, c=capture: self.remove_capture(g, c)).props("class=text-red-7")
+            if metadata or self.update_capture or notes or preview:
+                with ui.column().classes("tw-context-capture-details w-full gap-0"):
+                    if metadata or self.update_capture:
+                        with ui.row().classes("tw-context-capture-meta-row w-full items-center gap-2 flex-nowrap"):
+                            if metadata:
+                                ui.label(metadata).classes("tw-context-capture-meta grow min-w-0").tooltip(str(captured_at) if captured_at else metadata)
+                            else:
+                                ui.space()
+                            if self.update_capture:
+                                with ui.row().classes("tw-context-note-actions items-center gap-1"):
+                                    ui.button("编辑说明", on_click=lambda: self.edit_capture_label(group, capture)).props("flat dense")
+                    if notes:
+                        ui.label(notes).classes("tw-context-staged-note-text w-full")
+                    if preview:
+                        ui.label(preview).classes("tw-context-capture-preview w-full text-xs text-gray-500")
 
     def capture_preview(self, capture):
         values = []

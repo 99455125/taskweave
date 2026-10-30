@@ -36,13 +36,13 @@ class StepList:
             if item is not None and not item.is_deleted:
                 item.set_enabled(enabled)
 
-    async def render(self, steps, catalog, toolbar, list_area):
+    async def render(self, steps, catalog, toolbar, list_area, *, show_list=True):
         controls = []
         selected_id = self.selected_step_id()
         identity = self.identity()
         interaction = StepActions(self.controller.call, self.task_id(), selected_id, self.identity)
         with list_area:
-            for index, step in enumerate(steps):
+            for index, step in enumerate(steps if show_list else []):
                 control = self.button(
                     f"{index + 1}. {step['name']}",
                     lambda item=step: self.navigate_step(item["step_id"]), flat=True,
@@ -65,13 +65,19 @@ class StepList:
                 await self.paint()
 
         with toolbar:
-            self.button("", add, flat=True, icon="add").props("aria-label=添加步骤 title=添加步骤").classes("tw-add-step-button")
+            add_button = self.button("", add, flat=True, icon="add").props("aria-label=添加步骤 title=添加步骤").classes("tw-add-step-button")
+
+        if not show_list:
+            add_button.set_visibility(False)
 
         async def reorder(delta):
             await self.save_editor()
             result = await interaction.reorder(delta)
             if result is None:
                 return
+            if not show_list:
+                await self.paint()
+                return True
             index, target = result.index, result.target
             moving, adjacent = controls[index], controls[target]
             await self.animate(moving, adjacent)
@@ -153,6 +159,7 @@ class StepList:
 
         selected_index = next((i for i, item in enumerate(steps) if item["step_id"] == selected_id), -1)
         self.actions = {
+            "add": add,
             "move_up": lambda: reorder(-1),
             "move_down": lambda: reorder(1),
             "delete": delete,

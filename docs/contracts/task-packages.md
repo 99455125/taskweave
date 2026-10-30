@@ -1,25 +1,25 @@
 # 任务包
 
-线性任务导出`taskweave-task-2`，包含控制节点的任务导出`taskweave-task-3`。Schema在[core/task_package.py](../../src/taskweave/core/task_package.py)，规范化、验证与导入在[application/task_transfer.py](../../src/taskweave/application/task_transfer.py)。两种格式均可导入。
+任务导入与导出统一使用`taskweave-task-3`，线性任务也携带流程树。Schema在[core/task_package.py](../../src/taskweave/core/task_package.py)，规范化、验证与导入在[application/task_transfer.py](../../src/taskweave/application/task_transfer.py)。完整任务包必须符合现行格式。
 
 ## 外层结构
 
 | 字段 | 约束 |
 | --- | --- |
-| format | 线性任务为taskweave-task-2；结构化流程为taskweave-task-3 |
+| format | taskweave-task-3 |
 | origin | task_export或ai_generated |
 | task | name、description、input_schema |
 | steps | 最多1000项；每项key、validation_state、document |
-| flow、flow_validation_state | 仅v3；流程树动作通过步骤key关联，导入时映射为新身份 |
+| flow、flow_validation_state | 必填；流程树动作通过步骤key关联，导入时映射为新身份 |
 | contexts | 可选；只有task_export来源可以携带上下文组 |
 
-步骤document遵守[步骤契约](steps.md)，导出包包含完整字段；validation_state取DRAFT或VALIDATED，实际确认还须依据内容、来源和运行时验证规则。顶层和步骤定义不接纳任意未知字段。
+步骤document遵守[步骤契约](steps.md)，导出包包含完整字段；validation_state取DRAFT或VALIDATED，实际确认还须依据内容、来源和运行时验证规则。顶层和步骤定义不接纳任意未知字段。流程使用`version: 2`与`root`，条件节点声明`cases`和`default`，每条分支拥有身份与流程体；精确结构及引用校验见[task_flow.py](../../src/taskweave/core/task_flow.py)。
 
 ## 身份与材料
 
-导出把真实步骤ID改成包内key，步骤绑定及v3流程树引用同步改写；导入建立新任务/步骤ID，再映射引用。不能保留指向原任务的运行身份。上下文组通过step_key关联，保留有序采集项、request、items/views、操作说明和send_preview；旧包缺可选材料字段按实现默认值处理。
+导出把真实步骤ID改成包内key，步骤绑定及流程树引用同步改写；导入建立新任务/步骤ID，再映射引用。不能保留指向原任务的运行身份。上下文组通过step_key关联，保留有序采集项、request、items/views、操作说明和send_preview；可选材料字段按契约处理。
 
-任务包不包含本地环境、秘密引用配置、运行/尝试历史或活跃资源。AI生成包不能冒充带原始采集材料的完整导出包。v1包明确拒绝，需要用现行版本重新导出，不静默猜测转换。
+任务包不包含本地环境、秘密引用配置、运行/尝试历史或活跃资源。AI生成包不能冒充带原始采集材料的完整导出包。历史完整包格式在导入入口明确拒绝；先通过显式数据维护处理已知历史定义，再使用现行格式重新导出。维护范围与入口见[存储模块](../modules/storage.md)。
 
 ## 导入边界
 

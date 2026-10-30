@@ -35,7 +35,7 @@ def is_dirty(document: dict, baseline: dict) -> bool:
 
 def document_from_draft(baseline: dict, draft: dict) -> dict:
     import json
-    from taskweave.presentation.forms import schema_from_rows
+    from taskweave.presentation.forms import schema_from_editor
     from taskweave.presentation.result_fields import result_fields
     fields = draft['fields']
     doc = normalize_step(baseline)
@@ -51,11 +51,17 @@ def document_from_draft(baseline: dict, draft: dict) -> dict:
         name=fields['name'], step_description=fields['step_description'],
         step_notes=fields['step_notes'], step_content=fields['code'],
         capabilities=sorted(capabilities),
-        input_schema=schema_from_rows(draft['schema_original'], draft['schema']),
+        input_schema=schema_from_editor(draft['schema_original'], draft['schema'],
+                                        draft.get('schema_mode', 'form'), draft.get('schema_json', '')),
         delay_after_previous_seconds=(int(fields['delay'] or 0)
                                       if float(fields['delay'] or 0).is_integer() else fields['delay']),
         timeout_ms=round(float(fields['timeout'] or 60) * 1000),
     )
+    if 'output_schema' in draft:
+        doc['output_schema'] = schema_from_editor(draft['output_schema_original'], draft['output_schema'],
+            draft.get('output_schema_mode', 'form'), draft.get('output_schema_json', ''))
+    if not isinstance(doc['input_schema'], dict):
+        raise TaskError('FORM_INVALID', '步骤输入 Schema 需要使用对象结构。')
     doc['bindings'] = {}
     for row in draft['bindings']:
         name, source, value, source_step, output, pointer, *extras = row

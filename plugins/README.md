@@ -5,7 +5,10 @@
 - [Playwright](playwright/README.md)：页面操作、观察、验证和图像采集。
 - [本地验证码](ocr/README.md)：图片文字验证码本地 CPU 识别，与图片产生插件组合使用。
 - [TiDB](tidb/README.md)：连接、schema 采集与只读查询。
+- [Nacos](nacos/README.md)：配置读取、批量发布和 JSON/YAML 字段操作。
 - [基础数据工具](utility/README.md)：当前时间、UUID 和精确十进制计算。
+- [内部数据集](dataset/README.md)：任务内表格数据、SQL 查询与处理结果。
+- [Excel](excel/README.md)：读取、新建、区域写入及内部数据集导出。
 
 - [process](process/README.md)：有界本地命令与声明式文件产物。
 - [SSH/SFTP](ssh/README.md)：可信主机、受限远程根与传输。

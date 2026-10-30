@@ -335,3 +335,71 @@ class StepContextRepository:
             db.execute("UPDATE steps SET validation_state='DRAFT',validation_source=NULL,verified_hash=NULL,updated_at=? WHERE step_id=?", (timestamp, row['step_id']))
             db.execute('UPDATE tasks SET updated_at=? WHERE task_id=?', (timestamp, step['task_id']))
         return {'deleted': context_id}
+
+    def transfer_step_context_captures(self, step_id, context_id, capture_ids, target_step_id, *, mode,
+                                       expected_revision, target_context_id=None,
+                                       target_expected_revision=None, target_name=None):
+        """Transfer stored evidence within one task, preserving every capture field."""
+        if mode not in {'move', 'copy'}:
+            raise TaskError('FORM_INVALID', '请选择移动或复制')
+        if type(expected_revision) is not int or (target_context_id and type(target_expected_revision) is not int):
+            raise TaskError('EDIT_CONFLICT', '请刷新上下文版本后重试')
+        if target_context_id == context_id:
+            raise TaskError('CONTEXT_MISMATCH', '请选择其他上下文组')
+        with self.transaction() as db:
+            source_step, target_step = self.step(step_id), self.step(target_step_id)
+            if source_step['task_id'] != target_step['task_id']:
+                raise TaskError('CONTEXT_MISMATCH', '仅支持同一任务内转移材料')
+            source = db.execute('SELECT * FROM step_contexts WHERE context_id=? AND step_id=?', (context_id, step_id)).fetchone()
+            if source is None:
+                raise TaskError('CONTEXT_MISMATCH', '上下文不属于来源步骤')
+            self._expect_context_revision(db, context_id, expected_revision)
+            rows = db.execute('SELECT * FROM step_context_captures WHERE context_id=? ORDER BY order_index', (context_id,)).fetchall()
+            if capture_ids is None:
+                capture_ids = [row['capture_id'] for row in rows]
+            if (not isinstance(capture_ids, list) or not capture_ids or
+                    any(not isinstance(value, str) for value in capture_ids) or
+                    len(set(capture_ids)) != len(capture_ids) or
+                    not set(capture_ids).issubset({row['capture_id'] for row in rows})):
+                raise TaskError('CONTEXT_MISMATCH', '请选择有效且不重复的采集项')
+            selected = [row for row in rows if row['capture_id'] in capture_ids]
+            stamp = now()
+            if target_context_id:
+                target = db.execute('SELECT * FROM step_contexts WHERE context_id=? AND step_id=?', (target_context_id, target_step_id)).fetchone()
+                if target is None:
+                    raise TaskError('CONTEXT_MISMATCH', '上下文不属于目标步骤')
+                self._expect_context_revision(db, target_context_id, target_expected_revision)
+                if target['provider_id'] != source['provider_id']:
+                    raise TaskError('CONTEXT_PROVIDER_MISMATCH', '目标上下文须使用相同采集器')
+            else:
+                name = source['name'] if target_name is None else target_name
+                if not isinstance(name, str) or not name.strip():
+                    raise TaskError('FORM_INVALID', '请输入目标上下文名称')
+                target_context_id = uid()
+                order = db.execute('SELECT COALESCE(MAX(order_index),-1)+1 FROM step_contexts WHERE step_id=?', (target_step_id,)).fetchone()[0]
+                db.execute('INSERT INTO step_contexts(context_id,step_id,provider_id,name,context_notes,order_index,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)',
+                           (target_context_id, target_step_id, source['provider_id'], name.strip(), source['context_notes'], order, stamp, stamp))
+            offset = db.execute('SELECT COALESCE(MAX(order_index),-1)+1 FROM step_context_captures WHERE context_id=?', (target_context_id,)).fetchone()[0]
+            saved_ids = []
+            for index, row in enumerate(selected, offset):
+                if mode == 'move':
+                    capture_id = row['capture_id']
+                    db.execute('UPDATE step_context_captures SET context_id=?,order_index=?,updated_at=? WHERE capture_id=?', (target_context_id, index, stamp, capture_id))
+                else:
+                    values = dict(row)
+                    values.update(capture_id=uid(), context_id=target_context_id, order_index=index, created_at=stamp, updated_at=stamp)
+                    capture_id = values['capture_id']
+                    db.execute(f"INSERT INTO step_context_captures({','.join(values)}) VALUES({','.join('?' for _ in values)})", tuple(values.values()))
+                saved_ids.append(capture_id)
+            if mode == 'move':
+                remaining = db.execute('SELECT capture_id FROM step_context_captures WHERE context_id=? ORDER BY order_index', (context_id,)).fetchall()
+                for index, row in enumerate(remaining):
+                    db.execute('UPDATE step_context_captures SET order_index=? WHERE capture_id=?', (index, row['capture_id']))
+                db.execute('UPDATE step_contexts SET revision=revision+1,updated_at=? WHERE context_id=?', (stamp, context_id))
+            db.execute('UPDATE step_contexts SET revision=revision+1,updated_at=? WHERE context_id=?', (stamp, target_context_id))
+            for affected in ({step_id, target_step_id} if mode == 'move' else {target_step_id}):
+                db.execute("UPDATE steps SET validation_state='DRAFT',validation_source=NULL,verified_hash=NULL,updated_at=? WHERE step_id=?", (stamp, affected))
+            db.execute('UPDATE tasks SET updated_at=? WHERE task_id=?', (stamp, source_step['task_id']))
+            return {'source_group': next(g for g in self.list_step_contexts(step_id) if g['context_id'] == context_id),
+                    'target_group': next(g for g in self.list_step_contexts(target_step_id) if g['context_id'] == target_context_id),
+                    'capture_ids': saved_ids}

@@ -34,6 +34,9 @@ class StepEditorState:
 
 @dataclass
 class DebugState:
+    scene: dict | None = None
+    source_run_id: str | None = None
+    source_paths: dict = field(default_factory=dict)
     run_id: str | None = None
     environment_id: str | None = None
     task_inputs: dict | None = None

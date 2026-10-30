@@ -5,7 +5,7 @@ import json
 
 from nicegui import ui
 from taskweave.core.validation import TaskError
-from taskweave.desktop.contexts import render_preview_attachments
+from taskweave.desktop.components.chat_export import render_chat_export
 from taskweave.presentation.authoring import AIInteraction, AIChoiceDraft, AuthoringFlow, Notice
 
 
@@ -47,10 +47,47 @@ def submit_ai_choice(dialog, values):
     return buttons
 
 
+def render_code_comparison(current, candidate, diff):
+    with ui.tabs(value='compare').classes('w-full tw-ai-review-tabs') as tabs:
+        ui.tab('compare', label='代码对比')
+        ui.tab('diff', label='变更差异')
+    with ui.tab_panels(tabs, value='compare').classes('w-full tw-ai-review-panels'):
+        with ui.tab_panel('compare'), ui.element('div').classes('tw-ai-code-comparison w-full'):
+            with ui.column().classes('w-full min-w-0 gap-2'):
+                ui.label('当前步骤代码').classes('font-medium')
+                ui.code(current, language='python').classes('w-full')
+            with ui.column().classes('w-full min-w-0 gap-2'):
+                ui.label('AI 候选代码').classes('font-medium text-primary')
+                ui.code(candidate, language='python').classes('w-full')
+        with ui.tab_panel('diff'):
+            ui.code(diff, language='diff').classes('w-full')
+
+
+class InlineChatSurface:
+    """Keep export/reply controls alive while the same workspace reviews a candidate."""
+    def __init__(self, host):
+        self.host = host
+        host['chat'].clear()
+
+    def __enter__(self):
+        self.host['chat'].__enter__()
+        return self
+
+    def __exit__(self, *args):
+        return self.host['chat'].__exit__(*args)
+
+    def open(self):
+        self.host['show_chat']()
+
+    def close(self):
+        self.host['close']()
+
+
 class StepAIEditor:
     def __init__(self, controller, button, save_editor, environment_id, controls, identity,
                  *, debug_state=None, trials=None, reset_conversation=None, confirmation_step=None,
-                 author_step=None, authoring_request=None, draft_values=None):
+                 author_step=None, authoring_request=None, draft_values=None,
+                 review_host=None, start_debug=None):
         self.controller, self.button, self.save_editor = controller, button, save_editor
         self.environment_id, self.controls = environment_id, controls
         self.identity = identity
@@ -60,6 +97,50 @@ class StepAIEditor:
         self.interaction = AIInteraction()
         self.author_step, self.authoring_request = author_step, authoring_request
         self.draft_values = draft_values
+        self.review_host, self.start_debug = review_host, start_debug
+        self._adopting = False
+        self.repair_forms = {}
+
+    async def _adopt_content(self, validate, identity, close, repaint, *, debug=False, on_saved=None):
+        """Save one validated candidate before starting the existing debug action."""
+        if self._adopting:
+            return
+        self._adopting = True
+        try:
+            source = await validate()
+            controls = self.controls()
+            if self.identity() != identity or not controls:
+                raise TaskError('EDIT_CONFLICT', '当前步骤已变化，请重新查看 AI 结果。')
+            control = controls['code']
+            previous = control.value
+            control.value = source
+            try:
+                saved = await self.save_editor()
+            except Exception:
+                if (self.identity() == identity and not getattr(control, 'is_deleted', False)
+                        and control.value == source):
+                    control.value = previous
+                raise
+            if self.identity() != identity:
+                return
+            if on_saved:
+                on_saved()
+            close()
+            if self._current_code() != source:
+                ui.notify('候选代码已保存；当前草稿又有修改，已保留草稿，未开始调试。', type='warning')
+                return
+            if debug:
+                if self.start_debug is None or not isinstance(saved, dict) or saved.get('step_id') != identity[1]:
+                    raise TaskError('ADOPTED_DEBUG_START_FAILED', '代码已采纳并保存，调试启动失败：当前调试入口不可用。')
+                try:
+                    await self.start_debug(saved, identity)
+                except Exception as exc:
+                    raise TaskError('ADOPTED_DEBUG_START_FAILED', f'代码已采纳并保存，调试启动失败：{exc}') from exc
+            else:
+                await repaint()
+            return saved
+        finally:
+            self._adopting = False
 
     @property
     def pending_identity(self): return self.interaction.pending_identity
@@ -96,6 +177,7 @@ class StepAIEditor:
     async def recover_generation(self, *, repaint):
         request = self.retained_request()
         if request is None:
+            ui.notify('当前步骤暂无 AI 结果', type='info')
             return
         identity = self.identity()
         proposal = await asyncio.shield(request['task'])
@@ -108,7 +190,7 @@ class StepAIEditor:
         if request['operation'] == 'step.generate_goal':
             await self._present_goal_result(saved, proposal, identity, web_chat=params.get('export_only', False))
         else:
-            await self._present_generation_result((saved, proposal, identity), bool(params.get('feedback')), repaint,
+            await self._present_generation_result((saved, proposal, identity), bool(params.get('feedback') or params.get('use_history') or params.get('repair_notes')), repaint,
                                                   web_chat=params.get('export_only', False))
 
     async def _validate_retained_request(self, request, identity):
@@ -119,6 +201,15 @@ class StepAIEditor:
             self._current_code, self.trials)
 
     @exclusive_ai_flow
+    async def generate_from_form(self, channel, supplement, *, repaint):
+        """Use the inline assistant while retaining request and adoption guards."""
+        if channel not in {'api', 'chat'}:
+            raise ValueError('Unknown AI channel')
+        web_chat = channel == 'chat'
+        result = await self.generate_content(web_chat=web_chat, supplement=supplement or '')
+        await self._present_generation_result(result, False, repaint, web_chat=web_chat)
+
+    @exclusive_ai_flow
     async def choose_generation_mode(self, *, repaint):
         identity = self.identity()
         draft = self.interaction.choice(identity)
@@ -126,7 +217,7 @@ class StepAIEditor:
             choice = draft.submit(channel, self.identity())
             return choice[0] if choice else None
         with ui.dialog() as dialog, ui.card().classes("w-full max-w-md"):
-            ui.label("AI 生成内容").classes("text-lg font-medium")
+            ui.label("AI 生成步骤代码").classes("text-lg font-medium")
             with ui.row().classes("w-full items-center gap-2 flex-wrap"):
                 submit_ai_choice(dialog, [("使用 API", lambda: choose("api")), ("使用 Chat 网页", lambda: choose("chat"))])
                 ui.button("取消", on_click=lambda:dialog.submit(None)).props("outline")
@@ -146,7 +237,7 @@ class StepAIEditor:
         if feedback is None:
             return
         has_feedback = bool(feedback)
-        feedback_run_id = active_run_id if has_feedback else self.debug_state.feedback_run_id
+        feedback_run_id = active_run_id
         if has_feedback:
             self.debug_state.feedback = feedback
             self.debug_state.feedback_run_id = feedback_run_id
@@ -173,30 +264,54 @@ class StepAIEditor:
             deduplicate.on_value_change(lambda event: setattr(draft, 'deduplicate', event.value))
             supplement.on_value_change(lambda event: setattr(draft, 'supplement', event.value or ''))
             with ui.row().classes("tw-repair-dialog-actions w-full items-center gap-2 flex-wrap"):
-                api, chat = submit_ai_choice(dialog, [
+                submit_ai_choice(dialog, [
                     ("大模型api调用", lambda: draft.submit('api', self.identity())),
                     ("大模型网页chat调用", lambda: draft.submit('chat', self.identity())),
                 ])
-                if not has_feedback:
-                    api.disable(); chat.disable()
                 ui.button("取消", on_click=lambda:dialog.submit(None)).props("outline")
         choice = await dialog
-        if not choice or self.identity() != identity or not has_feedback: return
-        evidence_status = await self._flow().recheck_repair(identity, step_id, feedback_run_id, feedback)
-        if evidence_status == 'stale':
+        if not choice or self.identity() != identity: return
+        await self._submit_repair(choice, identity, feedback_run_id, feedback, repaint, supplement_control)
+
+    @exclusive_ai_flow
+    async def repair_from_form(self, channel, history_rounds, deduplicate, supplement,
+                               *, expected_evidence, repaint):
+        if channel not in {'api', 'chat'} or history_rounds not in range(-1, 11):
+            raise TaskError('FORM_INVALID', '请选择有效的生成方式和历史范围。')
+        if self.debug_state is None:
             return
-        if evidence_status == 'changed':
-            ui.notify("调试记录已变化，请重新打开 AI 修复并核对最新尝试。", type="warning")
+        identity = self.identity()
+        step_id = identity[1]
+        run_id = self.trials.get(step_id)
+        feedback = await self._flow().repair_evidence(identity, step_id, run_id)
+        if feedback is None:
             return
+        if expected_evidence != (run_id, feedback.get('attempt_id')):
+            ui.notify('调试记录已变化，请核对当前失败依据后再生成修复建议。', type='warning')
+            return
+        self.debug_state.feedback = feedback
+        self.debug_state.feedback_run_id = run_id
+        await self._submit_repair((channel, history_rounds, deduplicate, supplement),
+                                  identity, run_id, feedback, repaint)
+
+    async def _submit_repair(self, choice, identity, feedback_run_id, feedback, repaint, supplement_control=None):
+        step_id = identity[1]
+        if feedback:
+            evidence_status = await self._flow().recheck_repair(identity, step_id, feedback_run_id, feedback)
+            if evidence_status == 'stale':
+                return
+            if evidence_status == 'changed':
+                ui.notify("调试记录已变化，请重新打开 AI 修复并核对最新尝试。", type="warning")
+                return
         mode, history_rounds, dedup, text = choice
         self.debug_state.supplements[step_id] = text
         if supplement_control is not None: supplement_control.value = text
         result = await self.generate_content(
             fix_logs=True, web_chat=mode == "chat", supplement=text,
             run_id=self.trials.get(step_id), history_rounds=history_rounds,
-            deduplicate_history=dedup, feedback_override=feedback if has_feedback else None,
-            feedback_run_id=feedback_run_id if has_feedback else None,
-            removed_feedback=self.debug_state.removed_feedback if has_feedback else set(),
+            deduplicate_history=dedup, feedback_override=feedback,
+            feedback_run_id=feedback_run_id,
+            removed_feedback=set(self.debug_state.removed_feedback),
         )
         await self._present_generation_result(result, True, repaint, web_chat=mode == "chat")
 
@@ -274,6 +389,32 @@ class StepAIEditor:
                 return event.candidate
         return None
 
+    def _candidate_host(self):
+        host = self.review_host() if self.review_host else None
+        return host if host and host['current']() else None
+
+    def _render_inline_candidate(self, host, saved, source, explanation, diagnostics, accept, *, back=None):
+        host['main'].clear()
+        host['side'].clear()
+        with host['main']:
+            ui.label('AI 候选审阅').classes('text-base font-semibold')
+            render_code_comparison(saved['step_content'], source,
+                                   self.controller.diff(saved['step_content'], source))
+        with host['side']:
+            ui.label('候选代码').classes('text-base font-semibold')
+            ui.label(explanation or 'AI 未提供解释。').classes('whitespace-pre-wrap text-sm')
+            ui.label('基于版本 ' + saved['content_hash'][:8]).classes('text-xs text-gray-500')
+            if diagnostics:
+                with ui.expansion('诊断').classes('w-full'):
+                    ui.label(json.dumps(diagnostics, ensure_ascii=False, indent=2, default=str)).classes('text-xs whitespace-pre-wrap')
+            self.button('仅采纳', lambda: accept(False))
+            if self.start_debug:
+                self.button('采纳并调试', lambda: accept(True), primary=True)
+            ui.button('舍弃', on_click=host['close']).props('flat')
+            if back:
+                ui.button('返回修改粘贴内容', on_click=back).props('flat')
+        host['show']()
+
     async def present_content_candidate(self, saved, proposal, identity, repaint):
         if self.identity() != identity:
             return
@@ -281,26 +422,28 @@ class StepAIEditor:
         if not controls:
             return
         retained = self.retained_request()
-        with ui.dialog() as dialog, ui.card().classes("w-full max-w-4xl"):
-            ui.label("AI 建议").classes("text-lg")
+        async def validate():
+            await self._validate_retained_request(retained, identity)
+            return self._flow().content_candidate(saved, proposal, identity, self._current_code())
+
+        if self.review_host:
+            host = self._candidate_host()
+            if host:
+                async def accept_inline(debug=False):
+                    await self._adopt_content(validate, identity, host['close'], repaint, debug=debug)
+                self._render_inline_candidate(host, saved, proposal['proposed_content'],
+                                              proposal['explanation'], proposal['diagnostics'], accept_inline)
+            return
+        with ui.dialog() as dialog, ui.card().classes("tw-ai-candidate w-full"):
+            ui.label("AI 候选审阅").classes("text-lg font-semibold")
             ui.label(proposal["explanation"])
-            ui.code(self.controller.diff(saved["step_content"], proposal["proposed_content"]), language="diff").classes("w-full")
+            render_code_comparison(saved['step_content'], proposal['proposed_content'],
+                                   self.controller.diff(saved['step_content'], proposal['proposed_content']))
             if proposal["diagnostics"]:
                 ui.label(json.dumps(proposal["diagnostics"], ensure_ascii=False, indent=2, default=str))
 
             async def accept():
-                await self._validate_retained_request(retained, identity)
-                controls = self.controls()
-                if not controls:
-                    raise TaskError('EDIT_CONFLICT', '当前编辑器已关闭')
-                source = self._flow().content_candidate(saved, proposal, identity, self._current_code())
-                controls["code"].value = source
-                await self.save_editor()
-                if self.identity() != identity:
-                    return
-                ui.notify("AI 建议已保存为草稿，下一次调试使用此内容。")
-                dialog.close()
-                await repaint()
+                await self._adopt_content(validate, identity, dialog.close, repaint)
 
             with ui.row().classes("w-full items-center gap-2 flex-wrap"):
                 self.button("采纳到编辑器", accept, primary=True)
@@ -314,14 +457,18 @@ class StepAIEditor:
         if not self.identity() == identity:
             return
         retained = self.retained_request()
-        with ui.dialog() as dialog, ui.card().classes("w-full max-w-4xl"):
+        host = self._candidate_host() if self.review_host else None
+        if self.review_host and not host:
+            return
+        surface = InlineChatSurface(host) if host and 'chat' in host else ui.dialog()
+        with surface as dialog, ui.card().classes('tw-web-chat w-full max-w-4xl').props('flat' if host else ''):
             ui.label("网页 AI 对话").classes("text-lg")
-            ui.textarea("复制到网页 AI 的内容", value=exported["prompt"]).props("readonly rows=12").classes("w-full")
+            ui.textarea("复制到网页 AI 的内容", value=exported["prompt"]).props("readonly rows=6" if host else "readonly rows=12").classes("w-full")
             async def copy_prompt():
                 await self.controller.copy_text(exported["prompt"])
                 ui.notify("对话内容已复制")
             self.button("复制对话内容", copy_prompt)
-            render_preview_attachments(exported)
+            render_chat_export(exported, self.controller, filename="taskweave-step-chat.zip")
             draft = self.interaction.choice(identity)
             reply = ui.textarea("粘贴网页 AI 回复", value=draft.reply).classes("w-full").props("autogrow")
             reply.on_value_change(lambda event: setattr(draft, 'reply', event.value or ''))
@@ -336,47 +483,57 @@ class StepAIEditor:
                 diagnostics = await self._flow().validate_web_candidate(saved, source, identity)
                 if diagnostics is None:
                     return
-                with ui.dialog() as preview, ui.card().classes("w-full max-w-4xl"):
-                    ui.label("网页 AI 回复预览").classes("text-lg")
+                async def validate_adoption():
+                    await self._validate_retained_request(retained, identity)
+                    latest = await self.controller.call("step.get", step_id=saved["step_id"])
+                    if not self.controls():
+                        raise TaskError('EDIT_CONFLICT', '当前编辑器已关闭')
+                    self._flow().validate_version(saved, latest, identity,
+                                                  current_code=self._current_code(), expected_hash=exported['expected_hash'])
+                    return source
+
+                def record_adoption():
+                    if use_history:
+                        self.controller.append_debug_conversation(saved["step_id"], [
+                            exported["messages"][-1],
+                            {"role": "assistant", "content": json.dumps({"step_content": source, "explanation": explanation}, ensure_ascii=False)},
+                        ])
+                    from taskweave.infrastructure.privacy import redact
+                    logging.getLogger(__name__).info("网页 AI 回复已采纳：%s", redact({"step_content": source, "explanation": explanation}))
+
+                if self.review_host:
+                    host = self._candidate_host()
+                    if not host:
+                        return
+                    dialog.close()
+                    def close_inline():
+                        host['close']()
+                        dialog.close()
+                    def back_to_reply():
+                        host['close']()
+                        dialog.open()
+                    async def adopt_inline(debug=False):
+                        await self._adopt_content(validate_adoption, identity, close_inline, repaint,
+                                                  debug=debug, on_saved=record_adoption)
+                    self._render_inline_candidate(host, saved, source, explanation, diagnostics,
+                                                  adopt_inline, back=back_to_reply)
+                    return
+                with ui.dialog() as preview, ui.card().classes("tw-ai-candidate w-full"):
+                    ui.label("网页 AI 回复预览").classes("text-lg font-semibold")
                     ui.label("解释").classes("font-medium")
                     ui.label(explanation or "AI 未提供解释。").classes("whitespace-pre-wrap")
-                    ui.label("步骤对比").classes("font-medium")
-                    ui.code(
-                        self.controller.diff(saved["step_content"], source),
-                        language="diff",
-                    ).classes("w-full tw-code")
+                    render_code_comparison(saved['step_content'], source,
+                                           self.controller.diff(saved['step_content'], source))
                     warnings = [item.get("message", "") for item in diagnostics if item.get("severity") != "error"]
                     if warnings:
                         ui.label("校验提示：" + "；".join(warnings)).classes("text-amber-700")
 
                     async def adopt():
-                        await self._validate_retained_request(retained, identity)
-                        latest = await self.controller.call("step.get", step_id=saved["step_id"])
-                        if not self.controls():
-                            raise TaskError('EDIT_CONFLICT', '当前编辑器已关闭')
-                        self._flow().validate_version(saved, latest, identity,
-                                                      current_code=self._current_code(), expected_hash=exported['expected_hash'])
-                        code_control = self.controls()["code"]
-                        code_control.value = source
-                        try:
-                            await self.save_editor()
-                        except Exception:
-                            if not getattr(code_control, "is_deleted", False):
-                                code_control.value = saved["step_content"]
-                            raise
-                        if not self.identity() == identity:
-                            return
-                        if use_history:
-                            self.controller.append_debug_conversation(saved["step_id"], [
-                                exported["messages"][-1],
-                                {"role": "assistant", "content": json.dumps({"step_content": source, "explanation": explanation}, ensure_ascii=False)},
-                            ])
-                        from taskweave.infrastructure.privacy import redact
-                        logging.getLogger(__name__).info("网页 AI 回复已采纳：%s", redact({"step_content": source, "explanation": explanation}))
-                        ui.notify("网页 AI 回复已保存为草稿，下一次调试使用此内容。")
-                        preview.close()
-                        dialog.close()
-                        await repaint()
+                        def close_preview():
+                            preview.close()
+                            dialog.close()
+                        await self._adopt_content(validate_adoption, identity, close_preview, repaint,
+                                                  on_saved=record_adoption)
 
                     with ui.row().classes("w-full items-center gap-2 flex-wrap"):
                         self.button("采纳到编辑器", adopt, primary=True)
@@ -430,8 +587,8 @@ class StepAIEditor:
         if web_chat:
             with ui.dialog() as chat, ui.card().classes("w-full max-w-3xl"):
                 ui.label("网页 AI 生成步骤描述").classes("text-lg")
-                ui.textarea("复制到网页 AI", value=proposal["prompt"]).props("readonly autogrow").classes("w-full")
-                render_preview_attachments(proposal)
+                ui.textarea("复制到网页 AI", value=proposal["prompt"]).props("readonly rows=8").classes("w-full")
+                render_chat_export(proposal, self.controller, filename="taskweave-description-chat.zip")
                 draft = self.interaction.choice(identity)
                 reply = ui.textarea("粘贴网页回复", value=draft.reply).props("autogrow").classes("w-full")
                 reply.on_value_change(lambda event: setattr(draft, 'reply', event.value or ''))
@@ -457,7 +614,7 @@ class StepAIEditor:
             ui.label("步骤描述预览").classes("text-lg")
             ui.label("步骤描述").classes("font-medium")
             ui.label(description_text).classes("whitespace-pre-wrap border rounded p-3 w-full")
-            ui.label("步骤补充说明").classes("font-medium")
+            ui.label("步骤说明").classes("font-medium")
             ui.label(notes_text or "无").classes("whitespace-pre-wrap border rounded p-3 w-full text-gray-600")
 
             async def accept():

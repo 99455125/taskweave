@@ -18,6 +18,8 @@ uv run playwright install chromium
 uv run taskweave workbench --browser
 ```
 
+内部表格工作选择 `--extra dataset --extra excel`，Excel 引擎仅在可选插件中安装。
+
 后续uv sync需继续列出需要的extras；它会使环境匹配所选集合。不向项目虚拟环境另行安装pip包，不以依赖升级代替架构或业务修复。
 
 ## 源码定位
@@ -30,7 +32,7 @@ uv run taskweave workbench --browser
 | src/taskweave/infrastructure | 存储、运行、资源、模型和HTTP实现 |
 | src/taskweave/desktop | NiceGUI/pywebview页面、组件与平台适配 |
 | src/taskweave/plugins | 宿主SDK、发现、注册 |
-| plugins/ | 十一独立插件包 |
+| plugins/ | 十五独立插件包 |
 | tests/、scripts/、packaging/ | 验证、工程工具和平台分发 |
 
 按[模块导航](maintenance.md)定位责任，接口见[契约](contracts/README.md)。模块文档描述当前行为；精确SQL/Schema/签名在源码维护，不在文档复制整份实现。

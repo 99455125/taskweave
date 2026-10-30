@@ -13,7 +13,7 @@ from taskweave.desktop.state import PlanningPageState
 
 
 class PlanningEditorLateCandidateTests(unittest.TestCase):
-    def test_environment_selector_lives_before_plugins_in_materials_and_saves_same_field(self):
+    def test_environment_selector_lives_with_plugins_in_goal_and_saves_same_field(self):
         async def scenario(root):
             state = PlanningPageState(plan_id="plan", generation=4)
             calls = []
@@ -64,10 +64,11 @@ class PlanningEditorLateCandidateTests(unittest.TestCase):
                 return None
 
             environment = selects["采集环境（可选）"]
-            plugins = selects["所用插件"]
-            materials = ancestor_with_class(environment, "tw-plan-materials")
+            plugins = next(element for element in root.descendants() if element.props.get("aria-label") == "可用插件")
+            materials = ancestor_with_class(environment, "tw-plan-capabilities")
             self.assertIsNotNone(materials)
-            self.assertIs(materials, ancestor_with_class(plugins, "tw-plan-materials"))
+            self.assertIsNotNone(ancestor_with_class(environment, "tw-plan-form"))
+            self.assertIs(materials, ancestor_with_class(plugins, "tw-plan-capabilities"))
             self.assertLess(materials.default_slot.children.index(environment), materials.default_slot.children.index(plugins))
             self.assertNotIn("查看生成记录", button_labels)
             environment.value = "env-1"

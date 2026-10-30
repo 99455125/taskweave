@@ -451,9 +451,10 @@ class TasksPage(Page):
                 return
             step_counts[row["task_id"]] = len(row_steps)
 
+        category_control_ref = {"control": None}
         with ui.row().classes("tw-task-workspace w-full items-start flex-wrap lg:flex-nowrap"):
             with ui.column().classes("tw-task-sidebar tw-panel w-full lg:w-72 shrink-0 gap-3"):
-                with ui.row().classes("w-full justify-between items-center"):
+                with ui.row().classes("tw-task-sidebar-heading w-full justify-between items-center"):
                     ui.label("任务").classes("text-lg font-medium")
                     self.button("分类管理", self.category_manager.open, flat=True)
                     self.button("+", lambda: self.task_dialog(), flat=True).props("round dense aria-label=新建任务")
@@ -515,6 +516,10 @@ class TasksPage(Page):
                     options = {"": "全部任务", "favorites": "仅收藏"} | category_names
                     self.catalog_filter.retain_categories(options)
                     category_filter.set_options(options, value=self.catalog_filter.category)
+                    category_control = category_control_ref["control"]
+                    if category_control is not None and not category_control.is_deleted:
+                        category_control.set_options({"": "未分类"} | category_names,
+                            value=self._task_organization(task)["category_id"] or "")
                     render_task_rows()
                     return True
 
@@ -527,6 +532,11 @@ class TasksPage(Page):
                         task_description = task.get("description") or "暂无说明"
                         ui.label(task_description).classes("tw-task-summary text-sm text-gray-500").tooltip(task_description)
                     with ui.row().classes("tw-task-header-actions items-center gap-2 flex-nowrap shrink-0"):
+                        category_control_ref["control"] = ui.select(
+                            {"": "未分类"} | category_names,
+                            value=self._task_organization(task)["category_id"] or "", label="分类",
+                        ).props("outlined dense").classes("w-36").on_value_change(
+                            lambda event: self.set_organization(task, category_id=event.value or None))
                         favorite_control_ref = {"control": None}
                         def toggle_task_favorite(ref=favorite_control_ref):
                             return self.set_organization(task, toggle_favorite=True, favorite_control=ref["control"])
@@ -737,12 +747,13 @@ class TasksPage(Page):
         dialog.open()
 
     async def clear_task_runs(self, task):
-        with ui.dialog() as dialog, ui.card().classes("w-full max-w-xl"):
-            ui.label("清理任务“" + task["name"] + "”的全部运行数据？").classes("text-lg")
-            ui.label("保留任务配置、步骤及验证状态；删除执行和调试记录、结果、截图、文件及调试对话。保留的插件资源也会关闭，删除后无法恢复。")
-            with ui.row().classes("w-full items-center gap-2 flex-wrap"):
-                ui.button("取消", on_click=lambda: dialog.submit(False)).props("outline")
-                ui.button("确认清理", on_click=lambda: dialog.submit(True)).props("outline color=negative")
+        with ui.dialog() as dialog, ui.card().classes("tw-confirm-dialog"):
+            ui.label("清理任务“" + task["name"] + "”的全部运行数据？").classes("tw-confirm-title")
+            ui.label("保留任务配置、步骤及验证状态；删除执行和调试记录、结果、截图、文件及调试对话。保留的插件资源也会关闭，删除后无法恢复。")\
+                .classes("tw-confirm-description")
+            with ui.row().classes("tw-confirm-actions"):
+                ui.button("取消", on_click=lambda: dialog.submit(False)).props("outline").classes("tw-confirm-cancel")
+                ui.button("确认清理", on_click=lambda: dialog.submit(True)).props("outline color=negative").classes("tw-confirm-danger")
         if await dialog:
             result = await self.controller.call("task.clear_runs", task_id=task["task_id"])
             await self.lifecycle.runs_cleared(task["task_id"])
@@ -750,11 +761,12 @@ class TasksPage(Page):
             await self.repaint()
 
     async def delete_task(self, task):
-        with ui.dialog() as dialog, ui.card():
-            ui.label("删除任务“" + task["name"] + "”及其全部执行记录、结果？")
-            with ui.row().classes("w-full items-center gap-2 flex-wrap"):
-                ui.button("取消", on_click=lambda: dialog.submit(False)).props("outline")
-                ui.button("确认删除", on_click=lambda: dialog.submit(True)).props("color=negative")
+        with ui.dialog() as dialog, ui.card().classes("tw-confirm-dialog"):
+            ui.label("删除任务“" + task["name"] + "”？").classes("tw-confirm-title")
+            ui.label("同时删除该任务的全部执行记录与结果。").classes("tw-confirm-description")
+            with ui.row().classes("tw-confirm-actions"):
+                ui.button("取消", on_click=lambda: dialog.submit(False)).props("outline").classes("tw-confirm-cancel")
+                ui.button("确认删除", on_click=lambda: dialog.submit(True)).props("outline color=negative").classes("tw-confirm-danger")
         if await dialog:
             await self.controller.call("task.delete", task_id=task["task_id"])
             await self.lifecycle.deleted(task["task_id"])

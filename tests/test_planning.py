@@ -14,7 +14,9 @@ SOURCE = "async def run(ctx, inputs):\n    return ctx.result(data={})\n"
 
 def package():
     return {
-        "format": "taskweave-task-2", "origin": "ai_generated",
+        "format": "taskweave-task-3", "origin": "ai_generated",
+        "flow": {"version": 2, "root": {"id": "root", "kind": "sequence", "children": [{"id": "step-1", "kind": "action", "step_id": "step-1"}]}},
+        "flow_validation_state": "DRAFT",
         "task": {"name": "生成任务", "description": "", "input_schema": {"type": "object"}},
         "steps": [{"key": "step-1", "validation_state": "DRAFT", "document": {
             "name": "步骤", "step_description": "返回空结果", "step_notes": "",
@@ -41,6 +43,7 @@ class PlanningTests(unittest.TestCase):
             candidate = package()
             candidate["steps"].append(json.loads(json.dumps(candidate["steps"][0])))
             candidate["steps"][1]["key"] = "step-2"
+            candidate["flow"]["root"]["children"].append({"id": "step-2", "kind": "action", "step_id": "step-2"})
             for refs in (None, {}, {"step-1": [added["context"]["context_id"]]}):
                 with self.subTest(refs=refs):
                     if refs is not None:
@@ -122,6 +125,7 @@ class PlanningTests(unittest.TestCase):
                 "pointer": "/record_id",
             }}}
             candidate["steps"].append(second)
+            candidate["flow"]["root"]["children"].append({"id": "step-2", "kind": "action", "step_id": "step-2"})
             candidate["plan_context_refs"] = {
                 "step-1": contexts, "step-2": [contexts[1]],
             }
@@ -440,7 +444,7 @@ class PlanningTests(unittest.TestCase):
                 app.dispatch("plan.update", {"plan_id": plan["plan_id"], "expected_revision": 1, "name": "旧编辑"})
             self.assertEqual(conflict.exception.code, "EDIT_CONFLICT")
             generation = app.dispatch("plan.generate", {"plan_id": plan["plan_id"], "expected_revision": 2, "channel": "web_chat"})
-            self.assertIn("taskweave-task-2", generation["prompt"])
+            self.assertIn("taskweave-task-3", generation["prompt"])
             reply = json.dumps(package(), ensure_ascii=False)
             ready = app.dispatch("plan.generation.parse", {"generation_id": generation["generation_id"], "response_text": reply})
             self.assertEqual(ready["status"], "READY")

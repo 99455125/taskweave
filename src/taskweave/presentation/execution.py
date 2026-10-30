@@ -11,6 +11,8 @@ class ExecutionQuery(Protocol):
     @overload
     async def __call__(self, operation: Literal['run.list']) -> list[RunSummary]: ...
     @overload
+    async def __call__(self, operation: Literal['sequence.run.list']) -> list[dict[str, JSON]]: ...
+    @overload
     async def __call__(self, operation: Literal['run.get'], *, run_id: str) -> dict[str, JSON]: ...
     @overload
     async def __call__(self, operation: Literal['environment.list']) -> list[dict[str, JSON]]: ...
@@ -18,6 +20,16 @@ class ExecutionQuery(Protocol):
     async def __call__(self, operation: Literal['task.list']) -> list[TaskRecord]: ...
     @overload
     async def __call__(self, operation: Literal['step.list'], *, task_id: str) -> list[StepRecord]: ...
+
+
+def combination_execution(run):
+    """Project a combination as one selectable execution, retaining its frozen record."""
+    return {**run, 'execution_kind': 'sequence', 'run_id': run['sequence_run_id'],
+            'task_id': 'sequence:' + str(run['sequence_id']),
+            'mode': run['snapshot'].get('mode', 'EXECUTION'),
+            'environment_id': None, 'request_json': '{}', 'definition_json': None,
+            'started_at': run['created_at'], 'attempts': [], 'wait_until': None,
+            'waiting_step_id': None}
 
 
 @dataclass(frozen=True)
@@ -70,30 +82,41 @@ class ExecutionInteraction:
             return identity == self.rows_identity(page())
         all_runs = await call('run.list')
         if not current(): return None
-        runs = self.filter_runs(all_runs)
+        combinations = [combination_execution(run) for run in await call('sequence.run.list')]
+        if not current(): return None
+        owner = next((row.get('sequence_run_id') for row in all_runs
+                      if row['run_id'] == self.state.run_id), None)
+        if owner:
+            self.select_run(owner)
+            identity = self.rows_identity(page())
+        runs = self.filter_runs([*all_runs, *combinations])
         details = []
         for row in reversed(runs):
             detail = self.cached_detail(row, force=force)
-            if detail is None:
+            if row.get('execution_kind') == 'sequence':
+                detail = row
+            elif detail is None:
                 detail = await call('run.get', run_id=row['run_id'])
                 if not current(): return None
                 self.remember(row, detail)
             details.append(detail)
             if not current(): return None
+        details.sort(key=lambda run: run.get('started_at') or '', reverse=True)
         self.retain(runs, details)
         if self.state.run_id is None and self.state.signature is None and details:
             self.state.run_id = details[0]['run_id']
             identity = self.rows_identity(page())
-        signature = self.summary([details, self.state.run_id, self.state.selected_step_run_id, self.state.selected_step_id])
+        signature = self.summary([details, self.state.run_id, self.state.selected_step_run_id, self.state.selected_step_id, self.state.search_query])
         if signature == self.state.signature: return None
         environments = {item['environment_id']: item['name'] for item in await call('environment.list')}
         if not current(): return None
         tasks = {item['task_id']: item for item in await call('task.list')}
         if not current(): return None
+        tasks.update({run['task_id']: {'name': run['snapshot']['name']} for run in combinations})
         details = self.search(details, tasks)
         active_run = next((run for run in details if run['run_id'] == self.state.run_id), None)
         definition_steps = None
-        if active_run is not None:
+        if active_run is not None and active_run.get('execution_kind') != 'sequence':
             definition_steps = (json.loads(active_run['definition_json'])['steps'] if active_run['definition_json']
                                 else await call('step.list', task_id=active_run['task_id']))
             if not current(): return None
@@ -131,6 +154,7 @@ class ExecutionInteraction:
 
     def filter_runs(self, runs):
         return [run for run in runs if run['mode'] == 'EXECUTION'
+                and (run.get('execution_kind') == 'sequence' or not run.get('sequence_run_id'))
                 and (not self.state.task_ids or run['task_id'] in self.state.task_ids)
                 and (not self.state.statuses or run['status'] in self.state.statuses)]
 

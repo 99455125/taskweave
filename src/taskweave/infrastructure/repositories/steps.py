@@ -1,7 +1,7 @@
 """SQLite persistence for ordered task steps and their task graph."""
 
 from taskweave.core.validation import TaskError, normalize_step, fingerprint, check_bindings, dumps
-from taskweave.core.task_flow import normalize_flow, is_linear_flow
+from taskweave.core.task_flow import normalize_flow, is_linear_flow, conditional_branches
 import json
 from taskweave.infrastructure.sqlite_storage import SQLiteStorage, uid, now
 
@@ -50,7 +50,7 @@ class StepRepository:
         else:
             position = len(ordered)
         graph = json.loads(self.store.query("SELECT graph_json FROM tasks WHERE task_id=?", (task_id,), True)["graph_json"])
-        controlled = graph.get("version") == 2 and not is_linear_flow(graph)
+        controlled = not is_linear_flow(graph)
         check_bindings(doc["bindings"], ({s["step_id"] for s in ordered if s["step_id"] != step_id}
                                          if controlled else {s["step_id"] for s in ordered if s["position"] < position}))
         with self.store.transaction() as db:
@@ -82,56 +82,46 @@ class StepRepository:
         ids = [s[0] for s in db.execute("SELECT step_id FROM steps WHERE task_id=? ORDER BY position", (task_id,))]
         task = db.execute("SELECT graph_json FROM tasks WHERE task_id=?", (task_id,)).fetchone()
         current = json.loads(task[0])
-        if current.get("version") == 2:
-            graph = json.loads(task[0])
-            if is_linear_flow(graph):
-                graph["root"] = {"id": "root", "kind": "sequence", "children": [
-                    {"id": sid, "kind": "action", "step_id": sid} for sid in ids
-                ]}
-            else:
-                available = set(ids)
-                def retain(node):
-                    if node["kind"] == "action":
-                        return node if node["step_id"] in available else None
-                    if node["kind"] == "sequence":
-                        node["children"] = [item for child in node["children"]
-                                            if (item := retain(child)) is not None]
-                    elif node["kind"] == "if":
-                        node["then"] = retain(node["then"])
-                        node["else"] = retain(node["else"])
-                    elif node["kind"] in {"foreach", "loop"}:
-                        node["body"] = retain(node["body"])
-                    return node
-                graph["root"] = retain(graph["root"])
-                def placed(node):
-                    if node["kind"] == "action":
-                        return {node["step_id"]}
-                    if node["kind"] == "sequence":
-                        return set().union(*(placed(child) for child in node["children"]))
-                    if node["kind"] == "if":
-                        return placed(node["then"]) | placed(node["else"])
-                    return placed(node["body"])
-                for sid in ids:
-                    if sid not in placed(graph["root"]):
-                        graph["root"]["children"].append({"id": sid, "kind": "action", "step_id": sid})
-            normalize_flow(graph, [{"step_id": sid} for sid in ids])
-            encoded = dumps(graph)
-            if encoded != task[0]:
-                linear = is_linear_flow(graph)
-                db.execute(
-                    "UPDATE tasks SET graph_json=?,flow_validation_state=?,flow_verified_hash=?,updated_at=? WHERE task_id=?",
-                    (encoded, "VALIDATED" if linear else "DRAFT",
-                     fingerprint(graph) if linear else None, now(), task_id),
-                )
-            return
-        graph = {
-            "entry_node_id": ids[0] if ids else None,
-            "nodes": [
-                {"id": sid, "kind": "action", "config": {"step_id": sid}, "next": ids[i + 1] if i + 1 < len(ids) else None}
-                for i, sid in enumerate(ids)
-            ],
-        }
-        db.execute("UPDATE tasks SET graph_json=?,updated_at=? WHERE task_id=?", (dumps(graph), now(), task_id))
+        graph = json.loads(task[0])
+        if is_linear_flow(graph):
+            graph["root"] = {"id": "root", "kind": "sequence", "children": [
+                {"id": sid, "kind": "action", "step_id": sid} for sid in ids
+            ]}
+        else:
+            available = set(ids)
+            def retain(node):
+                if node["kind"] == "action":
+                    return node if node["step_id"] in available else None
+                if node["kind"] == "sequence":
+                    node["children"] = [item for child in node["children"]
+                                        if (item := retain(child)) is not None]
+                elif node["kind"] == "if":
+                    for _, body in conditional_branches(node):
+                        retain(body)
+                elif node["kind"] in {"foreach", "loop"}:
+                    node["body"] = retain(node["body"])
+                return node
+            graph["root"] = retain(graph["root"])
+            def placed(node):
+                if node["kind"] == "action":
+                    return {node["step_id"]}
+                if node["kind"] == "sequence":
+                    return set().union(*(placed(child) for child in node["children"]))
+                if node["kind"] == "if":
+                    return set().union(*(placed(body) for _, body in conditional_branches(node)))
+                return placed(node["body"])
+            for sid in ids:
+                if sid not in placed(graph["root"]):
+                    graph["root"]["children"].append({"id": sid, "kind": "action", "step_id": sid})
+        normalize_flow(graph, [{"step_id": sid} for sid in ids])
+        encoded = dumps(graph)
+        if encoded != task[0]:
+            linear = is_linear_flow(graph)
+            db.execute(
+                "UPDATE tasks SET graph_json=?,flow_validation_state=?,flow_verified_hash=?,updated_at=? WHERE task_id=?",
+                (encoded, "VALIDATED" if linear else "DRAFT",
+                 fingerprint(graph) if linear else None, now(), task_id),
+            )
 
     def reorder(self, task_id, step_ids):
         steps = self.steps(task_id)
@@ -139,7 +129,7 @@ class StepRepository:
             raise TaskError("ORDER_INVALID")
         seen = set()
         task_graph = json.loads(self.store.query("SELECT graph_json FROM tasks WHERE task_id=?", (task_id,), True)["graph_json"])
-        if task_graph.get("version") == 2 and not is_linear_flow(task_graph):
+        if not is_linear_flow(task_graph):
             raise TaskError("FLOW_REORDER_USE_EDITOR", "请在流程树中移动完整节点")
         for sid in step_ids:
             check_bindings(next(s for s in steps if s["step_id"] == sid)["bindings"], seen)

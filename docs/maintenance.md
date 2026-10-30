@@ -10,10 +10,11 @@
 | 步骤编写、校验、插件诊断与AI候选 | [步骤编写与校验](modules/authoring.md) | application/authoring.py、authoring_sessions.py、ai_requests.py；presentation/authoring.py、chat.py | application.authoring、ui.debug |
 | 采集、目标、录制与素材 | [上下文](modules/contexts.md) | application/contexts.py；infrastructure/context_sessions.py；presentation/context_collection.py、collection_form.py | domain.contexts、repository.contexts、ui.contexts |
 | 运行、补录、重跑、恢复与结果 | [执行](modules/execution.md) | application/runs.py；infrastructure/run_coordinator.py、coordinator_pool.py、worker_transport.py、worker.py | application.runs、ui.executions、ui.results、ui.debug |
-| 任务组合、映射与串行推进 | [执行](modules/execution.md) | core/task_sequences.py；application/sequences.py、sequence_driver.py；infrastructure/repositories/sequences.py；desktop/pages/sequences.py | application.sequences、repository.sequences、ui.sequences |
+| 任务组合、映射与结构化推进 | [执行](modules/execution.md) | core/task_sequences.py、sequence_flow.py；application/sequences.py、sequence_driver.py、sequence_values.py；infrastructure/repositories/sequences.py；desktop/pages/sequences.py、desktop/components/sequence_execution.py | application.sequences、repository.sequences、ui.sequences |
 | 数据库、事务、环境与工作空间设置 | [存储与环境](modules/storage.md) | infrastructure/sqlite_storage.py、repositories/；application/environments.py、settings.py | shared.storage、application.environments、repository.environments、ui.settings |
 | 交互、导航、页面与原生窗口 | [桌面UI](modules/desktop.md) | desktop/workbench.py、pages/、components/；presentation/ | 对应ui.*；presentation.interactions |
-| 发现、注册、SDK与具体插件 | [插件](modules/plugins.md) | src/taskweave/plugins/；plugins/ | shared.contracts、对应plugins.* |
+| 发现、注册、SDK与具体插件 | [插件](modules/plugins.md) | src/taskweave/plugins/；plugins/ | shared.contracts、对应plugins.*（含plugins.pdf） |
+| 内部数据集与Excel文件处理 | [存储](modules/storage.md)、[插件](modules/plugins.md) | core/dataset_contracts.py；infrastructure/datasets.py、dataset_sql.py；plugins/dataset/、plugins/excel/ | plugins.dataset、plugins.excel |
 
 以上源码路径以src/taskweave/为基准，根目录plugins/另行标明。完整目录与调用方向见[架构](architecture.md)。
 

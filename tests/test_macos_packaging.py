@@ -24,7 +24,7 @@ class PackagingTests(unittest.TestCase):
     def test_release_manifest_has_only_distribution_metadata(self):
         manifest = build.release_manifest('0.1.0', {name: '0.1.0' for name in build.PLUGINS})
         self.assertEqual(manifest['platform'], 'macos-arm64')
-        self.assertEqual(len(manifest['plugins']), 11)
+        self.assertEqual(len(manifest['plugins']), 15)
         self.assertEqual(set(manifest), {'product', 'version', 'platform', 'built_at_utc', 'plugins', 'browser', 'external_tools'})
 
     def test_declared_plugins_match_approved_full_inventory(self):

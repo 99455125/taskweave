@@ -74,7 +74,7 @@ class PluginArchitectureTests(unittest.TestCase):
             self.assertIs(pickle.loads(legacy_global), cls)
             self.assertIs(type(pickle.loads(pickle.dumps(cls(*args)))), cls)
 
-    def test_declared_entry_points_register_all_eleven_plugins_without_resources(self):
+    def test_declared_entry_points_register_all_plugins_without_resources(self):
         from importlib.metadata import EntryPoint
         from taskweave.plugins.registry import Registry
         plugins = []
@@ -88,7 +88,7 @@ class PluginArchitectureTests(unittest.TestCase):
         registry = Registry(plugins)
         self.assertEqual(set(registry.versions), {
             'playwright', 'ocr', 'tidb', 'file', 'utility', 'process', 'ssh',
-            'baota_dashboard', 'wordpress', 'uniapp', 'wechat_dev',
+            'baota_dashboard', 'wordpress', 'uniapp', 'wechat_dev', 'pdf', 'dataset', 'excel', 'nacos',
         })
 
     def test_host_sdk_does_not_import_optional_plugin_dependencies(self):
@@ -97,7 +97,7 @@ import importlib.abc
 import sys
 class BlockOptional(importlib.abc.MetaPathFinder):
     def find_spec(self, fullname, path=None, target=None):
-        if fullname.split('.')[0] in {'playwright', 'pymysql', 'sqlglot', 'ddddocr', 'nicegui', 'webview'}:
+        if fullname.split('.')[0] in {'playwright', 'pymysql', 'sqlglot', 'ddddocr', 'nicegui', 'webview', 'reportlab', 'pypdfium2', 'pypdfium2_raw', 'openpyxl', 'et_xmlfile', 'defusedxml'}:
             raise RuntimeError('Optional dependency leaked: ' + fullname)
 sys.meta_path.insert(0, BlockOptional())
 import taskweave.plugins.sdk

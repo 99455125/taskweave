@@ -1,6 +1,6 @@
 # TaskWeave 知识库
 
-本文档集描述当前源码的产品概念、实现边界和使用方式。知识基线为当前主工程及十一插件源码；版本与约束从对应实现核对，不用需求计划或阶段验收代替现状。
+本文档集描述当前源码的产品概念、实现边界和使用方式。知识基线为当前主工程及现有插件源码；版本与约束从对应实现核对，不用需求计划或阶段验收代替现状。
 
 ## 阅读路径
 
@@ -20,10 +20,10 @@
 | 项目 | 现行值 | 权威实现 |
 | --- | --- | --- |
 | Python / 主包 | Python ≥3.10，TaskWeave 0.1.0 | [pyproject.toml](../pyproject.toml) |
-| 控制库 / 任务数据 | 23 / 2 | [sqlite_storage.py](../src/taskweave/infrastructure/sqlite_storage.py) |
+| 控制库 / 任务数据 | 各自单一现行结构 | [control.sql](../src/taskweave/infrastructure/sql/control.sql)、[task-data.sql](../src/taskweave/infrastructure/sql/task-data.sql) |
 | 插件API | 1 | [registry.py](../src/taskweave/plugins/registry.py) |
 | 步骤内容 | `python-async-v1` | [validation.py](../src/taskweave/core/validation.py) |
-| 任务包 | 线性`taskweave-task-2`；结构化`taskweave-task-3` | [task_package.py](../src/taskweave/core/task_package.py) |
+| 任务包 | `taskweave-task-3`，统一携带流程树 | [task_package.py](../src/taskweave/core/task_package.py) |
 
 ## 知识维护
 

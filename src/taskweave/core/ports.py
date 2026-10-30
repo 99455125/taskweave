@@ -4,6 +4,8 @@ from dataclasses import dataclass, field
 from typing import Any, AsyncContextManager, Mapping, Protocol, Sequence
 
 from taskweave.core.json_types import JSON
+from taskweave.core.dataset_contracts import DatasetStore
+from taskweave.core.codegen_contracts import CodeGeneratorSpec, CodeGeneratorProvider
 from taskweave.core.capability_contracts import Diagnostic, CapabilitySpec, AuthoringContribution
 from taskweave.core.context_contracts import ContextItem, ContextView, ContextCollection, ContextRecordingCommand, ContextRecordingBatch, ContextTarget
 from taskweave.core.model_ports import ToolCall, ModelReply, ModelPort
@@ -82,6 +84,7 @@ class ResourceRegistry(Protocol):
 
 class PluginContext(Protocol):
     scope: Scope
+    datasets: DatasetStore
 
     async def allocate_file(self, name: str) -> StagedFile: ...
 
@@ -129,7 +132,7 @@ class PreparedResult:
 
 
 class ResultHandler(Protocol):
-    # Declarative schemas/migrations; host validates and performs all storage IO.
+    # Declarative current schemas; host validates and performs all storage IO.
     def schema(self) -> Mapping[str, JSON]: ...
     def prepare(self, request: ResultRequest) -> PreparedResult: ...
     def parse(self, stored: JSON) -> JSON: ...

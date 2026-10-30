@@ -9,12 +9,12 @@ ROOT = Path(SPECPATH).parents[1]
 settings = runpy.run_path(str(ROOT / 'scripts/build_macos.py'))
 modules = list(settings['PLUGINS'].values())
 datas, binaries, hiddenimports = [], [], []
-for package in ['taskweave', *modules, 'nicegui', 'webview', 'playwright', 'ddddocr', 'onnxruntime', 'cv2', 'tzdata']:
+for package in ['taskweave', *modules, 'nicegui', 'webview', 'playwright', 'ddddocr', 'onnxruntime', 'cv2', 'tzdata', 'pypdfium2', 'pypdfium2_raw', 'openpyxl', 'et_xmlfile', 'defusedxml', 'ruamel.yaml']:
     data, binary, hidden = collect_all(package)
     datas += data
     binaries += binary
     hiddenimports += hidden
-for distribution in ['taskweave', *[m.replace('_', '-') for m in modules], 'nicegui', 'pywebview', 'playwright']:
+for distribution in ['taskweave', *[m.replace('_', '-') for m in modules], 'nicegui', 'pywebview', 'playwright', 'pypdfium2', 'openpyxl', 'et-xmlfile', 'defusedxml', 'ruamel-yaml']:
     datas += copy_metadata(distribution)
 
 a = Analysis(

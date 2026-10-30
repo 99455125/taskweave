@@ -8,7 +8,7 @@ import sys
 
 BUNDLED_PLUGINS = (
     'playwright', 'ocr', 'tidb', 'utility', 'file', 'process', 'ssh',
-    'baota_dashboard', 'wordpress', 'uniapp', 'wechat_dev',
+    'baota_dashboard', 'wordpress', 'uniapp', 'wechat_dev', 'pdf', 'dataset', 'excel', 'nacos',
 )
 
 

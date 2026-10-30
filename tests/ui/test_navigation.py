@@ -266,6 +266,7 @@ class NavigationTests(unittest.TestCase):
                     started.set()
                     await release.wait()
                     return []
+                if operation == "sequence.run.list": return []
                 if operation == "run.list":
                     return []
                 return []
@@ -380,7 +381,7 @@ class NavigationTests(unittest.TestCase):
     def test_execution_task_filter_accepts_multiple_searchable_tasks(self):
         async def scenario():
             controller = AsyncMock()
-            controller.call.side_effect = [[{"task_id": "a", "name": "Alpha"}, {"task_id": "b", "name": "Beta"}]]
+            controller.call.side_effect = [[{"task_id": "a", "name": "Alpha"}, {"task_id": "b", "name": "Beta"}], []]
             selects = [MagicMock(), MagicMock()]
             for select in selects:
                 select.props.return_value = select
@@ -391,7 +392,7 @@ class NavigationTests(unittest.TestCase):
             with patch("taskweave.desktop.pages.executions.ui", ui):
                 await page.render()
             self.assertEqual(ui.select.call_args_list[0].kwargs["multiple"], True)
-            self.assertEqual(ui.select.call_args_list[0].kwargs["label"], "任务筛选（可多选）")
+            self.assertEqual(ui.select.call_args_list[0].kwargs["label"], "任务或任务组合（可多选）")
             self.assertIn("use-input", selects[0].props.call_args.args[0])
 
         asyncio.run(scenario())
