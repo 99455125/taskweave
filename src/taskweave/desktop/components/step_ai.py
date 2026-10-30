@@ -561,7 +561,7 @@ class StepAIEditor:
             ui.label("AI 生成步骤描述").classes("text-lg font-medium")
             requirement = ui.textarea(
                 "你想让这个步骤完成什么",
-                placeholder="例如：登录后进入记录管理，新建比例再通用示例通用示例，并保存结果截图",
+                placeholder="例如：登录后打开记录列表，新建一条记录，并保存结果截图",
             ).props("autogrow").classes("w-full")
             requirement.on_value_change(lambda event: setattr(draft, 'supplement', event.value or ''))
             with ui.row().classes("w-full gap-2 flex-wrap"):

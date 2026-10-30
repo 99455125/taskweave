@@ -5,7 +5,7 @@
 **Goal:** 完成已确认的实例选择、流程调试修复、实际路径展示、数组逐行录入四项。
 **Architecture:** 复用 worker 资源现场并按物理现场串行调度；新试跑保留自身结果归属。现有 Schema 和路径投影作为表单和显示的共同依据。
 **Tech Stack:** Python、uv、NiceGUI、unittest；不引入依赖。
-**Spec:** [确认范围](../specs/2026-10-28-通用示例experience-review-design.md#四项实施范围用户已确认)
+**Spec:** 本计划的目标及四项任务定义实施范围。
 
 ## Global Constraints
 

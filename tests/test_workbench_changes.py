@@ -26,7 +26,7 @@ class WorkbenchChanges(unittest.TestCase):
         from taskweave.desktop.workbench import filter_tasks
 
         tasks = [
-            {'name': '记录录入', 'description': '通用示例平台'},
+            {'name': '记录录入', 'description': '本地示例'},
             {'name': '通用示例核对', 'description': 'TiDB 数据校验'},
         ]
         self.assertEqual([task['name'] for task in filter_tasks(tasks, '记录')], ['记录录入'])
