@@ -135,11 +135,11 @@ class ContextCardTests(unittest.TestCase):
         from taskweave.desktop.contexts import show_context_preview
 
         async def scenario():
-            element={'tag':'button','name':'提交通用示例','role':'button','visible':True,
-                     'enabled':False,'selector':{'kind':'role','value':'button','name':'提交通用示例'},
+            element={'tag':'button','name':'提交记录','role':'button','visible':True,
+                     'enabled':False,'selector':{'kind':'role','value':'button','name':'提交记录'},
                      'attributes':{'data-testid':'submit-order'}}
             capture={'items':[
-                {'source':'playwright.page','content':json.dumps({'title':'通用示例页','elements':[element],
+                {'source':'playwright.page','content':json.dumps({'title':'记录页','elements':[element],
                     'frames':[{'url':'https://example.com/frame','elements':[dict(element,name='框架按钮')]}]})},
                 {'source':'playwright.recording','content':json.dumps({'events':[{'sequence':1,'kind':'click','target':element}]})},
                 {'source':'plugin_b.schema','content':json.dumps({'table':'orders','columns':[{'name':'order_no','type':'string'}]})}],
@@ -150,10 +150,10 @@ class ContextCardTests(unittest.TestCase):
             self.assertIn('采集数据',labels)
             self.assertIn('原文',labels)
             tables=[e for e in dialog.descendants() if 'tw-context-data-table' in e.classes]
-            self.assertTrue(any(row['name']=='提交通用示例' for table in tables for row in table.rows))
+            self.assertTrue(any(row['name']=='提交记录' for table in tables for row in table.rows))
             self.assertTrue(any(row['name']=='框架按钮' for table in tables for row in table.rows))
             self.assertTrue(any(row.get('action')=='click' for table in tables for row in table.rows))
-            table=next(t for t in tables if t.rows[0]['name']=='提交通用示例')
+            table=next(t for t in tables if t.rows[0]['name']=='提交记录')
             next(v.handler for v in table._event_listeners.values() if v.type=='rowClick')(
                 SimpleNamespace(args=[None,table.rows[0],0]))
             trees=[e for e in self.client.elements.values() if 'tw-context-field-tree' in e.classes]
@@ -167,12 +167,12 @@ class ContextCardTests(unittest.TestCase):
         async def scenario():
             capture={'items':[
                 {'source':'plugin_b.schema','content':json.dumps({'password':'fixture-sensitive-value','columns':['order_no']})},
-                {'source':'plugin_b.notes','content':'手动核对通用示例状态'}],'views':[]}
+                {'source':'plugin_b.notes','content':'手动核对记录状态'}],'views':[]}
             dialog=await show_context_preview('材料',capture,{},AsyncMock())
             rendered=' '.join(str(getattr(e,'content',''))+json.dumps(e._props,ensure_ascii=False) for e in dialog.descendants())
             self.assertNotIn('fixture-sensitive-value',rendered)
             self.assertIn('[REDACTED]',rendered)
-            self.assertIn('手动核对通用示例状态',rendered)
+            self.assertIn('手动核对记录状态',rendered)
             self.assertIn('order_no',rendered)
         self.run_scenario(scenario)
 
@@ -219,12 +219,12 @@ class ContextCardTests(unittest.TestCase):
     def test_saved_capture_shows_read_only_notes_and_summary_without_preview_action(self):
         async def scenario():
             group = dict(context_id='one', name='名称', context_notes='组说明', captures=[
-                dict(capture_id='capture-one', label='项一', operation_notes='打开通用示例查询',
+                dict(capture_id='capture-one', label='项一', operation_notes='打开记录查询',
                      items=[{'content': '原始证据'}]),
             ])
             cards = ContextCards([group], AsyncMock(), AsyncMock())
             texts = [getattr(e, 'text', '') for e in cards.cards['one'].descendants()]
-            self.assertIn('打开通用示例查询', texts)
+            self.assertIn('打开记录查询', texts)
             self.assertIn('原始证据', texts)
             self.assertIn('组说明', texts)
             self.assertNotIn('已采集', texts)

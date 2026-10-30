@@ -615,14 +615,14 @@ class PlanningPageTests(unittest.TestCase):
         summary = generation_summary({
             "generation_id": "g-latest", "created_at": "2026-09-27T06:30:00+00:00",
             "channel": "web_chat", "status": "BLOCKED", "candidate": None,
-            "diagnostics": [{"code": "PLAN_INFORMATION_MISSING", "message": "缺少通用示例编号"}],
+            "diagnostics": [{"code": "PLAN_INFORMATION_MISSING", "message": "缺少记录编号"}],
         })
         self.assertFalse(summary["can_import"])
         self.assertEqual(summary["channel"], "网页 Chat")
         self.assertEqual(summary["status"], "信息不足")
         self.assertNotIn("web_chat", summary["channel"])
         self.assertNotIn("BLOCKED", summary["status"])
-        self.assertIn("缺少通用示例编号", summary["diagnostics"][0])
+        self.assertIn("缺少记录编号", summary["diagnostics"][0])
 
     def test_import_generation_allows_two_independent_imports_and_refreshes_candidate(self):
         async def scenario():

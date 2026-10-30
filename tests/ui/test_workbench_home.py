@@ -89,7 +89,7 @@ class WorkbenchHomeTests(unittest.TestCase):
                 return {"last_command": {"mode": "UNTIL", "target": "step-a", "retry": None, "from": None}}
 
             async def call(operation, **kwargs):
-                if operation == "task.list": return [{"task_id": "task-a", "name": "通用示例任务", "updated_at": "2026-09-26", "description": ""}]
+                if operation == "task.list": return [{"task_id": "task-a", "name": "处理任务", "updated_at": "2026-09-26", "description": ""}]
                 if operation == "organization.category.list": return []
                 if operation == "environment.list": return []
                 if operation == "run.list": return [running, waiting, paused, retained, uncertain, history]

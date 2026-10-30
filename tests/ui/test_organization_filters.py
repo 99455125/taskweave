@@ -27,14 +27,14 @@ class OrganizationFilterTests(unittest.TestCase):
 
     def test_task_and_plan_filters_combine_search_favorites_and_category(self):
         rows = [
-            {"task_id": "a", "plan_id": "a", "name": "通用示例", "description": "登录", "is_favorite": 1, "category_id": "work"},
-            {"task_id": "b", "plan_id": "b", "name": "通用示例备份", "description": "登录", "is_favorite": 0, "category_id": "work"},
+            {"task_id": "a", "plan_id": "a", "name": "记录", "description": "登录", "is_favorite": 1, "category_id": "work"},
+            {"task_id": "b", "plan_id": "b", "name": "记录备份", "description": "登录", "is_favorite": 0, "category_id": "work"},
         ]
         self.assertEqual(
-            [row["task_id"] for row in filter_tasks(rows, "通用示例", favorite=True, category_id="work")],
+            [row["task_id"] for row in filter_tasks(rows, "记录", favorite=True, category_id="work")],
             ["a"],
         )
         self.assertEqual(
-            [row["plan_id"] for row in filter_plans(rows, "通用示例", favorite=True, category_id="work")],
+            [row["plan_id"] for row in filter_plans(rows, "记录", favorite=True, category_id="work")],
             ["a"],
         )

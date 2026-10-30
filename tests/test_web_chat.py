@@ -14,11 +14,11 @@ class WebChatTests(unittest.TestCase):
         self.assertIn('\n    role = "operator"', source)
         self.assertEqual(explanation, 'ok')
         self.assertEqual(
-            parse_goal_reply('{"step_description":"进入记录管理并创建通用示例。","step_notes":"不要重复打开页面"}'),
-            ('进入记录管理并创建通用示例。', '不要重复打开页面'),
+            parse_goal_reply('{"step_description":"进入记录管理并创建记录。","step_notes":"不要重复打开页面"}'),
+            ('进入记录管理并创建记录。', '不要重复打开页面'),
         )
         with self.assertRaises(TaskError):
-            parse_goal_reply('进入记录管理并创建通用示例。')
+            parse_goal_reply('进入记录管理并创建记录。')
     def test_paste_json_or_fenced_code(self):
         source_with_document_like_data = 'async def run(ctx, inputs):\n    return ctx.result(data={"step_content": "business value"})\n'
         for reply in [SOURCE, source_with_document_like_data, '```python\n' + SOURCE + '```', json.dumps({'step_content': SOURCE, 'explanation': '说明'}), '```json\n'+json.dumps({'step_content': SOURCE})+'\n```']:

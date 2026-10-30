@@ -353,7 +353,7 @@ class PlanningTests(unittest.TestCase):
 
         plans = [
             {"plan_id": "a", "name": "登录", "plan_description": "打开门户"},
-            {"plan_id": "b", "name": "通用示例", "plan_description": "TiDB 核对"},
+            {"plan_id": "b", "name": "数据", "plan_description": "TiDB 核对"},
             {"plan_id": "c", "name": "导出", "plan_description": "下载文件"},
         ]
         self.assertEqual([p["plan_id"] for p in filter_plans(plans, "tidb")], ["b"])
@@ -386,7 +386,7 @@ class PlanningTests(unittest.TestCase):
 
         async def scenario():
             controller = AsyncMock()
-            controller.call.side_effect = [[{"plan_id": "p1", "name": "通用示例", "revision": 1} ], [], {"plan_id": "p1"}]
+            controller.call.side_effect = [[{"plan_id": "p1", "name": "记录", "revision": 1} ], [], {"plan_id": "p1"}]
             button = MagicMock()
             page = PlanningPage(controller, PlanningPageState(plan_id="p1"), button, AsyncMock(), AsyncMock(), AsyncMock())
             page.editor = AsyncMock()
@@ -400,7 +400,7 @@ class PlanningTests(unittest.TestCase):
             self.assertIn("搜索规划", [call.args[0] for call in fake_ui.input.call_args_list])
             titles = [call.args[0] for call in button.call_args_list]
             self.assertIn("新建规划", titles)
-            self.assertIn("通用示例", titles)
+            self.assertIn("记录", titles)
             props = [entry.args[0] for entry in button.return_value.props.call_args_list]
             self.assertTrue(any("icon=delete" in value for value in props))
 

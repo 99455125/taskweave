@@ -15,7 +15,7 @@ def store(app):
 class AgentStoreTests(CoreFixture):
     def test_definition_and_receipt_commit_together_and_replay(self):
         receipts = store(self.app)
-        first = receipts.atomic("create-contract", "fp1", lambda: self.app.tasks.create("通用示例"))
+        first = receipts.atomic("create-contract", "fp1", lambda: self.app.tasks.create("记录"))
         repeated = receipts.atomic("create-contract", "fp1", lambda: self.app.tasks.create("重复"))
         self.assertEqual(repeated["task_id"], first["task_id"])
         self.assertEqual(len(self.app.tasks.list()), 1)

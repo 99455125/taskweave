@@ -55,9 +55,9 @@ class PlaywrightScopeTests(unittest.IsolatedAsyncioTestCase):
         self.context = await self.browser.new_context()
         self.page = await self.context.new_page()
         await self.page.set_content('''
-            <fieldset id="reservation"><legend>通用示例</legend><label><input type="radio" name="reservation">否</label></fieldset>
+            <fieldset id="reservation"><legend>预约选项</legend><label><input type="radio" name="reservation">否</label></fieldset>
             <section id="other"><h2>其他记录信息</h2>
-              <fieldset id="open"><legend>通用示例</legend><label><input type="radio" name="open">是</label><label><input type="radio" name="open">否</label></fieldset>
+              <fieldset id="open"><legend>可选字段</legend><label><input type="radio" name="open">是</label><label><input type="radio" name="open">否</label></fieldset>
               <fieldset id="agent"><legend>附加选项</legend><label><input type="radio" name="agent">是</label><label><input type="radio" name="agent">否</label></fieldset>
             </section>
             <div id="status"></div><div role="checkbox" aria-label="自定义" aria-checked="false" tabindex="0"
@@ -147,7 +147,7 @@ class PlaywrightScopeTests(unittest.IsolatedAsyncioTestCase):
         radio = next(item for item in data['elements'] if item['tag'] == 'input' and item['label'] == '否')
         self.assertEqual(radio['match_count'], 1)
         self.assertEqual(await locate(self.page, radio['selector']).count(), 1)
-        self.assertEqual(radio['field_group']['name'], '通用示例')
+        self.assertEqual(radio['field_group']['name'], '预约选项')
 
     async def test_local_dom_has_bounded_hierarchy_field_groups_and_redacted_values(self):
         await self.page.locator('#agent').evaluate("e => e.insertAdjacentHTML('beforeend', '<input type=password id=password value=private-secret><input name=api_token value=another-secret>')")

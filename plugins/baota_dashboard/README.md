@@ -38,7 +38,7 @@ Optional fixed Chinese BaoTa Linux 11.7.0 API adapter. Protocol tests are not re
 | get_certificate | site/GetSSL siteName | false可为未启用；删真实私钥/CSR原文，摘要 | class/panelSite.py:2743 |
 | deploy_certificate | site/SetSSL siteName,key,csr | key引用、匹配证书公钥/链/域名/有效期，后查部署内容 | class/panelSite.py:1670 |
 | request_certificate | acme/apply_cert_api id,domains,auth_type,auth_to,auto_wildcard=0 | http/tls或手工dns；pending=accepted，证书=issued；不默认部署 | class/acme_v2.py:2090 |
-| renew_certificate | acme/renew_cert index=GetSSL所查通用示例 | 无证书/跳过不得成功；签发与部署expiry核对分开 | class/acme_v2.py:2514 |
+| renew_certificate | acme/renew_cert index=GetSSL所查记录 | 无证书/跳过不得成功；签发与部署expiry核对分开 | class/acme_v2.py:2514 |
 | set_https | SetSSLConf/CloseSSLConf；HttpToHttps/CloseToHttps | HTTPS/跳转分别执行/留痕，后GetSSL核对 | class/panelSite.py:2134,2443,2520,2593 |
 | create_backup | site或database/ToBackup id | 同步；查唯一新增备份、实际文件/完整下载MD5/大小 | class/panelSite.py:5572；class/database.py:1381 |
 | list_backups | data/getData backup type=0,search=site_id；database/GetBackup | pid/路径精确归属；DB getter不按id过滤 | class/data.py:769；class/database.py:2011 |

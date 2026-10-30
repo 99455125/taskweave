@@ -36,7 +36,7 @@ def build_registry(): return Registry([RecordingPlugin()])
 
 class LocalPage(BaseHTTPRequestHandler):
     def do_GET(self):
-        content = '<fieldset id="open"><legend>通用示例</legend><label><input type=radio name=open>是</label><label><input type=radio name=open>否</label></fieldset><fieldset><legend>附加选项</legend><label><input type=radio name=agent>否</label></fieldset><input id=password type=password>'
+        content = '<fieldset id="open"><legend>可选字段</legend><label><input type=radio name=open>是</label><label><input type=radio name=open>否</label></fieldset><fieldset><legend>附加选项</legend><label><input type=radio name=agent>否</label></fieldset><input id=password type=password>'
         if self.path == '/frame':
             content = '<button id="frame-confirm">框架确认</button>'
         elif self.path == '/complex':
@@ -131,12 +131,12 @@ class RetainedBrowserRecordingTests(unittest.TestCase):
                               for event in json.loads(item['content'])['events']]
                     clicks = [event for event in events if event['kind']=='operation' and event['action']=='click']
                     self.assertTrue(clicks)
-                    self.assertEqual(clicks[0]['target']['field_group']['name'], '通用示例')
+                    self.assertEqual(clicks[0]['target']['field_group']['name'], '可选字段')
                     self.assertTrue(clicks[0]['target']['checked'])
                     if complex_page:
                         groups = {event['target'].get('field_group', {}).get('name') for event in clicks
                                   if event['target'].get('field_group')}
-                        self.assertTrue({'通用示例', '附加字段0', '附加字段1', '附加字段2'} <= groups)
+                        self.assertTrue({'可选字段', '附加字段0', '附加字段1', '附加字段2'} <= groups)
                         names = {event['captured_target']['name'] for event in clicks}
                         self.assertTrue({'今天', '自然终止', '框架确认', '新页面确认', '最终页面确认'} <= names)
                         self.assertTrue(any(event['target'].get('selector', {}).get('frame') == '#subform'
@@ -157,7 +157,7 @@ class RetainedBrowserRecordingTests(unittest.TestCase):
                         self.assertGreaterEqual(len({event['target_id'] for event in baselines}), 2)
                     self.assertNotIn('never-store-this-password',text)
                     self.assertTrue(entry['capture']['views']);self.assertFalse(entry['send_preview'])
-                    entry.update(label='选择通用示例',operation_notes='先选择否，再检查选中状态。')
+                    entry.update(label='选择可选字段',operation_notes='先选择否，再检查选中状态。')
                     if complex_page:
                         entry['send_preview'] = True
                     async def save():
@@ -173,7 +173,7 @@ class RetainedBrowserRecordingTests(unittest.TestCase):
                     self.assertFalse(recording.pending)
                 asyncio.run(scenario())
                 saved=app.dispatch('context.list',{'step_id':step['step_id']})
-                self.assertEqual(len(saved),1);self.assertEqual(saved[0]['captures'][0]['label'],'选择通用示例')
+                self.assertEqual(len(saved),1);self.assertEqual(saved[0]['captures'][0]['label'],'选择可选字段')
                 original_capture = app.dispatch('context.capture.get', {'step_id':step['step_id'],
                     'context_id':saved[0]['context_id'],'capture_id':saved[0]['captures'][0]['capture_id']})
                 package=app.export_task(task['task_id'])

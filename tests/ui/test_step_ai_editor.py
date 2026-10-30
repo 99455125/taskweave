@@ -119,12 +119,12 @@ class StepAIEditorTests(unittest.TestCase):
             async def scenario():
                 self.assertTrue(hasattr(editor, 'generate_from_form'), 'Code assistant needs a guarded generation entry')
                 with patch('taskweave.desktop.components.step_ai.ui', MagicMock()):
-                    await editor.generate_from_form('chat', '保留通用示例编号，增加金额输出', repaint=AsyncMock())
+                    await editor.generate_from_form('chat', '保留记录编号，增加金额输出', repaint=AsyncMock())
                 request = controller.authoring_request(saved['step_id'])
                 self.assertTrue(request['params']['export_only'])
                 prompt = request['task'].result()['prompt']
                 self.assertIn('DEMO-100', prompt)
-                self.assertIn('保留通用示例编号，增加金额输出', prompt)
+                self.assertIn('保留记录编号，增加金额输出', prompt)
                 current = await controller.call('step.get', step_id=saved['step_id'])
                 self.assertEqual(current['step_content'], code)
             asyncio.run(scenario())

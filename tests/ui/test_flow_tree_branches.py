@@ -19,8 +19,8 @@ class FlowTreeBranchesTests(unittest.TestCase):
         self.addCleanup(self.javascript.stop)
         self.client = Client(page('/flow-tree-branches'))
         self.selected, self.configured, self.moved, self.deleted = [], [], [], []
-        self.steps = [{'step_id': 'step-a', 'name': '更新通用示例'},
-                      {'step_id': 'step-b', 'name': '新建通用示例'},
+        self.steps = [{'step_id': 'step-a', 'name': '更新记录'},
+                      {'step_id': 'step-b', 'name': '新建记录'},
                       {'step_id': 'step-c', 'name': '记录未匹配'}]
         condition = lambda n: {"op": "eq", "left": {"literal": n}, "right": {"literal": n}}
         body = lambda identity, action_id, step: {"id": identity, "kind": "sequence", "children": [
@@ -68,7 +68,7 @@ class FlowTreeBranchesTests(unittest.TestCase):
         self.assertEqual([getattr(e, 'text', '') for e in elements if 'tw-flow-path-label' in e.classes],
                          ['分支 1', '分支 2', '否则'])
 
-        for index, name in enumerate(('更新通用示例', '新建通用示例', '记录未匹配')):
+        for index, name in enumerate(('更新记录', '新建记录', '记录未匹配')):
             button = next(e for e in elements if e._props.get('aria-label') == '选择步骤：' + name)
             self.assertIs(self.branch_ancestor(button), rows[index])
             self.click(button)

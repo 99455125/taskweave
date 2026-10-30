@@ -395,7 +395,7 @@ class SequencesPageTests(CoreFixture):
     def test_child_execution_retains_failed_and_invalid_attempt_details(self):
         task = self.app.repo.create_task("失败任务", {
             "type": "object", "properties": {"value": {"type": "integer"}}, "required": ["value"]})["task_id"]
-        step = self.step(task, source="async def run(ctx, inputs):\n    if inputs['value'] == 0:\n        raise RuntimeError('通用示例未匹配')\n    return ctx.result(data=inputs)\n",
+        step = self.step(task, source="async def run(ctx, inputs):\n    if inputs['value'] == 0:\n        raise RuntimeError('记录未匹配')\n    return ctx.result(data=inputs)\n",
             bindings={"value": {"ref": {"source": "task", "pointer": "/value"}}},
             input_schema={"type": "object", "properties": {"value": {"type": "integer"}}, "required": ["value"]})
         self.confirm(step, {"value": 1})
@@ -419,7 +419,7 @@ class SequencesPageTests(CoreFixture):
                     self.assertIn("当前有效", attempts[1].text)
                     for attempt in attempts:
                         texts = [element.text for element in attempt.descendants() if isinstance(element, ui.label)]
-                        self.assertTrue(any("通用示例未匹配" in text for text in texts))
+                        self.assertTrue(any("记录未匹配" in text for text in texts))
                         self.assertTrue(any(json.loads(element.content) == {"value": 0}
                                             for element in attempt.descendants() if isinstance(element, ui.code)))
                     self.assertFalse(any(isinstance(element, ui.button) and element.text == "查看结果"

@@ -56,10 +56,10 @@ class TiDBPlugin:
     def result_views(self): return {'tidb.table': {'type': 'table', 'description': '查询结果表格：columns 和 rows'}, 'tidb.verification': {'type': 'report', 'description': '核对报告：passed/message/tables，每个表有 title/columns/rows；可选 query_info'}}
     def authoring(self, selected_ids):
         example = '''async def run(ctx, inputs):
-    table = await ctx.call("tidb.query", {"sql": "SELECT order_no, status FROM orders WHERE order_no = %s", "params": [inputs["order_no"]], "title": "通用示例信息"})
+    table = await ctx.call("tidb.query", {"sql": "SELECT order_no, status FROM orders WHERE order_no = %s", "params": [inputs["order_no"]], "title": "记录信息"})
     passed = not table["truncated"] and len(table["rows"]) == 1 and table["rows"][0]["status"] == "SUBMITTED"
-    report = {"passed": passed, "message": "通用示例核对通过" if passed else "通用示例核对未通过", "tables": [table], "query_info": table["query_info"]}
-    return ctx.result(data={"order_no": inputs["order_no"], "verified": passed, "report": report}, views=[{"title": "通用示例核对", "renderer": "tidb.verification", "pointer": "/report"}])'''
+    report = {"passed": passed, "message": "记录核对通过" if passed else "记录核对未通过", "tables": [table], "query_info": table["query_info"]}
+    return ctx.result(data={"order_no": inputs["order_no"], "verified": passed, "report": report}, views=[{"title": "记录核对", "renderer": "tidb.verification", "pointer": "/report"}])'''
         instructions = 'TiDB 连接由运行时提供，不把账号、密码、连接串放入参数、源码、返回或报告。tidb.query 使用 sql、params 及可选 title/max_rows；业务值用 %s 和 params 绑定，禁止字符串拼接。只允许单条只读 SELECT。表和字段必须来自结构上下文或结构工具。结果含 title、columns、rows、row_count、truncated、query_info；Decimal 为字符串、日期为 ISO 字符串。核对遵循步骤规格，区分零行、多行和 truncated。后续数据放 data；用户需要查看时用 tidb.table 或 tidb.verification 并提供明确标题。是否将不匹配视为失败由步骤规格决定；连接或查询异常不能伪装为核对成功。'
         examples = [example]
         if 'tidb.execute_sql' in selected_ids:

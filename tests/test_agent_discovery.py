@@ -25,11 +25,11 @@ class AgentDiscoveryTests(CoreFixture):
         jsonschema.Draft202012Validator.check_schema(contract)
         self.assertIn('checks', contract['properties'])
     def test_search_pages_stably_without_returning_step_code(self):
-        ids = [self.app.tasks.create(f"通用示例检查 {i}")["task_id"] for i in range(3)]
+        ids = [self.app.tasks.create(f"记录检查 {i}")["task_id"] for i in range(3)]
         self.step(ids[0])
         api = discovery(self.app)
-        page = api.discover("task", query="通用示例", limit=2)
-        following = api.discover("task", query="通用示例", cursor=page["next_cursor"], limit=2)
+        page = api.discover("task", query="记录", limit=2)
+        following = api.discover("task", query="记录", cursor=page["next_cursor"], limit=2)
         self.assertEqual(len(page["items"]), 2)
         self.assertEqual(len(following["items"]), 1)
         self.assertEqual({r["id"] for r in page["items"] + following["items"]}, set(ids))
@@ -37,16 +37,16 @@ class AgentDiscoveryTests(CoreFixture):
         self.assertIsNone(following["next_cursor"])
 
     def test_cursor_is_bound_to_query_and_detects_changed_collection(self):
-        self.app.tasks.create("通用示例甲")
-        self.app.tasks.create("通用示例乙")
+        self.app.tasks.create("记录甲")
+        self.app.tasks.create("记录乙")
         api = discovery(self.app)
-        page = api.discover("task", query="通用示例", limit=1)
+        page = api.discover("task", query="记录", limit=1)
         with self.assertRaises(TaskError) as caught:
             api.discover("task", query="另一查询", cursor=page["next_cursor"])
         self.assertEqual(caught.exception.code, "AGENT_CURSOR_INVALID")
-        self.app.tasks.create("通用示例丙")
+        self.app.tasks.create("记录丙")
         with self.assertRaises(TaskError) as caught:
-            api.discover("task", query="通用示例", cursor=page["next_cursor"])
+            api.discover("task", query="记录", cursor=page["next_cursor"])
         self.assertEqual(caught.exception.code, "AGENT_CURSOR_STALE")
 
     def test_action_details_are_selected_and_catalog_search_has_no_schema(self):

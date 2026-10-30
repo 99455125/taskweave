@@ -303,9 +303,9 @@ class TasksPageTests(unittest.TestCase):
             async def call(operation, **kwargs):
                 calls.append((operation, kwargs))
                 if operation == "task.get":
-                    return {"task_id": "task-a", "name": "通用示例任务", "description": "查询通用示例", "input_schema_json": '{"type":"object","properties":{}}', "updated_at": "today"}
+                    return {"task_id": "task-a", "name": "记录任务", "description": "查询记录", "input_schema_json": '{"type":"object","properties":{}}', "updated_at": "today"}
                 if operation == "task.list":
-                    return [{"task_id": "task-a", "name": "通用示例任务", "description": "查询通用示例"}, {"task_id": "task-b", "name": "其他任务", "description": "另一个"}]
+                    return [{"task_id": "task-a", "name": "记录任务", "description": "查询记录"}, {"task_id": "task-b", "name": "其他任务", "description": "另一个"}]
                 if operation == "organization.category.list":
                     return []
                 if operation == "step.list":
@@ -335,7 +335,7 @@ class TasksPageTests(unittest.TestCase):
             self.assertIn("步骤管理", labels)
             self.assertIn("执行历史", labels)
             self.assertIn("调试历史", labels)
-            self.assertIn("通用示例任务", labels)
+            self.assertIn("记录任务", labels)
             self.assertIn("步骤编辑视图", labels)
             self.assertIn("执行历史视图 task-a", labels)
             self.assertIn("调试历史视图 task-a", labels)
@@ -396,7 +396,7 @@ class TasksPageTests(unittest.TestCase):
         async def scenario():
             controller = AsyncMock()
             controller.call.side_effect = [
-                [{"task_id": "task", "name": "通用示例任务", "description": "对账"}], [],
+                [{"task_id": "task", "name": "记录任务", "description": "对账"}], [],
             ]
             titles = []
             def button(title, callback, **kwargs):

@@ -6,4 +6,4 @@
 uv run --extra browser python examples/req004/browser_demo.py
 ```
 
---headed显示浏览器窗口。需要匹配Chromium；输出通用示例号及本地结果。当前能力与配置见[Playwright插件](../../plugins/playwright/README.md)，SDK见[插件契约](../../docs/contracts/plugins.md)。本例不是真实外部业务系统验收。
+--headed显示浏览器窗口。需要匹配Chromium；输出记录号及本地结果。当前能力与配置见[Playwright插件](../../plugins/playwright/README.md)，SDK见[插件契约](../../docs/contracts/plugins.md)。本例不是真实外部业务系统验收。

@@ -65,25 +65,25 @@ uv run --extra gui --extra browser --extra ocr --extra database taskweave workbe
 
 ## 步骤示例
 
-前序步骤返回 `data.order_no`，在当前步骤绑定输入 `order_no` 到前序结果 `/order_no`。目标可写“根据单号查询通用示例，确认状态为 SUBMITTED，保存通用示例表和核对说明供查看”。AI 使用插件提供的格式生成：
+前序步骤返回 `data.order_no`，在当前步骤绑定输入 `order_no` 到前序结果 `/order_no`。目标可写“根据单号查询记录，确认状态为 SUBMITTED，保存记录表和核对说明供查看”。AI 使用插件提供的格式生成：
 
 ```python
 async def run(ctx, inputs):
     table = await ctx.call("tidb.query", {
         "sql": "SELECT order_no, status FROM orders WHERE order_no = %s",
         "params": [inputs["order_no"]],
-        "title": "通用示例信息",
+        "title": "记录信息",
     })
     passed = not table["truncated"] and len(table["rows"]) == 1 and table["rows"][0]["status"] == "SUBMITTED"
     report = {
         "passed": passed,
-        "message": "通用示例核对通过" if passed else "通用示例核对未通过",
+        "message": "记录核对通过" if passed else "记录核对未通过",
         "tables": [table],
         "query_info": table["query_info"],
     }
     return ctx.result(
         data={"order_no": inputs["order_no"], "verified": passed, "report": report},
-        views=[{"title": "通用示例数据库核对", "renderer": "tidb.verification", "pointer": "/report"}],
+        views=[{"title": "记录数据库核对", "renderer": "tidb.verification", "pointer": "/report"}],
     )
 ```
 

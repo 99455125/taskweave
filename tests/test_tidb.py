@@ -32,11 +32,11 @@ class TiDBTests(unittest.TestCase):
         cursor.fetchmany.return_value = [(Decimal('1.20'), datetime(2026, 9, 19)), (Decimal('2'), datetime(2026, 9, 19))]
         connection = MagicMock();connection.cursor.return_value = cursor
         with patch('pymysql.connect', return_value=connection) as connect:
-            result = asyncio.run(DatabaseAction('query').execute(self.context(), {'sql': 'SELECT amount, created FROM orders WHERE order_no = %s', 'params': ["x' OR 1=1"], 'max_rows': 1, 'title': '通用示例'}))
+            result = asyncio.run(DatabaseAction('query').execute(self.context(), {'sql': 'SELECT amount, created FROM orders WHERE order_no = %s', 'params': ["x' OR 1=1"], 'max_rows': 1, 'title': '记录'}))
         self.assertEqual(cursor.execute.call_args.args, ('SELECT amount, created FROM orders WHERE order_no = %s', ["x' OR 1=1"]))
         self.assertEqual(cursor.execute.call_args_list[0].args, ('SET TRANSACTION READ ONLY',))
         self.assertEqual(result['rows'][0]['amount'], '1.20');self.assertTrue(result['truncated'])
-        self.assertEqual(result['title'], '通用示例');self.assertNotIn('password', result['query_info'])
+        self.assertEqual(result['title'], '记录');self.assertNotIn('password', result['query_info'])
         connection.rollback.assert_called_once();connection.close.assert_called_once()
         self.assertEqual(connect.call_args.kwargs['database'], 'uat')
 

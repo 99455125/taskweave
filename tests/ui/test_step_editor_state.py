@@ -13,7 +13,7 @@ class StepEditorStateTests(unittest.TestCase):
     def test_action_insertion_uses_cursor_line_indentation_and_preserves_return(self):
         from taskweave.desktop.components.step_editor import insert_action_source
         source = ('async def run(ctx, inputs):\n'
-                  '    title = "通用示例📄"\n'
+                  '    title = "记录📄"\n'
                   '    if inputs:\n'
                   '        title = inputs["title"]\n'
                   '    return ctx.result(data=inputs)\n')
@@ -30,7 +30,7 @@ class StepEditorStateTests(unittest.TestCase):
         import ast
         from taskweave.desktop.components.step_editor import insert_action_source
         source = ('async def run(ctx, inputs):\n'
-                  '    title = """通用示例\n'
+                  '    title = """记录\n'
                   '第二行\n'
                   '    最后一行"""\n'
                   '    return ctx.result(\n'
@@ -66,8 +66,8 @@ class StepEditorStateTests(unittest.TestCase):
                     preview = next((e for e in client.elements.values() if 'tw-action-preview' in e.classes), None)
                     self.assertIsNotNone(preview, 'Action parameters need a live code preview')
                     text = next(e for e in client.elements.values() if e.props.get('aria-label') == 'text · 必录')
-                    text.set_value('通用示例📄')
-                    self.assertIn("'text': '通用示例📄'", preview.content)
+                    text.set_value('记录📄')
+                    self.assertIn("'text': '记录📄'", preview.content)
                     self.assertEqual(wb.edit_controls['code'].value, step['step_content'])
                     self.assertEqual(wb.edit_controls['caps'].value, ['demo', 'text'])
                     wb.edit_controls['caps'].set_value(['demo'])
@@ -175,7 +175,7 @@ class StepEditorStateTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
             task = app.repo.create_task('assistant layout')
-            step = app.repo.save_step(task['task_id'], {'name': '查询通用示例', 'capabilities': []})
+            step = app.repo.save_step(task['task_id'], {'name': '查询记录', 'capabilities': []})
             client = Client(page('/code-assistant-switching'))
             async def scenario():
                 with client:

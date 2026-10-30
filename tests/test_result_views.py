@@ -26,7 +26,7 @@ class ResultViews(unittest.TestCase):
             with Application(home) as app:
                 task = app.repo.create_task('展示')['task_id']
                 step = app.repo.save_step(task, {'step_content': '''async def run(ctx, inputs):
-    return ctx.result(data={"order_no": "001", "report": {"columns": [{"key": "status", "label": "状态"}], "rows": [{"status": "ok"}]}}, views=[{"title": "通用示例数据", "renderer": "core.table", "pointer": "/report"}])'''})
+    return ctx.result(data={"order_no": "001", "report": {"columns": [{"key": "status", "label": "状态"}], "rows": [{"status": "ok"}]}}, views=[{"title": "记录数据", "renderer": "core.table", "pointer": "/report"}])'''})
                 run = app.trial_step(step['step_id'], {}, uid())
                 finished = app.coordinator.wait(run['run_id'])
                 self.assertEqual(finished['status'], 'SUCCEEDED', finished)
@@ -34,7 +34,7 @@ class ResultViews(unittest.TestCase):
                 self.assertEqual(app.repo.read_output(run['run_id'], step['step_id'], 'data', app.registry)['order_no'], '001')
             with Application(home) as app:
                 saved = app.repo.read_result(ref['result_id'], app.registry)
-                self.assertEqual(saved['views'][0]['title'], '通用示例数据')
+                self.assertEqual(saved['views'][0]['title'], '记录数据')
                 self.assertEqual(saved['data']['report']['rows'][0]['status'], 'ok')
                 self.assertEqual(saved['name'], 'data')
 

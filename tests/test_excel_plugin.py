@@ -28,10 +28,10 @@ class ExcelTests(unittest.TestCase):
         return asyncio.run(action.execute(self.ctx, inputs))
 
     def test_create_write_read_and_dataset_export(self):
-        self.call('create', path='orders.xlsx', sheet='通用示例', values=[['编号', '金额'], ['001', 12], ['002', 5]])
+        self.call('create', path='orders.xlsx', sheet='记录', values=[['编号', '金额'], ['001', 12], ['002', 5]])
         sheets = self.call('inspect', path='orders.xlsx')['sheets']
-        self.assertEqual(sheets[0]['name'], '通用示例')
-        result = self.call('read', path='orders.xlsx', sheet='通用示例')
+        self.assertEqual(sheets[0]['name'], '记录')
+        result = self.call('read', path='orders.xlsx', sheet='记录')
         ref = result['dataset']
         self.assertEqual(self.ctx.datasets.read(ref)['rows'], [{'编号': '001', '金额': 12}, {'编号': '002', '金额': 5}])
         self.call('create', path='result.xlsx', sheet='结果')

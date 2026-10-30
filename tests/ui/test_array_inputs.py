@@ -189,76 +189,76 @@ class ArrayInputsTests(unittest.TestCase):
     def insurance_schema(self, *, enum=False):
         item = {'type': 'string', 'minLength': 1}
         if enum:
-            item['enum'] = ['通用示例', '机动车', '责任']
+            item['enum'] = ['类型A', '机动车', '责任']
         return {'properties': {'明细': {'type': 'array', 'items': {'type': 'object', 'properties': {
-            '通用示例': {'type': 'array', 'items': item, 'minItems': 1, 'uniqueItems': True},
+            '类别': {'type': 'array', 'items': item, 'minItems': 1, 'uniqueItems': True},
             '责任限额': {'type': 'number', 'default': 1000},
             '币种': {'type': 'string', 'default': 'CNY'},
-            '通用示例': {'type': 'number', 'default': 0}}, 'required': ['通用示例'],
+            '数值比例': {'type': 'number', 'default': 0}}, 'required': ['类别'],
             'additionalProperties': True}}}}
 
     def test_insurance_string_list_is_editable_with_optional_defaults_and_extensions(self):
         schema = self.insurance_schema()
-        form = self.form({'明细': [{'通用示例': ['通用示例', '机动车'], '业务扩展': {'keep': True}}]}, schema)
+        form = self.form({'明细': [{'类别': ['类型A', '机动车'], '业务扩展': {'keep': True}}]}, schema)
         editor = form.controls['明细'][1]
         self.assertTrue(hasattr(editor, 'rows'), 'simple string-list fields must keep object row editing')
-        classes = editor.rows[0]['controls']['通用示例']
-        self.assertEqual(classes.value, ['通用示例', '机动车'])
+        classes = editor.rows[0]['controls']['类别']
+        self.assertEqual(classes.value, ['类型A', '机动车'])
         with self.client:
             classes.add_entry('责任')
             classes.remove_entry(1)
-        self.assertEqual(form.values(), {'明细': [{'通用示例': ['通用示例', '责任'], '业务扩展': {'keep': True}}]})
+        self.assertEqual(form.values(), {'明细': [{'类别': ['类型A', '责任'], '业务扩展': {'keep': True}}]})
         with self.client: editor.add_row()
         fields = editor.rows[1]['controls']
         self.assertIn('可选', fields['责任限额'].label)
         self.assertEqual(fields['责任限额'].value, '1000')
         self.assertEqual(fields['币种'].value, 'CNY')
-        self.assertEqual(fields['通用示例'].value, '0')
-        with self.client: fields['通用示例'].add_entry('通用示例')
+        self.assertEqual(fields['数值比例'].value, '0')
+        with self.client: fields['类别'].add_entry('类型A')
         fields['责任限额'].set_value('')
-        self.assertEqual(form.values()['明细'][1], {'通用示例': ['通用示例'], '币种': 'CNY', '通用示例': 0})
+        self.assertEqual(form.values()['明细'][1], {'类别': ['类型A'], '币种': 'CNY', '数值比例': 0})
 
     def test_string_list_draft_restore_preserves_blank_entry_and_unknown_values(self):
         schema = self.insurance_schema()
-        form = self.form({'明细': [{'通用示例': ['通用示例'], '业务扩展': ['keep']}]}, schema)
+        form = self.form({'明细': [{'类别': ['类型A'], '业务扩展': ['keep']}]}, schema)
         editor = form.controls['明细'][1]
         self.assertTrue(hasattr(editor, 'rows'))
-        with self.client: editor.rows[0]['controls']['通用示例'].add_entry('')
+        with self.client: editor.rows[0]['controls']['类别'].add_entry('')
         restored = self.form({'明细': editor.value}, schema)
-        self.assertEqual(restored.controls['明细'][1].rows[0]['controls']['通用示例'].value, ['通用示例', ''])
-        with self.assertRaisesRegex(TaskError, '通用示例'):
+        self.assertEqual(restored.controls['明细'][1].rows[0]['controls']['类别'].value, ['类型A', ''])
+        with self.assertRaisesRegex(TaskError, '类别'):
             restored.values()
         with self.client:
-            restored.controls['明细'][1].rows[0]['controls']['通用示例'].remove_entry(1)
-        self.assertEqual(restored.values(), {'明细': [{'通用示例': ['通用示例'], '业务扩展': ['keep']}]})
+            restored.controls['明细'][1].rows[0]['controls']['类别'].remove_entry(1)
+        self.assertEqual(restored.values(), {'明细': [{'类别': ['类型A'], '业务扩展': ['keep']}]})
 
     def test_enum_string_list_is_multiple_select_and_retains_invalid_draft_choice(self):
         schema = self.insurance_schema(enum=True)
-        form = self.form({'明细': [{'通用示例': ['通用示例', 'unknown']}]}, schema)
+        form = self.form({'明细': [{'类别': ['类型A', 'unknown']}]}, schema)
         editor = form.controls['明细'][1]
         self.assertTrue(hasattr(editor, 'rows'))
-        classes = editor.rows[0]['controls']['通用示例']
+        classes = editor.rows[0]['controls']['类别']
         self.assertIsInstance(classes, ui.select)
         self.assertTrue(classes.multiple)
-        self.assertEqual(classes.value, ['通用示例', 'unknown'])
+        self.assertEqual(classes.value, ['类型A', 'unknown'])
         with self.assertRaises(TaskError): form.values()
-        classes.set_value(['通用示例', '机动车'])
-        self.assertEqual(form.values(), {'明细': [{'通用示例': ['通用示例', '机动车']}]})
+        classes.set_value(['类型A', '机动车'])
+        self.assertEqual(form.values(), {'明细': [{'类别': ['类型A', '机动车']}]})
 
     def test_malformed_string_list_item_and_unknown_extension_survive_sibling_edits(self):
         schema = self.insurance_schema()
-        form = self.form({'明细': [{'通用示例': ['通用示例', 7], '业务扩展': {'original': 1}}]}, schema)
+        form = self.form({'明细': [{'类别': ['类型A', 7], '业务扩展': {'original': 1}}]}, schema)
         editor = form.controls['明细'][1]
         self.assertTrue(hasattr(editor, 'rows'))
         editor.rows[0]['controls']['币种'].set_value('USD')
-        self.assertEqual(json.loads(editor.value)[0]['通用示例'], ['通用示例', 7])
+        self.assertEqual(json.loads(editor.value)[0]['类别'], ['类型A', 7])
         restored = self.form({'明细': editor.value}, schema)
         self.assertEqual(json.loads(restored.controls['明细'][1].value)[0]['业务扩展'], {'original': 1})
-        with self.assertRaisesRegex(TaskError, '通用示例'):
+        with self.assertRaisesRegex(TaskError, '类别'):
             restored.values()
 
     def test_nested_complex_array_fields_stay_in_json_editor(self):
         schema = self.insurance_schema()
-        schema['properties']['明细']['items']['properties']['通用示例']['items'] = {'type': 'object'}
+        schema['properties']['明细']['items']['properties']['类别']['items'] = {'type': 'object'}
         form = self.form({'明细': []}, schema)
         self.assertFalse(hasattr(form.controls['明细'][1], 'rows'))

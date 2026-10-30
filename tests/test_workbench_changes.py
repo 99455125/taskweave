@@ -27,10 +27,10 @@ class WorkbenchChanges(unittest.TestCase):
 
         tasks = [
             {'name': '记录录入', 'description': '本地示例'},
-            {'name': '通用示例核对', 'description': 'TiDB 数据校验'},
+            {'name': '数据核对', 'description': 'TiDB 数据校验'},
         ]
         self.assertEqual([task['name'] for task in filter_tasks(tasks, '记录')], ['记录录入'])
-        self.assertEqual([task['name'] for task in filter_tasks(tasks, 'tidb')], ['通用示例核对'])
+        self.assertEqual([task['name'] for task in filter_tasks(tasks, 'tidb')], ['数据核对'])
         self.assertEqual(filter_tasks(tasks, '不存在'), [])
 
     def test_step_reorder_moves_existing_controls_and_updates_visible_positions(self):

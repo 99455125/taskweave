@@ -14,8 +14,8 @@ class TiDBExecution(unittest.TestCase):
                 env = app.repo.save_environment('uat', {'tidb_host': '127.0.0.1', 'tidb_port': database.port, 'tidb_username': 'reader', 'tidb_password': 'secret', 'tidb_database': 'uat', 'tidb_tls': False})['environment_id']
                 task = app.repo.create_task('数据库核对')['task_id']
                 step = app.repo.save_step(task, {'capabilities': ['tidb.query'], 'step_content': '''async def run(ctx, inputs):
-    table = await ctx.call("tidb.query", {"sql": "SELECT order_no, status FROM orders WHERE order_no=%s", "params": ["001"], "title": "通用示例信息"})
-    report = {"passed": table["rows"][0]["status"] == "SUBMITTED", "message": "通用示例核对通过", "tables": [table], "query_info": table["query_info"]}
+    table = await ctx.call("tidb.query", {"sql": "SELECT order_no, status FROM orders WHERE order_no=%s", "params": ["001"], "title": "记录信息"})
+    report = {"passed": table["rows"][0]["status"] == "SUBMITTED", "message": "记录核对通过", "tables": [table], "query_info": table["query_info"]}
     return ctx.result(data={"order_no": "001", "verified": report["passed"], "report": report}, views=[{"title": "数据库核对", "renderer": "tidb.verification", "pointer": "/report"}])'''})
                 run = app.trial_step(step['step_id'], {}, uid(), env)
                 done = app.coordinator.wait(run['run_id'])

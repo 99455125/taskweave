@@ -31,7 +31,7 @@ def main():
         "step.save",
         task_id=task["task_id"],
         document={
-            "name": "返回通用示例号",
+            "name": "返回记录号",
             "step_content": 'async def run(ctx, inputs):\n    return ctx.result(data={"order_id": "API-1001"})\n',
         },
     )

@@ -36,7 +36,7 @@ class TaskTransfer(unittest.TestCase):
 
     def test_round_trip_new_ids_dependencies_and_verification(self):
         with tempfile.TemporaryDirectory() as home, Application(home) as app:
-            task = app.repo.create_task('通用示例', {'type': 'object', 'properties': {'url': {'type': 'string', 'default': 'local'}}})
+            task = app.repo.create_task('记录', {'type': 'object', 'properties': {'url': {'type': 'string', 'default': 'local'}}})
             first = app.repo.save_step(task['task_id'], {'name': '获取单号', 'step_description': '读取页面单号', 'step_notes': '单号必须来自页面，不得编造', 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data={"order_no": "001"})'})
             second = app.repo.save_step(task['task_id'], {'name': '核对', 'input_schema': {'type': 'object', 'properties': {'order_no': {'type': 'string'}}}, 'bindings': {'order_no': {'ref': {'source': 'step', 'step_id': first['step_id'], 'output': 'data', 'pointer': '/order_no'}}}, 'step_content': 'async def run(ctx, inputs):\n    return ctx.result(data=inputs)'})
             group = app.repo.save_step_context(first['step_id'],'demo.page','记录录入','draft',[{'content':'one'}],context_notes='说明',request={'selector':'one'},views=[{'title':'预览','renderer':'demo.image','data':{'image_base64':'abc'}}])

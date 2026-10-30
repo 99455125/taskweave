@@ -20,7 +20,7 @@ class DatasetTests(unittest.TestCase):
         return self.results.datasets
 
     def sample(self):
-        return self.store().create('通用示例', [{'name': '客户', 'type': 'text'}, {'name': '金额', 'type': 'integer'}],
+        return self.store().create('记录', [{'name': '客户', 'type': 'text'}, {'name': '金额', 'type': 'integer'}],
                                    [['甲', 120], ['乙', 80], ['甲', 30]])
 
     def test_query_join_parameters_and_update_preserve_source(self):
@@ -161,7 +161,7 @@ class DatasetWorkerTests(unittest.TestCase):
             app.configure_plugin('dataset', True)
             task = app.repo.create_task('数据集链路')['task_id']
             first = app.repo.save_step(task, {'name': '创建', 'capabilities': ['dataset.create'],
-                'step_content': 'async def run(ctx, inputs):\n    ref = await ctx.call("dataset.create", {"name":"通用示例","columns":[{"name":"n","type":"integer"}],"rows":[[2],[3]]})\n    return ctx.result(data={"ref":ref})'})
+                'step_content': 'async def run(ctx, inputs):\n    ref = await ctx.call("dataset.create", {"name":"记录","columns":[{"name":"n","type":"integer"}],"rows":[[2],[3]]})\n    return ctx.result(data={"ref":ref})'})
             second = app.repo.save_step(task, {'name': '聚合', 'capabilities': ['dataset.query', 'dataset.read'],
                 'bindings': {'source': {'ref': {'source': 'step', 'step_id': first['step_id'], 'pointer': '/ref'}}},
                 'step_content': 'async def run(ctx, inputs):\n    ref = await ctx.call("dataset.query", {"sources":{"items":inputs["source"]},"sql":"SELECT SUM(n) AS total FROM items","name":"汇总"})\n    table = await ctx.call("dataset.read", {"dataset":ref})\n    return ctx.result(data={"ref":ref,"table":table},views=[{"title":"汇总","renderer":"core.table","pointer":"/table"}])'})

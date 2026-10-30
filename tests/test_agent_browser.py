@@ -19,13 +19,13 @@ class AgentBrowserTests(unittest.TestCase):
         from playwright.sync_api import sync_playwright, expect
         with tempfile.TemporaryDirectory(prefix='taskweave-agent-browser-') as root:
             with Application(root) as app:
-                task = app.tasks.create('通用示例总额验收')
+                task = app.tasks.create('记录总额验收')
                 step = app.steps.save(task['task_id'], {'name': '计算总额',
                     'step_content': "async def run(ctx, inputs):\n    return ctx.result(data={'total': 42, 'items': 2})\n"})
                 app.confirm_step_manual(step['step_id'], step['content_hash'])
                 version = app.tasks.definition_hash(task['task_id'])
                 spec = app.agent.review('prepare', {'target_kind': 'task', 'target_id': task['task_id'], 'expected_version': version,
-                    'title': '核对通用示例总额为 42', 'checks': [{'id': 'total', 'label': '通用示例总额等于 42',
+                    'title': '核对记录总额为 42', 'checks': [{'id': 'total', 'label': '记录总额等于 42',
                     'source': {'step_id': step['step_id'], 'pointer': '/total'}, 'op': 'eq', 'expected': 42}]})
                 run = app.agent.execute('task.run', {'task_id': task['task_id'], 'expected_hash': version}, 'browser-launch', spec['review_spec_id'])
                 self.assertEqual(app.runs.wait(run['run_id'])['status'], 'SUCCEEDED')
@@ -58,7 +58,7 @@ class AgentBrowserTests(unittest.TestCase):
                             client = AgentClient(root)
                             opened = client.call('agent.review', {'action': 'open', 'params': {'kind': 'run', 'identity': run['run_id']}})
                             self.assertTrue(opened['opened'])
-                            expect(page.get_by_text('核对通用示例总额为 42', exact=True)).to_be_visible()
+                            expect(page.get_by_text('核对记录总额为 42', exact=True)).to_be_visible()
                             expect(page.get_by_text('自动核对：通过', exact=True)).to_be_visible()
                             page.get_by_role('button', name='查看原始结果', exact=True).click()
                             expect(page.get_by_text('计算总额 · 运行结果', exact=True)).to_be_visible()

@@ -64,7 +64,7 @@ class PlaywrightRecordingTests(unittest.IsolatedAsyncioTestCase):
         self.browser=await self.runtime.chromium.launch(headless=True)
         self.context=await self.browser.new_context()
         self.page=await self.context.new_page()
-        await self.page.set_content('''<fieldset id="open"><legend>通用示例</legend><label><input type=radio name=open>是</label><label><input type=radio name=open>否</label></fieldset><fieldset id="agent"><legend>附加选项</legend><label><input type=radio name=agent>是</label><label><input type=radio name=agent>否</label></fieldset><input id=account><input id=password type=password><button id=plain>按钮</button>''')
+        await self.page.set_content('''<fieldset id="open"><legend>可选字段</legend><label><input type=radio name=open>是</label><label><input type=radio name=open>否</label></fieldset><fieldset id="agent"><legend>附加选项</legend><label><input type=radio name=agent>是</label><label><input type=radio name=agent>否</label></fieldset><input id=account><input id=password type=password><button id=plain>按钮</button>''')
         self.resource={'context':self.context,'page':self.page}
         self.ctx=SimpleNamespace(resources=SimpleNamespace(acquire=AsyncMock(return_value=self.resource),active=lambda name:[('operator',self.resource)]),environment={},task_parameters={},scope=SimpleNamespace(task_id='t',run_id='r'))
         self.plugin=PlaywrightPlugin()
@@ -102,7 +102,7 @@ class PlaywrightRecordingTests(unittest.IsolatedAsyncioTestCase):
         clicks=[e for e in events if e['kind']=='operation' and e['action']=='click']
         self.assertTrue(clicks)
         target=clicks[0]['target']
-        self.assertEqual(target['field_group']['name'],'通用示例')
+        self.assertEqual(target['field_group']['name'],'可选字段')
         self.assertTrue(target['checked'])
         self.assertEqual(await locate(self.page,target['selector']).count(),1)
         self.assertTrue(any(e['kind']=='baseline' for e in events))
